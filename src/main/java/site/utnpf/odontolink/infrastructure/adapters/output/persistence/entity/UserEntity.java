@@ -1,67 +1,66 @@
-package site.utnpf.odontolink.domain.model;
+package site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity;
+
+import jakarta.persistence.*;
+import site.utnpf.odontolink.domain.model.Role;
 
 import java.time.Instant;
 import java.time.LocalDate;
 
 /**
- * Representa la entidad central de AUTENTICACIÓN y PERFIL.
- * Contiene todos los campos comunes a todas las personas.
- * Spring Security interactuará directamente con esta entidad.
+ * Entidad JPA para la tabla 'users'.
+ * Representa la persistencia de un User del dominio.
  */
-public class User {
+@Entity
+@Table(name = "users")
+public class UserEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(nullable = false, unique = true, length = 100)
     private String email;
+
+    @Column(nullable = false)
     private String password;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
     private Role role;
+
+    @Column(nullable = false)
     private boolean isActive;
 
-    // Campos de Perfil Comunes
+    @Column(nullable = false, length = 100)
     private String firstName;
+
+    @Column(nullable = false, length = 100)
     private String lastName;
+
+    @Column(nullable = false, unique = true, length = 20)
     private String dni;
+
+    @Column(length = 20)
     private String phone;
+
+    @Column
     private LocalDate birthDate;
 
+    @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
-    // Constructores
-    public User() {
-        this.isActive = true;
-        this.createdAt = Instant.now();
-    }
-
-    public User(String email, String password, Role role, String firstName, String lastName, String dni, String phone, LocalDate birthDate) {
-        this();
-        this.email = email;
-        this.password = password;
-        this.role = role;
-        this.firstName = firstName;
-        this.lastName = lastName;
-        this.dni = dni;
-        this.phone = phone;
-        this.birthDate = birthDate;
-    }
-
-    // Comportamientos del Dominio Rico
-
-    /**
-     * Lógica de negocio para desactivar un usuario.
-     */
-    public void deactivate() {
-        if (!this.isActive) {
-            throw new IllegalStateException("El usuario ya está inactivo.");
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = Instant.now();
         }
-        this.isActive = false;
+        if (!isActive) {
+            isActive = true;
+        }
     }
 
-    /**
-     * Lógica de negocio para cambiar la contraseña.
-     */
-    public void changePassword(String currentPasswordHash, String newPasswordHash) {
-        // if (!passwordEncoder.matches(currentPassword, this.password)) {
-        //    throw new SecurityException("Contraseña actual incorrecta");
-        // }
-        this.password = newPasswordHash;
+    // Constructores
+    public UserEntity() {
     }
 
     // Getters y Setters

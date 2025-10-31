@@ -33,3 +33,37 @@ build/
 .vscode/
 
 /docs/
+
+### =============================================================================
+### SECURITY - ARCHIVOS CON INFORMACIÓN SENSIBLE
+### =============================================================================
+### NUNCA subir estos archivos al repositorio
+### =============================================================================
+
+# Variables de entorno
+.env
+.env.local
+.env.*.local
+
+# Archivos de configuración con credenciales
+application-local.properties
+application-secrets.properties
+*.secret
+*.key
+*.pem
+*.p12
+*.jks
+
+# Logs que puedan contener información sensible
+logs/
+*.log
+
+# Backups de bases de datos
+*.sql
+*.dump
+*.backup
+
+# Certificados y keys
+ssl/
+certs/
+*.crt
