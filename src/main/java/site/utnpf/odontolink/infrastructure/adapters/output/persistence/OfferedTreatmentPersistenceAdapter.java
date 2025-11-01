@@ -83,4 +83,18 @@ public class OfferedTreatmentPersistenceAdapter implements OfferedTreatmentRepos
     public boolean hasActiveAppointments(Long offeredTreatmentId) {
         return jpaOfferedTreatmentRepository.hasActiveAppointments(offeredTreatmentId);
     }
+
+    @Override
+    public List<OfferedTreatment> findAll() {
+        return jpaOfferedTreatmentRepository.findAll().stream()
+                .map(OfferedTreatmentPersistenceMapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<OfferedTreatment> findByTreatmentId(Long treatmentId) {
+        return jpaOfferedTreatmentRepository.findByTreatmentId(treatmentId).stream()
+                .map(OfferedTreatmentPersistenceMapper::toDomain)
+                .collect(Collectors.toList());
+    }
 }

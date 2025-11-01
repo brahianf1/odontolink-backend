@@ -5,12 +5,16 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import site.utnpf.odontolink.application.port.in.IAppointmentUseCase;
 import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
+import site.utnpf.odontolink.domain.model.Appointment;
 import site.utnpf.odontolink.domain.model.AvailabilitySlot;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.AddOfferedTreatmentRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.UpdateOfferedTreatmentRequestDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AppointmentResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.OfferedTreatmentResponseDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.AppointmentRestMapper;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.AvailabilitySlotInputMapper;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.OfferedTreatmentRestMapper;
 import site.utnpf.odontolink.infrastructure.security.AuthenticationFacade;
@@ -23,25 +27,31 @@ import java.util.stream.Collectors;
  * Controlador REST para la gestión del catálogo personal de tratamientos del practicante.
  * Adaptador de entrada (Input Adapter) en Arquitectura Hexagonal.
  *
- * Endpoints implementados:
+ * Endpoints de Catálogo:
  * - POST   /api/practitioner/offered-treatments          - Agregar tratamiento (CU-005)
  * - GET    /api/practitioner/offered-treatments          - Obtener mi catálogo
  * - PUT    /api/practitioner/offered-treatments/{id}     - Modificar tratamiento (CU-006)
  * - DELETE /api/practitioner/offered-treatments/{id}     - Eliminar tratamiento (CU-007)
  *
+ * Endpoints de Turnos:
+ * - GET    /api/practitioner/appointments/upcoming       - Ver mis turnos agendados
+ *
  * @author OdontoLink Team
  */
 @RestController
-@RequestMapping("/api/practitioner/offered-treatments")
+@RequestMapping("/api/practitioner")
 @PreAuthorize("hasRole('PRACTITIONER')")
 public class PractitionerController {
 
     private final IOfferedTreatmentUseCase offeredTreatmentUseCase;
+    private final IAppointmentUseCase appointmentUseCase;
     private final AuthenticationFacade authenticationFacade;
 
     public PractitionerController(IOfferedTreatmentUseCase offeredTreatmentUseCase,
+                                  IAppointmentUseCase appointmentUseCase,
                                   AuthenticationFacade authenticationFacade) {
         this.offeredTreatmentUseCase = offeredTreatmentUseCase;
+        this.appointmentUseCase = appointmentUseCase;
         this.authenticationFacade = authenticationFacade;
     }
 
@@ -51,7 +61,7 @@ public class PractitionerController {
      *
      * POST /api/practitioner/offered-treatments
      */
-    @PostMapping
+    @PostMapping("/offered-treatments")
     public ResponseEntity<OfferedTreatmentResponseDTO> addTreatmentToCatalog(
             @Valid @RequestBody AddOfferedTreatmentRequestDTO request) {
 
@@ -75,7 +85,7 @@ public class PractitionerController {
      *
      * GET /api/practitioner/offered-treatments
      */
-    @GetMapping
+    @GetMapping("/offered-treatments")
     public ResponseEntity<List<OfferedTreatmentResponseDTO>> getMyOfferedTreatments() {
 
         Long practitionerId = authenticationFacade.getAuthenticatedPractitionerId();
@@ -94,7 +104,7 @@ public class PractitionerController {
      *
      * PUT /api/practitioner/offered-treatments/{id}
      */
-    @PutMapping("/{id}")
+    @PutMapping("/offered-treatments/{id}")
     public ResponseEntity<OfferedTreatmentResponseDTO> updateOfferedTreatment(
             @PathVariable Long id,
             @Valid @RequestBody UpdateOfferedTreatmentRequestDTO request) {
@@ -119,12 +129,43 @@ public class PractitionerController {
      *
      * DELETE /api/practitioner/offered-treatments/{id}
      */
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/offered-treatments/{id}")
     public ResponseEntity<Void> removeFromCatalog(@PathVariable Long id) {
 
         Long practitionerId = authenticationFacade.getAuthenticatedPractitionerId();
         offeredTreatmentUseCase.removeFromCatalog(practitionerId, id);
 
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Obtiene todos los turnos agendados (SCHEDULED) del practicante autenticado.
+     * Endpoint de lectura "Mis Turnos".
+     *
+     * El practicante puede ver:
+     * - Fecha y hora de cada turno
+     * - Estado del turno
+     * - Paciente asociado
+     * - Tratamiento asociado
+     *
+     * Este endpoint permite al practicante gestionar su agenda y ver qué pacientes
+     * tiene agendados para cada fecha.
+     *
+     * GET /api/practitioner/appointments/upcoming
+     *
+     * @return Lista de turnos agendados del practicante
+     */
+    @GetMapping("/appointments/upcoming")
+    public ResponseEntity<List<AppointmentResponseDTO>> getMyUpcomingAppointments() {
+
+        Long practitionerId = authenticationFacade.getAuthenticatedPractitionerId();
+
+        List<Appointment> appointments = appointmentUseCase.getUpcomingAppointmentsForPractitioner(practitionerId);
+
+        List<AppointmentResponseDTO> response = appointments.stream()
+                .map(AppointmentRestMapper::toResponse)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(response);
     }
 }

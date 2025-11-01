@@ -5,8 +5,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
+import site.utnpf.odontolink.domain.model.Patient;
 import site.utnpf.odontolink.domain.model.Practitioner;
 import site.utnpf.odontolink.domain.model.User;
+import site.utnpf.odontolink.domain.repository.PatientRepository;
 import site.utnpf.odontolink.domain.repository.PractitionerRepository;
 import site.utnpf.odontolink.domain.repository.UserRepository;
 
@@ -25,11 +27,14 @@ public class AuthenticationFacade {
 
     private final UserRepository userRepository;
     private final PractitionerRepository practitionerRepository;
+    private final PatientRepository patientRepository;
 
     public AuthenticationFacade(UserRepository userRepository,
-                               PractitionerRepository practitionerRepository) {
+                               PractitionerRepository practitionerRepository,
+                               PatientRepository patientRepository) {
         this.userRepository = userRepository;
         this.practitionerRepository = practitionerRepository;
+        this.patientRepository = patientRepository;
     }
 
     /**
@@ -82,5 +87,24 @@ public class AuthenticationFacade {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Practitioner", "userId", user.getId().toString()));
         return practitioner.getId();
+    }
+
+    /**
+     * Obtiene el ID del Patient asociado al usuario autenticado.
+     *
+     * Este método es útil para endpoints que requieren el patientId
+     * y están protegidos con @PreAuthorize("hasRole('PATIENT')").
+     *
+     * Soporta el CU-008: "Reservar Turno".
+     *
+     * @return El ID del Patient
+     * @throws ResourceNotFoundException si el usuario no tiene un perfil de paciente asociado
+     */
+    public Long getAuthenticatedPatientId() {
+        User user = getAuthenticatedUser();
+        Patient patient = patientRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Patient", "userId", user.getId().toString()));
+        return patient.getId();
     }
 }

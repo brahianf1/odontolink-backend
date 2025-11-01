@@ -34,6 +34,13 @@ public class Attention {
     /** Relación 1-a-N: El feedback (de ambas partes) asociado a este caso */
     private List<Feedback> feedbackList;
 
+    // Constructor sin argumentos (requerido por mappers de persistencia)
+    public Attention() {
+        this.appointments = new ArrayList<>();
+        this.progressNotes = new ArrayList<>();
+        this.feedbackList = new ArrayList<>();
+    }
+
     public Attention(Patient patient, Practitioner practitioner, Treatment treatment) {
         this.patient = patient;
         this.practitioner = practitioner;
@@ -79,5 +86,79 @@ public class Attention {
         Appointment newAppointment = new Appointment(this, time, motive);
         this.appointments.add(newAppointment);
         return newAppointment;
+    }
+
+    // Getters y Setters
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Patient getPatient() {
+        return patient;
+    }
+
+    public void setPatient(Patient patient) {
+        this.patient = patient;
+    }
+
+    public Practitioner getPractitioner() {
+        return practitioner;
+    }
+
+    public void setPractitioner(Practitioner practitioner) {
+        this.practitioner = practitioner;
+    }
+
+    public Treatment getTreatment() {
+        return treatment;
+    }
+
+    public void setTreatment(Treatment treatment) {
+        this.treatment = treatment;
+    }
+
+    public AttentionStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(AttentionStatus status) {
+        this.status = status;
+    }
+
+    public LocalDate getStartDate() {
+        return startDate;
+    }
+
+    public void setStartDate(LocalDate startDate) {
+        this.startDate = startDate;
+    }
+
+    public List<Appointment> getAppointments() {
+        return appointments;
+    }
+
+    public void setAppointments(List<Appointment> appointments) {
+        this.appointments = appointments;
+    }
+
+    public List<ProgressNote> getProgressNotes() {
+        return progressNotes;
+    }
+
+    public void setProgressNotes(List<ProgressNote> progressNotes) {
+        this.progressNotes = progressNotes;
+    }
+
+    public List<Feedback> getFeedbackList() {
+        return feedbackList;
+    }
+
+    public void setFeedbackList(List<Feedback> feedbackList) {
+        this.feedbackList = feedbackList;
     }
 }

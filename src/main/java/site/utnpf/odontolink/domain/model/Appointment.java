@@ -19,6 +19,10 @@ public class Appointment {
     private String motive;                 // Motivo de la cita (ej. "Inicio", "Control")
     private AppointmentStatus status;      // "Agendado", "Cancelado", etc.
 
+    // Constructor sin argumentos (requerido por mappers de persistencia)
+    public Appointment() {
+    }
+
     // Constructor usado por la Attention
     protected Appointment(Attention attention, LocalDateTime time, String motive) {
         this.attention = attention;
@@ -42,5 +46,47 @@ public class Appointment {
 
     public void markAsNoShow() {
         this.status = AppointmentStatus.NO_SHOW;
+    }
+
+    // Getters y Setters
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Attention getAttention() {
+        return attention;
+    }
+
+    public void setAttention(Attention attention) {
+        this.attention = attention;
+    }
+
+    public LocalDateTime getAppointmentTime() {
+        return appointmentTime;
+    }
+
+    public void setAppointmentTime(LocalDateTime appointmentTime) {
+        this.appointmentTime = appointmentTime;
+    }
+
+    public String getMotive() {
+        return motive;
+    }
+
+    public void setMotive(String motive) {
+        this.motive = motive;
+    }
+
+    public AppointmentStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(AppointmentStatus status) {
+        this.status = status;
     }
 }

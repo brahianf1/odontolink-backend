@@ -27,6 +27,11 @@ public interface JpaOfferedTreatmentRepository extends JpaRepository<OfferedTrea
     List<OfferedTreatmentEntity> findByPractitionerId(Long practitionerId);
 
     /**
+     * Obtiene todas las ofertas de tratamientos filtradas por tipo de tratamiento.
+     */
+    List<OfferedTreatmentEntity> findByTreatmentId(Long treatmentId);
+
+    /**
      * Verifica si un practicante ya ofrece un tratamiento específico.
      */
     boolean existsByPractitionerAndTreatment(PractitionerEntity practitioner, TreatmentEntity treatment);

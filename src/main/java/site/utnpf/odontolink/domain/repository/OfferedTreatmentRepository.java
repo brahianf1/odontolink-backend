@@ -53,4 +53,16 @@ public interface OfferedTreatmentRepository {
      * Verifica si existen turnos activos asociados a una oferta de tratamiento.
      */
     boolean hasActiveAppointments(Long offeredTreatmentId);
+
+    /**
+     * Obtiene todas las ofertas de tratamientos disponibles (catálogo público).
+     * Usado para mostrar el catálogo completo a los pacientes.
+     */
+    List<OfferedTreatment> findAll();
+
+    /**
+     * Obtiene todas las ofertas de tratamientos filtradas por tipo de tratamiento.
+     * Usado para mostrar ofertas específicas de un tratamiento particular.
+     */
+    List<OfferedTreatment> findByTreatmentId(Long treatmentId);
 }
