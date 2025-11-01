@@ -7,12 +7,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import site.utnpf.odontolink.application.port.in.IAuthUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.IPractitionerRegistrationUseCase;
+import site.utnpf.odontolink.application.port.in.ISupervisorRegistrationUseCase;
 import site.utnpf.odontolink.application.port.out.ITokenProvider;
 import site.utnpf.odontolink.application.service.AuthService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
 import site.utnpf.odontolink.application.service.PractitionerRegistrationService;
+import site.utnpf.odontolink.application.service.SupervisorRegistrationService;
 import site.utnpf.odontolink.domain.repository.PatientRepository;
 import site.utnpf.odontolink.domain.repository.PractitionerRepository;
+import site.utnpf.odontolink.domain.repository.SupervisorRepository;
 import site.utnpf.odontolink.domain.repository.UserRepository;
 
 /**
@@ -55,5 +58,16 @@ public class BeanConfiguration {
                                                                             PractitionerRepository practitionerRepository,
                                                                             PasswordEncoder passwordEncoder) {
         return new PractitionerRegistrationService(userRepository, practitionerRepository, passwordEncoder);
+    }
+
+    /**
+     * Bean para el caso de uso de registro de supervisores/docentes.
+     * Expone la interfaz ISupervisorRegistrationUseCase implementada por SupervisorRegistrationService.
+     */
+    @Bean
+    public ISupervisorRegistrationUseCase supervisorRegistrationUseCase(UserRepository userRepository,
+                                                                        SupervisorRepository supervisorRepository,
+                                                                        PasswordEncoder passwordEncoder) {
+        return new SupervisorRegistrationService(userRepository, supervisorRepository, passwordEncoder);
     }
 }
