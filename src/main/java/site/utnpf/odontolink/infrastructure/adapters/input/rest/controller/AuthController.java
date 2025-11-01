@@ -6,10 +6,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import site.utnpf.odontolink.application.port.in.IAuthUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
+import site.utnpf.odontolink.application.port.in.IPractitionerRegistrationUseCase;
 import site.utnpf.odontolink.domain.model.AuthResult;
 import site.utnpf.odontolink.domain.model.Patient;
+import site.utnpf.odontolink.domain.model.Practitioner;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.LoginRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.RegisterPatientRequestDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.RegisterPractitionerRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.JwtResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.AuthResponseMapper;
 
@@ -25,11 +28,14 @@ import java.util.Map;
 public class AuthController {
 
     private final IPatientRegistrationUseCase patientRegistrationUseCase;
+    private final IPractitionerRegistrationUseCase practitionerRegistrationUseCase;
     private final IAuthUseCase authUseCase;
 
     public AuthController(IPatientRegistrationUseCase patientRegistrationUseCase,
+                         IPractitionerRegistrationUseCase practitionerRegistrationUseCase,
                          IAuthUseCase authUseCase) {
         this.patientRegistrationUseCase = patientRegistrationUseCase;
+        this.practitionerRegistrationUseCase = practitionerRegistrationUseCase;
         this.authUseCase = authUseCase;
     }
 
@@ -54,6 +60,30 @@ public class AuthController {
         );
 
         Map<String, Object> response = AuthResponseMapper.toRegistrationResponseDTO(patient);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * POST /api/auth/register/practitioner
+     * Registra un nuevo practicante en el sistema.
+     * El manejo de excepciones se delega a GlobalExceptionHandler.
+     * El mapeo a DTO se delega a AuthResponseMapper.
+     */
+    @PostMapping("/register/practitioner")
+    public ResponseEntity<Map<String, Object>> registerPractitioner(@Valid @RequestBody RegisterPractitionerRequestDTO request) {
+        Practitioner practitioner = practitionerRegistrationUseCase.registerPractitioner(
+                request.getEmail(),
+                request.getPassword(),
+                request.getFirstName(),
+                request.getLastName(),
+                request.getDni(),
+                request.getPhone(),
+                request.getBirthDate(),
+                request.getStudentId(),
+                request.getStudyYear()
+        );
+
+        Map<String, Object> response = AuthResponseMapper.toRegistrationResponseDTO(practitioner);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

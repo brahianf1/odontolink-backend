@@ -4,6 +4,7 @@ import java.util.Set;
 
 /**
  * Contiene solo los datos ESPECÍFICOS del practicante.
+ * Se vincula 1-a-1 con la entidad User.
  */
 public class Practitioner {
     private Long id;
@@ -32,4 +33,71 @@ public class Practitioner {
      * Representa "Mis Atenciones".
      */
     private Set<Attention> attentions;
+
+    // Constructores
+    public Practitioner() {
+    }
+
+    public Practitioner(User user, String studentId, Integer studyYear) {
+        this.user = user;
+        this.studentId = studentId;
+        this.studyYear = studyYear;
+    }
+
+    // Getters y Setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public String getStudentId() {
+        return studentId;
+    }
+
+    public void setStudentId(String studentId) {
+        this.studentId = studentId;
+    }
+
+    public Integer getStudyYear() {
+        return studyYear;
+    }
+
+    public void setStudyYear(Integer studyYear) {
+        this.studyYear = studyYear;
+    }
+
+    public Set<Supervisor> getSupervisors() {
+        return supervisors;
+    }
+
+    public void setSupervisors(Set<Supervisor> supervisors) {
+        this.supervisors = supervisors;
+    }
+
+    public Set<OfferedTreatment> getOfferedTreatments() {
+        return offeredTreatments;
+    }
+
+    public void setOfferedTreatments(Set<OfferedTreatment> offeredTreatments) {
+        this.offeredTreatments = offeredTreatments;
+    }
+
+    public Set<Attention> getAttentions() {
+        return attentions;
+    }
+
+    public void setAttentions(Set<Attention> attentions) {
+        this.attentions = attentions;
+    }
 }

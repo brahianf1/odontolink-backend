@@ -14,22 +14,30 @@ import java.time.LocalDate;
 /**
  * Servicio de aplicación para el registro de pacientes (CU-013).
  * Implementa el puerto de entrada IPatientRegistrationUseCase.
- * Coordina la lógica de negocio para crear un usuario con rol PATIENT y su perfil asociado.
+ * Extiende de BaseUserRegistrationService para reutilizar lógica común.
+ *
+ * Este servicio se encarga de:
+ * - Coordinar el registro de un usuario con rol PATIENT
+ * - Aplicar validaciones específicas de pacientes (si las hubiere en el futuro)
+ * - Crear el perfil específico de Patient con healthInsurance y bloodType
+ *
  * El bean se registra explícitamente en BeanConfiguration.
  */
 @Transactional
-public class PatientRegistrationService implements IPatientRegistrationUseCase {
+public class PatientRegistrationService extends BaseUserRegistrationService
+        implements IPatientRegistrationUseCase {
 
-    private final UserRepository userRepository;
     private final PatientRepository patientRepository;
-    private final PasswordEncoder passwordEncoder;
+
+    // Variables de instancia para los datos específicos del paciente
+    private String healthInsurance;
+    private String bloodType;
 
     public PatientRegistrationService(UserRepository userRepository,
                                      PatientRepository patientRepository,
                                      PasswordEncoder passwordEncoder) {
-        this.userRepository = userRepository;
+        super(userRepository, passwordEncoder);
         this.patientRepository = patientRepository;
-        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
@@ -37,20 +45,20 @@ public class PatientRegistrationService implements IPatientRegistrationUseCase {
                                    String dni, String phone, LocalDate birthDate,
                                    String healthInsurance, String bloodType) {
 
-        // Validación de negocio: El email no debe existir
-        if (userRepository.existsByEmail(email)) {
-            throw new site.utnpf.odontolink.domain.exception.DuplicateResourceException("Usuario", "email", email);
-        }
+        // Guardar datos específicos para uso en hooks
+        this.healthInsurance = healthInsurance;
+        this.bloodType = bloodType;
 
-        // Validación de negocio: El DNI no debe existir
-        if (userRepository.existsByDni(dni)) {
-            throw new site.utnpf.odontolink.domain.exception.DuplicateResourceException("Usuario", "DNI", dni);
-        }
+        // 1. Validar reglas comunes (email y DNI únicos)
+        validateCommonRules(email, dni);
 
-        // Crear el User con contraseña hasheada
-        User user = new User(
+        // 2. Validar reglas específicas del paciente (actualmente ninguna)
+        validateRoleSpecificRules();
+
+        // 3. Crear y guardar el User base
+        User savedUser = createAndSaveUser(
                 email,
-                passwordEncoder.encode(password),
+                password,
                 Role.ROLE_PATIENT,
                 firstName,
                 lastName,
@@ -59,13 +67,22 @@ public class PatientRegistrationService implements IPatientRegistrationUseCase {
                 birthDate
         );
 
-        // Guardar el User primero
-        User savedUser = userRepository.save(user);
+        // 4. Crear y guardar el perfil específico de Patient
+        return (Patient) createAndSaveRoleProfile(savedUser);
+    }
 
-        // Crear el perfil de Patient
+    @Override
+    protected void validateRoleSpecificRules() {
+        // Los pacientes no tienen validaciones adicionales por ahora
+        // Ejemplo futuro: validar que no tenga deudas pendientes, etc.
+    }
+
+    @Override
+    protected Patient createAndSaveRoleProfile(User savedUser) {
+        // Crear el perfil de Patient con los datos específicos
         Patient patient = new Patient(savedUser, healthInsurance, bloodType);
 
-        // Guardar el Patient
+        // Guardar y retornar el Patient
         return patientRepository.save(patient);
     }
 }

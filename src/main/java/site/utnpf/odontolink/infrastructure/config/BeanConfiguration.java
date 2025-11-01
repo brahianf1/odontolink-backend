@@ -6,10 +6,13 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import site.utnpf.odontolink.application.port.in.IAuthUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
+import site.utnpf.odontolink.application.port.in.IPractitionerRegistrationUseCase;
 import site.utnpf.odontolink.application.port.out.ITokenProvider;
 import site.utnpf.odontolink.application.service.AuthService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
+import site.utnpf.odontolink.application.service.PractitionerRegistrationService;
 import site.utnpf.odontolink.domain.repository.PatientRepository;
+import site.utnpf.odontolink.domain.repository.PractitionerRepository;
 import site.utnpf.odontolink.domain.repository.UserRepository;
 
 /**
@@ -41,5 +44,16 @@ public class BeanConfiguration {
                                                                   PatientRepository patientRepository,
                                                                   PasswordEncoder passwordEncoder) {
         return new PatientRegistrationService(userRepository, patientRepository, passwordEncoder);
+    }
+
+    /**
+     * Bean para el caso de uso de registro de practicantes.
+     * Expone la interfaz IPractitionerRegistrationUseCase implementada por PractitionerRegistrationService.
+     */
+    @Bean
+    public IPractitionerRegistrationUseCase practitionerRegistrationUseCase(UserRepository userRepository,
+                                                                            PractitionerRepository practitionerRepository,
+                                                                            PasswordEncoder passwordEncoder) {
+        return new PractitionerRegistrationService(userRepository, practitionerRepository, passwordEncoder);
     }
 }

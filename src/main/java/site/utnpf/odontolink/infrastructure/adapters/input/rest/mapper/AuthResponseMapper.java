@@ -2,6 +2,7 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper;
 
 import site.utnpf.odontolink.domain.model.AuthResult;
 import site.utnpf.odontolink.domain.model.Patient;
+import site.utnpf.odontolink.domain.model.Practitioner;
 import site.utnpf.odontolink.domain.model.User;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.JwtResponseDTO;
 
@@ -42,6 +43,21 @@ public class AuthResponseMapper {
 
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Paciente registrado exitosamente");
+        response.put("userId", user.getId());
+        response.put("email", user.getEmail());
+        response.put("role", user.getRole().name());
+
+        return response;
+    }
+
+    /**
+     * Convierte un Practitioner del dominio a un DTO de respuesta de registro.
+     */
+    public static Map<String, Object> toRegistrationResponseDTO(Practitioner practitioner) {
+        User user = practitioner.getUser();
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Practicante registrado exitosamente");
         response.put("userId", user.getId());
         response.put("email", user.getEmail());
         response.put("role", user.getRole().name());
