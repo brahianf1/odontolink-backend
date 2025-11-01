@@ -10,7 +10,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import site.utnpf.odontolink.domain.exception.AuthenticationFailedException;
 import site.utnpf.odontolink.domain.exception.DuplicateResourceException;
+import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
+import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ErrorResponseDTO;
 
 import java.util.List;
@@ -87,6 +89,42 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+    }
+
+    /**
+     * Maneja excepciones de reglas de negocio inválidas.
+     */
+    @ExceptionHandler(InvalidBusinessRuleException.class)
+    public ResponseEntity<ErrorResponseDTO> handleInvalidBusinessRuleException(
+            InvalidBusinessRuleException ex,
+            HttpServletRequest request) {
+
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                "Business Rule Violation",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(errorResponse);
+    }
+
+    /**
+     * Maneja excepciones de operaciones no autorizadas.
+     */
+    @ExceptionHandler(UnauthorizedOperationException.class)
+    public ResponseEntity<ErrorResponseDTO> handleUnauthorizedOperationException(
+            UnauthorizedOperationException ex,
+            HttpServletRequest request) {
+
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                HttpStatus.FORBIDDEN.value(),
+                "Forbidden",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
     }
 
     /**

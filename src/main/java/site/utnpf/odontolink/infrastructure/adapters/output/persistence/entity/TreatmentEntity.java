@@ -1,23 +1,30 @@
-package site.utnpf.odontolink.domain.model;
+package site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity;
+
+import jakarta.persistence.*;
 
 /**
- * Representa el catálogo general de tratamientos que la institución ofrece.
- * Ej: "Limpieza Dental", "Endodoncia". Es una entidad maestra.
+ * Entidad JPA para la tabla 'treatments'.
+ * Representa el catálogo maestro de tratamientos de la institución.
  */
-public class Treatment {
+@Entity
+@Table(name = "treatments")
+public class TreatmentEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(nullable = false, unique = true, length = 100)
     private String name;
+
+    @Column(columnDefinition = "TEXT")
     private String description;
-    private String area; // ej: "General", "Ortodoncia"
+
+    @Column(length = 50)
+    private String area;
 
     // Constructores
-    public Treatment() {
-    }
-
-    public Treatment(String name, String description, String area) {
-        this.name = name;
-        this.description = description;
-        this.area = area;
+    public TreatmentEntity() {
     }
 
     // Getters y Setters

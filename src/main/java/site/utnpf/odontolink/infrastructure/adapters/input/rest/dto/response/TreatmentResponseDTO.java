@@ -1,20 +1,21 @@
-package site.utnpf.odontolink.domain.model;
+package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 
 /**
- * Representa el catálogo general de tratamientos que la institución ofrece.
- * Ej: "Limpieza Dental", "Endodoncia". Es una entidad maestra.
+ * DTO de respuesta para un tratamiento del catálogo maestro.
  */
-public class Treatment {
+public class TreatmentResponseDTO {
+
     private Long id;
     private String name;
     private String description;
-    private String area; // ej: "General", "Ortodoncia"
+    private String area;
 
     // Constructores
-    public Treatment() {
+    public TreatmentResponseDTO() {
     }
 
-    public Treatment(String name, String description, String area) {
+    public TreatmentResponseDTO(Long id, String name, String description, String area) {
+        this.id = id;
         this.name = name;
         this.description = description;
         this.area = area;
