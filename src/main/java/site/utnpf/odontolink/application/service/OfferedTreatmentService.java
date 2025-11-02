@@ -80,6 +80,7 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
     public OfferedTreatment addTreatmentToCatalog(Long practitionerId,
                                                   Long treatmentId,
                                                   String requirements,
+                                                  int durationInMinutes,
                                                   Set<AvailabilitySlot> availabilitySlots) {
 
         Practitioner practitioner = practitionerRepository.findById(practitionerId)
@@ -92,6 +93,7 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
                 practitioner,
                 treatment,
                 requirements,
+                durationInMinutes,
                 availabilitySlots
         );
 
@@ -120,6 +122,7 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
     public OfferedTreatment updateOfferedTreatment(Long practitionerId,
                                                    Long offeredTreatmentId,
                                                    String requirements,
+                                                   Integer durationInMinutes,
                                                    Set<AvailabilitySlot> availabilitySlots) {
 
         OfferedTreatment existingOffer = offeredTreatmentRepository.findById(offeredTreatmentId)
@@ -132,6 +135,7 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
         OfferedTreatment updatedOffer = domainService.updateOffer(
                 existingOffer,
                 requirements,
+                durationInMinutes,
                 availabilitySlots
         );
 

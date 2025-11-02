@@ -49,6 +49,7 @@ public class OfferedTreatmentRestMapper {
         }
 
         response.setRequirements(domain.getRequirements());
+        response.setDurationInMinutes(domain.getDurationInMinutes());
 
         if (domain.getAvailabilitySlots() != null) {
             response.setAvailabilitySlots(

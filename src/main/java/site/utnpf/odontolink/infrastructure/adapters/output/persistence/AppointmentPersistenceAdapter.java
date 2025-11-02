@@ -119,4 +119,47 @@ public class AppointmentPersistenceAdapter implements AppointmentRepository {
                 status
         );
     }
+
+    @Override
+    public boolean hasCollisionInTimeRange(
+            Long practitionerId,
+            LocalDateTime startTime,
+            LocalDateTime endTime,
+            AppointmentStatus excludeStatus) {
+
+        // Obtener todos los turnos del practicante en ese rango de fechas
+        LocalDateTime startOfDay = startTime.toLocalDate().atStartOfDay();
+        LocalDateTime endOfDay = endTime.toLocalDate().plusDays(1).atStartOfDay();
+
+        List<AppointmentEntity> appointments = jpaAppointmentRepository.findByPractitionerIdAndDateRange(
+                practitionerId,
+                startOfDay,
+                endOfDay
+        );
+
+        // Filtrar los que no tienen el estado excluido y verificar solapamiento
+        return appointments.stream()
+                .filter(apt -> apt.getStatus() != excludeStatus)
+                .anyMatch(apt -> {
+                    LocalDateTime aptStart = apt.getAppointmentTime();
+                    LocalDateTime aptEnd = aptStart.plusMinutes(apt.getDurationInMinutes());
+
+                    // Detectar solapamiento: dos rangos se solapan si uno comienza antes de que el otro termine
+                    return startTime.isBefore(aptEnd) && endTime.isAfter(aptStart);
+                });
+    }
+
+    @Override
+    public List<Appointment> findByPractitionerIdAndDate(Long practitionerId, LocalDateTime date) {
+        LocalDateTime startOfDay = date.toLocalDate().atStartOfDay();
+        LocalDateTime endOfDay = date.toLocalDate().plusDays(1).atStartOfDay();
+
+        return jpaAppointmentRepository.findByPractitionerIdAndDateRange(
+                practitionerId,
+                startOfDay,
+                endOfDay
+        ).stream()
+                .map(AppointmentPersistenceMapper::toDomain)
+                .collect(Collectors.toList());
+    }
 }

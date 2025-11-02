@@ -19,15 +19,28 @@ public class Appointment {
     private String motive;                 // Motivo de la cita (ej. "Inicio", "Control")
     private AppointmentStatus status;      // "Agendado", "Cancelado", etc.
 
+    /**
+     * Duración en minutos del turno.
+     * Este campo representa un "snapshot" de la duración del servicio en el momento
+     * de la reserva. Se preserva inmutablemente para mantener la integridad del registro
+     * histórico, independientemente de cambios posteriores en la configuración del servicio.
+     *
+     * Razón de diseño: Si un practicante cambia la duración de su servicio de 30 a 60 minutos,
+     * los turnos ya reservados deben mantener la duración con la que fueron acordados (30 min).
+     * Esto permite cálculos precisos de disponibilidad y auditoría histórica correcta.
+     */
+    private int durationInMinutes;
+
     // Constructor sin argumentos (requerido por mappers de persistencia)
     public Appointment() {
     }
 
     // Constructor usado por la Attention
-    protected Appointment(Attention attention, LocalDateTime time, String motive) {
+    protected Appointment(Attention attention, LocalDateTime time, String motive, int durationInMinutes) {
         this.attention = attention;
         this.appointmentTime = time;
         this.motive = motive;
+        this.durationInMinutes = durationInMinutes;
         this.status = AppointmentStatus.SCHEDULED;
     }
 
@@ -88,5 +101,13 @@ public class Appointment {
 
     public void setStatus(AppointmentStatus status) {
         this.status = status;
+    }
+
+    public int getDurationInMinutes() {
+        return durationInMinutes;
+    }
+
+    public void setDurationInMinutes(int durationInMinutes) {
+        this.durationInMinutes = durationInMinutes;
     }
 }

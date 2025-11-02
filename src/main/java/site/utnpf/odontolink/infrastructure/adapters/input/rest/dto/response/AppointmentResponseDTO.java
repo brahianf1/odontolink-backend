@@ -20,6 +20,7 @@ public class AppointmentResponseDTO {
     private LocalDateTime appointmentTime;
     private String motive;
     private AppointmentStatus status;
+    private int durationInMinutes;
 
     // Información del tratamiento
     private Long treatmentId;
@@ -127,5 +128,13 @@ public class AppointmentResponseDTO {
 
     public void setAttentionId(Long attentionId) {
         this.attentionId = attentionId;
+    }
+
+    public int getDurationInMinutes() {
+        return durationInMinutes;
+    }
+
+    public void setDurationInMinutes(int durationInMinutes) {
+        this.durationInMinutes = durationInMinutes;
     }
 }

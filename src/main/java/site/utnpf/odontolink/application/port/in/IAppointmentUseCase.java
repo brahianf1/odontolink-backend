@@ -3,6 +3,7 @@ package site.utnpf.odontolink.application.port.in;
 import site.utnpf.odontolink.domain.model.Appointment;
 import site.utnpf.odontolink.domain.model.Attention;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -64,4 +65,21 @@ public interface IAppointmentUseCase {
      * @return Lista de tratamientos ofrecidos disponibles
      */
     List<site.utnpf.odontolink.domain.model.OfferedTreatment> getAvailableOfferedTreatments(Long treatmentId);
+
+    /**
+     * Obtiene los slots de tiempo disponibles para un tratamiento ofrecido en una fecha específica.
+     * Este método implementa el cálculo de inventario dinámico.
+     *
+     * Corresponde a la nueva funcionalidad de "Ver Disponibilidad" del CU-008.
+     *
+     * El servicio calcula en tiempo real:
+     * 1. Los slots teóricos basados en el bloque de disponibilidad y la duración del servicio
+     * 2. Filtra los slots que colisionan con turnos ya reservados
+     * 3. Devuelve solo los slots realmente disponibles para reservar
+     *
+     * @param offeredTreatmentId ID de la oferta de tratamiento
+     * @param requestedDate Fecha para la cual se consultan los horarios disponibles
+     * @return Lista de LocalDateTime con los slots disponibles (ej: [2025-01-15T08:00, 2025-01-15T08:30, ...])
+     */
+    List<LocalDateTime> getAvailableSlots(Long offeredTreatmentId, LocalDate requestedDate);
 }

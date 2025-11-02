@@ -23,6 +23,7 @@ public class AppointmentPersistenceMapper {
         appointment.setAppointmentTime(entity.getAppointmentTime());
         appointment.setMotive(entity.getMotive());
         appointment.setStatus(entity.getStatus());
+        appointment.setDurationInMinutes(entity.getDurationInMinutes());
         // NOTE: No mapeamos 'attention' aquí para evitar ciclos
 
         return appointment;
@@ -49,6 +50,7 @@ public class AppointmentPersistenceMapper {
         appointment.setAppointmentTime(entity.getAppointmentTime());
         appointment.setMotive(entity.getMotive());
         appointment.setStatus(entity.getStatus());
+        appointment.setDurationInMinutes(entity.getDurationInMinutes());
 
         // Mapear la Attention con sus relaciones ya cargadas
         if (entity.getAttention() != null) {
@@ -73,6 +75,7 @@ public class AppointmentPersistenceMapper {
         entity.setAppointmentTime(appointment.getAppointmentTime());
         entity.setMotive(appointment.getMotive());
         entity.setStatus(appointment.getStatus());
+        entity.setDurationInMinutes(appointment.getDurationInMinutes());
         // NOTE: No mapeamos 'attention' aquí para evitar ciclos
 
         return entity;

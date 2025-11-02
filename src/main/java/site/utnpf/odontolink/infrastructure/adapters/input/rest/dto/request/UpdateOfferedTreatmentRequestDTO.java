@@ -13,6 +13,8 @@ public class UpdateOfferedTreatmentRequestDTO {
 
     private String requirements;
 
+    private Integer durationInMinutes;
+
     @NotEmpty(message = "Debe especificar al menos un horario de disponibilidad")
     @Valid
     private Set<AvailabilitySlotDTO> availabilitySlots;
@@ -21,8 +23,9 @@ public class UpdateOfferedTreatmentRequestDTO {
     public UpdateOfferedTreatmentRequestDTO() {
     }
 
-    public UpdateOfferedTreatmentRequestDTO(String requirements, Set<AvailabilitySlotDTO> availabilitySlots) {
+    public UpdateOfferedTreatmentRequestDTO(String requirements, Integer durationInMinutes, Set<AvailabilitySlotDTO> availabilitySlots) {
         this.requirements = requirements;
+        this.durationInMinutes = durationInMinutes;
         this.availabilitySlots = availabilitySlots;
     }
 
@@ -33,6 +36,14 @@ public class UpdateOfferedTreatmentRequestDTO {
 
     public void setRequirements(String requirements) {
         this.requirements = requirements;
+    }
+
+    public Integer getDurationInMinutes() {
+        return durationInMinutes;
+    }
+
+    public void setDurationInMinutes(Integer durationInMinutes) {
+        this.durationInMinutes = durationInMinutes;
     }
 
     public Set<AvailabilitySlotDTO> getAvailabilitySlots() {

@@ -88,4 +88,23 @@ public interface JpaAppointmentRepository extends JpaRepository<AppointmentEntit
             @Param("appointmentTime") LocalDateTime appointmentTime,
             @Param("excludedStatus") AppointmentStatus excludedStatus
     );
+
+    /**
+     * Busca turnos de un practicante para una fecha específica.
+     * Este método es crucial para el cálculo del inventario dinámico.
+     *
+     * @param practitionerId ID del practicante
+     * @param startOfDay Inicio del día (00:00:00)
+     * @param endOfDay Fin del día (23:59:59)
+     * @return Lista de turnos en ese rango
+     */
+    @Query("SELECT a FROM AppointmentEntity a " +
+           "WHERE a.attention.practitioner.id = :practitionerId " +
+           "AND a.appointmentTime >= :startOfDay " +
+           "AND a.appointmentTime < :endOfDay")
+    List<AppointmentEntity> findByPractitionerIdAndDateRange(
+            @Param("practitionerId") Long practitionerId,
+            @Param("startOfDay") LocalDateTime startOfDay,
+            @Param("endOfDay") LocalDateTime endOfDay
+    );
 }

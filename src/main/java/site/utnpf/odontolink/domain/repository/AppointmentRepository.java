@@ -91,4 +91,34 @@ public interface AppointmentRepository {
             LocalDateTime appointmentTime,
             AppointmentStatus status
     );
+
+    /**
+     * Verifica si existe un conflicto de horario para un practicante en un rango de tiempo.
+     * Este método es fundamental para el inventario dinámico, ya que verifica si un rango
+     * [startTime, endTime) se solapa con algún turno existente del practicante.
+     *
+     * Lógica de solapamiento: Dos rangos [A1, A2) y [B1, B2) se solapan si A1 < B2 AND B1 < A2
+     *
+     * @param practitionerId ID del practicante
+     * @param startTime Inicio del rango a verificar
+     * @param endTime Fin del rango a verificar
+     * @param excludeStatus Estado de turnos a excluir (típicamente CANCELLED)
+     * @return true si existe al menos un turno que se solapa con el rango especificado
+     */
+    boolean hasCollisionInTimeRange(
+            Long practitionerId,
+            LocalDateTime startTime,
+            LocalDateTime endTime,
+            AppointmentStatus excludeStatus
+    );
+
+    /**
+     * Obtiene todos los turnos de un practicante para una fecha específica.
+     * Útil para calcular el inventario de slots disponibles.
+     *
+     * @param practitionerId ID del practicante
+     * @param date Fecha para la cual buscar turnos
+     * @return Lista de turnos del practicante en esa fecha
+     */
+    List<Appointment> findByPractitionerIdAndDate(Long practitionerId, LocalDateTime date);
 }

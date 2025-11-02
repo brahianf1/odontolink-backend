@@ -6,7 +6,9 @@ import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
 import site.utnpf.odontolink.domain.model.*;
 import site.utnpf.odontolink.domain.repository.*;
 import site.utnpf.odontolink.domain.service.AppointmentBookingService;
+import site.utnpf.odontolink.domain.service.AvailabilityGenerationService;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -35,18 +37,21 @@ public class AppointmentService implements IAppointmentUseCase {
     private final AttentionRepository attentionRepository;
     private final OfferedTreatmentRepository offeredTreatmentRepository;
     private final AppointmentBookingService appointmentBookingService;
+    private final AvailabilityGenerationService availabilityGenerationService;
 
     public AppointmentService(
             PatientRepository patientRepository,
             AppointmentRepository appointmentRepository,
             AttentionRepository attentionRepository,
             OfferedTreatmentRepository offeredTreatmentRepository,
-            AppointmentBookingService appointmentBookingService) {
+            AppointmentBookingService appointmentBookingService,
+            AvailabilityGenerationService availabilityGenerationService) {
         this.patientRepository = patientRepository;
         this.appointmentRepository = appointmentRepository;
         this.attentionRepository = attentionRepository;
         this.offeredTreatmentRepository = offeredTreatmentRepository;
         this.appointmentBookingService = appointmentBookingService;
+        this.availabilityGenerationService = availabilityGenerationService;
     }
 
     /**
@@ -139,5 +144,34 @@ public class AppointmentService implements IAppointmentUseCase {
 
         // Retornar todos los tratamientos ofrecidos
         return offeredTreatmentRepository.findAll();
+    }
+
+    /**
+     * Obtiene los slots de tiempo disponibles para un tratamiento ofrecido en una fecha específica.
+     * Implementa el cálculo de inventario dinámico delegando al servicio de dominio.
+     *
+     * Orquestación:
+     * 1. Carga el OfferedTreatment desde el repositorio
+     * 2. Delega al AvailabilityGenerationService para calcular los slots disponibles
+     * 3. Retorna la lista de slots (timestamps)
+     *
+     * @param offeredTreatmentId ID de la oferta de tratamiento
+     * @param requestedDate Fecha para la cual se consultan los horarios
+     * @return Lista de LocalDateTime con los slots disponibles
+     * @throws ResourceNotFoundException si el OfferedTreatment no existe
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<LocalDateTime> getAvailableSlots(Long offeredTreatmentId, LocalDate requestedDate) {
+        // Cargar el OfferedTreatment desde el repositorio
+        OfferedTreatment offeredTreatment = offeredTreatmentRepository.findById(offeredTreatmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "OfferedTreatment",
+                        "id",
+                        offeredTreatmentId.toString()
+                ));
+
+        // Delegar al servicio de dominio para calcular el inventario dinámico
+        return availabilityGenerationService.generateAvailableSlots(offeredTreatment, requestedDate);
     }
 }

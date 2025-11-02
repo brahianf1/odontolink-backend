@@ -25,12 +25,14 @@ public interface IOfferedTreatmentUseCase {
      * @param practitionerId ID del practicante (obtenido del usuario autenticado)
      * @param treatmentId ID del tratamiento maestro seleccionado
      * @param requirements Requisitos específicos del practicante
+     * @param durationInMinutes Duración del tratamiento en minutos
      * @param availabilitySlots Horarios de disponibilidad (objetos de dominio)
      * @return El tratamiento ofrecido creado
      */
     OfferedTreatment addTreatmentToCatalog(Long practitionerId,
                                            Long treatmentId,
                                            String requirements,
+                                           int durationInMinutes,
                                            Set<AvailabilitySlot> availabilitySlots);
 
     /**
@@ -40,12 +42,14 @@ public interface IOfferedTreatmentUseCase {
      * @param practitionerId ID del practicante (para verificar permisos)
      * @param offeredTreatmentId ID del tratamiento ofrecido a modificar
      * @param requirements Nuevos requisitos específicos
+     * @param durationInMinutes Duración del tratamiento en minutos (null para no modificar)
      * @param availabilitySlots Nuevos horarios de disponibilidad (objetos de dominio)
      * @return El tratamiento ofrecido actualizado
      */
     OfferedTreatment updateOfferedTreatment(Long practitionerId,
                                             Long offeredTreatmentId,
                                             String requirements,
+                                            Integer durationInMinutes,
                                             Set<AvailabilitySlot> availabilitySlots);
 
     /**

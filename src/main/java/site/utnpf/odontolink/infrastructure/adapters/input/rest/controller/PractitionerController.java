@@ -72,6 +72,7 @@ public class PractitionerController {
                 practitionerId,
                 request.getTreatmentId(),
                 request.getRequirements(),
+                request.getDurationInMinutes(),
                 availabilitySlots
         );
 
@@ -116,6 +117,7 @@ public class PractitionerController {
                 practitionerId,
                 id,
                 request.getRequirements(),
+                request.getDurationInMinutes(),
                 availabilitySlots
         );
 

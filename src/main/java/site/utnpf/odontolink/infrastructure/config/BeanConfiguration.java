@@ -29,6 +29,7 @@ import site.utnpf.odontolink.domain.repository.SupervisorRepository;
 import site.utnpf.odontolink.domain.repository.TreatmentRepository;
 import site.utnpf.odontolink.domain.repository.UserRepository;
 import site.utnpf.odontolink.domain.service.AppointmentBookingService;
+import site.utnpf.odontolink.domain.service.AvailabilityGenerationService;
 import site.utnpf.odontolink.domain.service.OfferedTreatmentDomainService;
 
 /**
@@ -152,6 +153,25 @@ public class BeanConfiguration {
     }
 
     /**
+     * Bean para el servicio de dominio de AvailabilityGeneration.
+     * Este es el servicio de dominio que implementa el algoritmo de inventario dinámico:
+     * - Genera slots teóricos basados en la duración del servicio
+     * - Filtra slots que colisionan con turnos ya reservados
+     * - Devuelve solo los slots realmente disponibles
+     *
+     * Este servicio opera exclusivamente con POJOs de dominio.
+     */
+    @Bean
+    public AvailabilityGenerationService availabilityGenerationService(
+            AppointmentRepository appointmentRepository,
+            OfferedTreatmentRepository offeredTreatmentRepository) {
+        return new AvailabilityGenerationService(
+                appointmentRepository,
+                offeredTreatmentRepository
+        );
+    }
+
+    /**
      * Bean para el caso de uso de gestión de turnos.
      * Expone la interfaz IAppointmentUseCase implementada por AppointmentService.
      *
@@ -159,11 +179,13 @@ public class BeanConfiguration {
      * - Reservar primer turno (crea Attention + Appointment atómicamente)
      * - Ver catálogo público de tratamientos ofrecidos
      * - Consultar turnos agendados (paciente y practicante)
+     * - Obtener slots disponibles (inventario dinámico)
      *
      * Este servicio es el orquestador transaccional que:
      * 1. Carga entidades desde repositorios
      * 2. Delega al AppointmentBookingService (dominio) para aplicar reglas de negocio
-     * 3. Persiste cambios de forma transaccional
+     * 3. Delega al AvailabilityGenerationService para calcular inventario dinámico
+     * 4. Persiste cambios de forma transaccional
      */
     @Bean
     public IAppointmentUseCase appointmentUseCase(
@@ -171,13 +193,15 @@ public class BeanConfiguration {
             AppointmentRepository appointmentRepository,
             AttentionRepository attentionRepository,
             OfferedTreatmentRepository offeredTreatmentRepository,
-            AppointmentBookingService appointmentBookingService) {
+            AppointmentBookingService appointmentBookingService,
+            AvailabilityGenerationService availabilityGenerationService) {
         return new AppointmentService(
                 patientRepository,
                 appointmentRepository,
                 attentionRepository,
                 offeredTreatmentRepository,
-                appointmentBookingService
+                appointmentBookingService,
+                availabilityGenerationService
         );
     }
 }

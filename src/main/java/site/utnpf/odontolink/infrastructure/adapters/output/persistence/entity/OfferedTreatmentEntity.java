@@ -29,6 +29,13 @@ public class OfferedTreatmentEntity {
     private String requirements;
 
     /**
+     * La duración en minutos que este practicante asigna a este tratamiento específico.
+     * Este valor es fundamental para el cálculo del inventario dinámico de turnos.
+     */
+    @Column(name = "duration_in_minutes", nullable = false)
+    private int durationInMinutes;
+
+    /**
      * Relación OneToMany con AvailabilitySlotEntity.
      * CascadeType.ALL: Al guardar/actualizar/eliminar un OfferedTreatment, se aplica en cascada a los slots.
      * orphanRemoval = true: Si un slot se remueve de la colección, se elimina de la BD.
@@ -71,6 +78,14 @@ public class OfferedTreatmentEntity {
 
     public void setRequirements(String requirements) {
         this.requirements = requirements;
+    }
+
+    public int getDurationInMinutes() {
+        return durationInMinutes;
+    }
+
+    public void setDurationInMinutes(int durationInMinutes) {
+        this.durationInMinutes = durationInMinutes;
     }
 
     public Set<AvailabilitySlotEntity> getAvailabilitySlots() {

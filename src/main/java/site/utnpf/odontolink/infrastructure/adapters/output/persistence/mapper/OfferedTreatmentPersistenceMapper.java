@@ -27,6 +27,7 @@ public class OfferedTreatmentPersistenceMapper {
         OfferedTreatmentEntity entity = new OfferedTreatmentEntity();
         entity.setId(domain.getId());
         entity.setRequirements(domain.getRequirements());
+        entity.setDurationInMinutes(domain.getDurationInMinutes());
 
         // Mapear las relaciones
         if (domain.getPractitioner() != null) {
@@ -64,6 +65,7 @@ public class OfferedTreatmentPersistenceMapper {
         OfferedTreatment domain = new OfferedTreatment();
         domain.setId(entity.getId());
         domain.setRequirements(entity.getRequirements());
+        domain.setDurationInMinutes(entity.getDurationInMinutes());
 
         // Mapear las relaciones
         if (entity.getPractitioner() != null) {

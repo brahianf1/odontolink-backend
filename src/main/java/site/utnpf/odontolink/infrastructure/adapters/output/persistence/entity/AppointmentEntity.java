@@ -40,6 +40,9 @@ public class AppointmentEntity {
     @Column(nullable = false, length = 20)
     private AppointmentStatus status;
 
+    @Column(name = "duration_in_minutes", nullable = false)
+    private int durationInMinutes;
+
     // Constructores
     public AppointmentEntity() {
     }
@@ -83,5 +86,13 @@ public class AppointmentEntity {
 
     public void setStatus(AppointmentStatus status) {
         this.status = status;
+    }
+
+    public int getDurationInMinutes() {
+        return durationInMinutes;
+    }
+
+    public void setDurationInMinutes(int durationInMinutes) {
+        this.durationInMinutes = durationInMinutes;
     }
 }

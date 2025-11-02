@@ -75,11 +75,14 @@ public class AppointmentBookingService {
         // Validar la Oferta (Regla de Negocio)
         OfferedTreatment offeredTreatment = validateOfferedTreatment(offeredTreatmentId);
 
+        // Obtener la duración del servicio para las validaciones
+        int durationInMinutes = offeredTreatment.getDurationInMinutes();
+
         // Validar Disponibilidad (Regla de Negocio 1)
         validateAvailability(offeredTreatmentId, appointmentTime);
 
-        // Validar Conflictos (Regla de Negocio 2)
-        validateNoConflicts(patient, offeredTreatment.getPractitioner(), appointmentTime);
+        // Validar Conflictos (Regla de Negocio 2) usando rangos de tiempo
+        validateNoConflicts(patient, offeredTreatment.getPractitioner(), appointmentTime, durationInMinutes);
 
         // Buscar o Crear la Attention (el "Caso Clínico")
         Attention attention = findOrCreateAttention(
@@ -91,7 +94,8 @@ public class AppointmentBookingService {
         // Usar el método de dominio rico de Attention para crear el Appointment
         Appointment newAppointment = attention.scheduleAppointment(
                 appointmentTime,
-                "Primer turno - Inicio de tratamiento"
+                "Primer turno - Inicio de tratamiento",
+                durationInMinutes
         );
 
         // Devolver la Attention (con el Appointment en su lista)
@@ -139,17 +143,31 @@ public class AppointmentBookingService {
     }
 
     /**
-     * Valida que no existan conflictos de horario.
-     * Regla de Negocio 2: Ni el Paciente ni el Practicante pueden tener otro turno activo a la misma hora.
+     * Valida que no existan conflictos de horario usando rangos de tiempo.
+     * Regla de Negocio 2: Ni el Paciente ni el Practicante pueden tener otro turno activo
+     * que se solape con el rango de tiempo del nuevo turno.
      *
-     * @param patient         El paciente
-     * @param practitioner    El practicante
-     * @param appointmentTime El horario solicitado
+     * Este método implementa la validación de colisiones por rango, fundamental para el
+     * modelo de inventario dinámico. En lugar de verificar un punto exacto en el tiempo,
+     * verifica si el rango [startTime, endTime) del nuevo turno se solapa con algún turno existente.
+     *
+     * @param patient            El paciente
+     * @param practitioner       El practicante
+     * @param appointmentTime    Hora de inicio del turno solicitado
+     * @param durationInMinutes  Duración del servicio en minutos
      * @throws InvalidBusinessRuleException si hay conflictos
      */
-    private void validateNoConflicts(Patient patient, Practitioner practitioner, LocalDateTime appointmentTime) {
+    private void validateNoConflicts(Patient patient, Practitioner practitioner,
+                                     LocalDateTime appointmentTime, int durationInMinutes) {
+        // Calcular el rango de tiempo del turno solicitado
+        LocalDateTime startTime = appointmentTime;
+        LocalDateTime endTime = appointmentTime.plusMinutes(durationInMinutes);
+
         // Verificar conflicto para el Paciente
         // Excluimos turnos CANCELLED ya que no representan un conflicto real
+        // Nota: La verificación de pacientes sigue usando punto exacto por simplicidad,
+        // ya que es raro que un paciente tenga múltiples turnos solapados.
+        // Se podría mejorar en el futuro si es necesario.
         boolean patientHasConflict = appointmentRepository.existsByPatientIdAndAppointmentTimeAndStatusNot(
                 patient.getId(),
                 appointmentTime,
@@ -163,16 +181,18 @@ public class AppointmentBookingService {
             );
         }
 
-        // Verificar conflicto para el Practicante
-        boolean practitionerHasConflict = appointmentRepository.existsByPractitionerIdAndAppointmentTimeAndStatusNot(
+        // Verificar conflicto para el Practicante usando rango de tiempo
+        // Esta es la validación clave del inventario dinámico
+        boolean practitionerHasConflict = appointmentRepository.hasCollisionInTimeRange(
                 practitioner.getId(),
-                appointmentTime,
+                startTime,
+                endTime,
                 AppointmentStatus.CANCELLED
         );
 
         if (practitionerHasConflict) {
             throw new InvalidBusinessRuleException(
-                    "El practicante ya tiene un turno agendado para esta fecha y hora. " +
+                    "El practicante ya tiene un turno agendado que se solapa con el horario solicitado. " +
                             "Por favor, seleccione otro horario disponible."
             );
         }

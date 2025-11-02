@@ -14,6 +14,7 @@ public class OfferedTreatmentResponseDTO {
     private String practitionerName;
     private TreatmentResponseDTO treatment;
     private String requirements;
+    private int durationInMinutes;
     private Set<AvailabilitySlotDTO> availabilitySlots;
 
     // Constructores
@@ -70,6 +71,14 @@ public class OfferedTreatmentResponseDTO {
 
     public void setRequirements(String requirements) {
         this.requirements = requirements;
+    }
+
+    public int getDurationInMinutes() {
+        return durationInMinutes;
+    }
+
+    public void setDurationInMinutes(int durationInMinutes) {
+        this.durationInMinutes = durationInMinutes;
     }
 
     public Set<AvailabilitySlotDTO> getAvailabilitySlots() {

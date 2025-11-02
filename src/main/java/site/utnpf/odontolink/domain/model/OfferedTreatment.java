@@ -19,6 +19,14 @@ public class OfferedTreatment {
     private String requirements; // "Requisitos específicos"
 
     /**
+     * La duración en minutos que este practicante
+     * asigna a ESTE tratamiento específico.
+     * (ej. 30 para Limpieza, 60 para Extracción)
+     * Este valor es fundamental para el cálculo del inventario dinámico de turnos.
+     */
+    private int durationInMinutes;
+
+    /**
      * Relación 1-a-N: Las franjas horarias estructuradas
      * para esta oferta (disponibilidad).
      */
@@ -67,6 +75,14 @@ public class OfferedTreatment {
 
     public void setRequirements(String requirements) {
         this.requirements = requirements;
+    }
+
+    public int getDurationInMinutes() {
+        return durationInMinutes;
+    }
+
+    public void setDurationInMinutes(int durationInMinutes) {
+        this.durationInMinutes = durationInMinutes;
     }
 
     public Set<AvailabilitySlot> getAvailabilitySlots() {

@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.controller;
 
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,6 +19,8 @@ import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.Attention
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.OfferedTreatmentRestMapper;
 import site.utnpf.odontolink.infrastructure.security.AuthenticationFacade;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -26,9 +29,10 @@ import java.util.stream.Collectors;
  * Adaptador de entrada (Input Adapter) en Arquitectura Hexagonal.
  *
  * Endpoints implementados:
- * - GET    /api/patient/offered-treatments         - Ver catálogo de tratamientos
- * - POST   /api/patient/appointments               - Reservar turno (CU-008)
- * - GET    /api/patient/appointments/upcoming      - Ver mis turnos agendados
+ * - GET    /api/patient/offered-treatments                      - Ver catálogo de tratamientos
+ * - GET    /api/patient/offered-treatments/{id}/availability    - Ver slots disponibles (inventario dinámico)
+ * - POST   /api/patient/appointments                            - Reservar turno (CU-008)
+ * - GET    /api/patient/appointments/upcoming                   - Ver mis turnos agendados
  *
  * Todos los endpoints están protegidos con @PreAuthorize("hasRole('PATIENT')").
  *
@@ -75,6 +79,45 @@ public class PatientController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Obtiene los slots de tiempo disponibles para un tratamiento ofrecido en una fecha específica.
+     * Implementa el nuevo modelo de inventario dinámico.
+     *
+     * Este endpoint permite al paciente consultar los horarios realmente disponibles
+     * antes de intentar reservar un turno. El sistema calcula en tiempo real:
+     * 1. Los slots teóricos basados en la duración del servicio
+     * 2. Filtra los slots que colisionan con turnos ya reservados
+     * 3. Devuelve solo los slots que están disponibles para reservar
+     *
+     * GET /api/patient/offered-treatments/{offeredTreatmentId}/availability?date=2025-01-15
+     *
+     * Query Parameters:
+     * - date: Fecha en formato ISO (YYYY-MM-DD)
+     *
+     * Response: 200 OK con lista de slots disponibles
+     * Ejemplo:
+     * [
+     *   "2025-01-15T08:00:00",
+     *   "2025-01-15T08:30:00",
+     *   "2025-01-15T09:00:00",
+     *   "2025-01-15T10:00:00"
+     * ]
+     *
+     * @param offeredTreatmentId ID de la oferta de tratamiento
+     * @param date Fecha para consultar disponibilidad (formato ISO: YYYY-MM-DD)
+     * @return ResponseEntity con la lista de slots disponibles
+     */
+    @GetMapping("/offered-treatments/{offeredTreatmentId}/availability")
+    public ResponseEntity<List<LocalDateTime>> getAvailableSlots(
+            @PathVariable Long offeredTreatmentId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        // Delegar al caso de uso para calcular el inventario dinámico
+        List<LocalDateTime> availableSlots = appointmentUseCase.getAvailableSlots(offeredTreatmentId, date);
+
+        return ResponseEntity.ok(availableSlots);
     }
 
     /**

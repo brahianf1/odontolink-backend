@@ -79,11 +79,11 @@ public class Attention {
     /**
      * Lógica de negocio para agendar un nuevo turno para ESTE caso.
      */
-    public Appointment scheduleAppointment(LocalDateTime time, String motive) {
+    public Appointment scheduleAppointment(LocalDateTime time, String motive, int durationInMinutes) {
         if (this.status != AttentionStatus.IN_PROGRESS) {
             throw new IllegalStateException("No se pueden agendar turnos para un caso cerrado o cancelado.");
         }
-        Appointment newAppointment = new Appointment(this, time, motive);
+        Appointment newAppointment = new Appointment(this, time, motive, durationInMinutes);
         this.appointments.add(newAppointment);
         return newAppointment;
     }
