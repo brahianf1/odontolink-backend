@@ -174,4 +174,121 @@ public class AppointmentService implements IAppointmentUseCase {
         // Delegar al servicio de dominio para calcular el inventario dinámico
         return availabilityGenerationService.generateAvailableSlots(offeredTreatment, requestedDate);
     }
+
+    /**
+     * Implementa el caso de uso CU 4.1: "Gestionar Asistencia al Turno" - Marcar como completado.
+     *
+     * Orquestación:
+     * 1. Busca el Appointment desde el repositorio
+     * 2. Valida que el practicante sea el dueño de la atención asociada
+     * 3. Valida que el turno esté en estado SCHEDULED (regla de negocio)
+     * 4. Actualiza el estado directamente en la base de datos (sin re-mapear entidad completa)
+     *
+     * @param appointmentId ID del turno a marcar como completado
+     * @param practitionerUser Usuario practicante autenticado
+     * @return El Appointment actualizado con estado COMPLETED
+     * @throws ResourceNotFoundException si el turno no existe
+     * @throws site.utnpf.odontolink.domain.exception.UnauthorizedOperationException si el practicante no es el dueño
+     * @throws IllegalStateException si el turno no está en estado SCHEDULED
+     */
+    @Override
+    public Appointment markAppointmentAsCompleted(Long appointmentId, User practitionerUser) {
+        // Cargar el Appointment desde el repositorio con su Attention y Practitioner
+        Appointment appointment = appointmentRepository.findByIdWithAttention(appointmentId)
+                .orElseThrow(() -> new site.utnpf.odontolink.domain.exception.ResourceNotFoundException(
+                        "Appointment",
+                        "id",
+                        appointmentId.toString()
+                ));
+
+        // Validar pertenencia: Solo el practicante dueño de la atención puede marcar asistencia
+        validatePractitionerOwnership(appointment, practitionerUser);
+
+        // Validar que el turno esté en estado SCHEDULED (regla de negocio)
+        if (appointment.getStatus() != AppointmentStatus.SCHEDULED) {
+            throw new IllegalStateException("Solo se puede completar un turno 'Agendado'.");
+        }
+
+        // Actualizar el estado directamente en la base de datos
+        // Esto es más eficiente y evita problemas con referencias bidireccionales
+        boolean updated = appointmentRepository.updateStatus(appointmentId, AppointmentStatus.COMPLETED);
+
+        if (!updated) {
+            throw new IllegalStateException("No se pudo actualizar el estado del turno.");
+        }
+
+        // Actualizar el estado en el objeto de dominio para retornarlo correctamente
+        appointment.setStatus(AppointmentStatus.COMPLETED);
+        return appointment;
+    }
+
+    /**
+     * Implementa el caso de uso CU 4.1: "Gestionar Asistencia al Turno" - Marcar como ausente.
+     *
+     * Orquestación:
+     * 1. Busca el Appointment desde el repositorio
+     * 2. Valida que el practicante sea el dueño de la atención asociada
+     * 3. Valida que el turno esté en estado SCHEDULED (regla de negocio)
+     * 4. Actualiza el estado directamente en la base de datos (sin re-mapear entidad completa)
+     *
+     * @param appointmentId ID del turno a marcar como ausente
+     * @param practitionerUser Usuario practicante autenticado
+     * @return El Appointment actualizado con estado NO_SHOW
+     * @throws ResourceNotFoundException si el turno no existe
+     * @throws site.utnpf.odontolink.domain.exception.UnauthorizedOperationException si el practicante no es el dueño
+     * @throws IllegalStateException si el turno no está en estado SCHEDULED
+     */
+    @Override
+    public Appointment markAppointmentAsNoShow(Long appointmentId, User practitionerUser) {
+        // Cargar el Appointment desde el repositorio con su Attention y Practitioner
+        Appointment appointment = appointmentRepository.findByIdWithAttention(appointmentId)
+                .orElseThrow(() -> new site.utnpf.odontolink.domain.exception.ResourceNotFoundException(
+                        "Appointment",
+                        "id",
+                        appointmentId.toString()
+                ));
+
+        // Validar pertenencia: Solo el practicante dueño de la atención puede marcar asistencia
+        validatePractitionerOwnership(appointment, practitionerUser);
+
+        // Validar que el turno esté en estado SCHEDULED (regla de negocio)
+        if (appointment.getStatus() != AppointmentStatus.SCHEDULED) {
+            throw new IllegalStateException("Solo se puede marcar como 'Ausente' un turno 'Agendado'.");
+        }
+
+        // Actualizar el estado directamente en la base de datos
+        // Esto es más eficiente y evita problemas con referencias bidireccionales
+        boolean updated = appointmentRepository.updateStatus(appointmentId, AppointmentStatus.NO_SHOW);
+
+        if (!updated) {
+            throw new IllegalStateException("No se pudo actualizar el estado del turno.");
+        }
+
+        // Actualizar el estado en el objeto de dominio para retornarlo correctamente
+        appointment.setStatus(AppointmentStatus.NO_SHOW);
+        return appointment;
+    }
+
+    /**
+     * Valida que el practicante autenticado sea el dueño de la atención asociada al turno.
+     *
+     * @param appointment Turno a validar
+     * @param practitionerUser Usuario practicante autenticado
+     * @throws site.utnpf.odontolink.domain.exception.UnauthorizedOperationException si el practicante no es el dueño
+     */
+    private void validatePractitionerOwnership(Appointment appointment, User practitionerUser) {
+        Attention attention = appointment.getAttention();
+
+        if (attention == null || attention.getPractitioner() == null) {
+            throw new IllegalStateException("El turno no tiene una atención asociada válida.");
+        }
+
+        // Comparar el User del Practitioner con el User autenticado
+        User practitionerOwner = attention.getPractitioner().getUser();
+        if (practitionerOwner == null || !practitionerOwner.getId().equals(practitionerUser.getId())) {
+            throw new site.utnpf.odontolink.domain.exception.UnauthorizedOperationException(
+                    "Solo el practicante responsable de la atención puede marcar la asistencia del turno."
+            );
+        }
+    }
 }

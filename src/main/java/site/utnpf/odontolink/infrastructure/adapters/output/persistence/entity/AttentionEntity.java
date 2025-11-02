@@ -53,6 +53,17 @@ public class AttentionEntity {
     @OneToMany(mappedBy = "attention", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<AppointmentEntity> appointments = new ArrayList<>();
 
+    /**
+     * Relación OneToMany con ProgressNoteEntity (bidireccional).
+     *
+     * CascadeType.ALL: Todas las operaciones (persist, merge, remove, etc.) se propagan a las ProgressNotes.
+     * orphanRemoval = true: Si una ProgressNote se remueve de la lista, se elimina de la BD.
+     *
+     * mappedBy = "attention": Indica que ProgressNoteEntity tiene el lado owner de la relación.
+     */
+    @OneToMany(mappedBy = "attention", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ProgressNoteEntity> progressNotes = new ArrayList<>();
+
     // Constructores
     public AttentionEntity() {
     }
@@ -130,5 +141,31 @@ public class AttentionEntity {
     public void removeAppointment(AppointmentEntity appointment) {
         this.appointments.remove(appointment);
         appointment.setAttention(null);
+    }
+
+    public List<ProgressNoteEntity> getProgressNotes() {
+        return progressNotes;
+    }
+
+    public void setProgressNotes(List<ProgressNoteEntity> progressNotes) {
+        this.progressNotes = progressNotes;
+    }
+
+    /**
+     * Método de utilidad para mantener la consistencia bidireccional.
+     * Agrega una ProgressNoteEntity a la lista y establece la relación inversa.
+     */
+    public void addProgressNote(ProgressNoteEntity progressNote) {
+        this.progressNotes.add(progressNote);
+        progressNote.setAttention(this);
+    }
+
+    /**
+     * Método de utilidad para mantener la consistencia bidireccional.
+     * Remueve una ProgressNoteEntity de la lista y rompe la relación inversa.
+     */
+    public void removeProgressNote(ProgressNoteEntity progressNote) {
+        this.progressNotes.remove(progressNote);
+        progressNote.setAttention(null);
     }
 }

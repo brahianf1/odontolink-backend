@@ -53,11 +53,36 @@ public class Appointment {
         this.status = AppointmentStatus.CANCELLED;
     }
 
+    /**
+     * Marca el turno como completado (el paciente asistió).
+     * Este método implementa la lógica del RF9 - CU 4.1: Gestionar Asistencia al Turno.
+     *
+     * Reglas de negocio:
+     * - Solo se puede completar un turno con estado SCHEDULED
+     * - Esta operación es irreversible
+     *
+     * @throws IllegalStateException si el turno no está en estado SCHEDULED
+     */
     public void complete() {
+        if (this.status != AppointmentStatus.SCHEDULED) {
+            throw new IllegalStateException("Solo se puede completar un turno 'Agendado'.");
+        }
         this.status = AppointmentStatus.COMPLETED;
     }
 
+    /**
+     * Marca el turno como "ausente" (el paciente no asistió).
+     * Este método implementa la lógica del RF9 - CU 4.1: Gestionar Asistencia al Turno.
+     *
+     * Reglas de negocio:
+     * - Solo se puede marcar como ausente un turno con estado SCHEDULED
+     *
+     * @throws IllegalStateException si el turno no está en estado SCHEDULED
+     */
     public void markAsNoShow() {
+        if (this.status != AppointmentStatus.SCHEDULED) {
+            throw new IllegalStateException("Solo se puede marcar como 'Ausente' un turno 'Agendado'.");
+        }
         this.status = AppointmentStatus.NO_SHOW;
     }
 

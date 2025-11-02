@@ -170,4 +170,54 @@ public class PractitionerController {
 
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * Marca un turno como completado (el paciente asistió).
+     * Implementa RF9 - CU 4.1: Gestionar Asistencia al Turno.
+     *
+     * Este endpoint permite al practicante registrar que el paciente asistió a su cita.
+     * El turno debe estar en estado SCHEDULED para poder ser marcado como completado.
+     *
+     * POST /api/practitioner/appointments/{id}/complete
+     *
+     * @param appointmentId ID del turno a marcar como completado
+     * @return El Appointment actualizado con estado COMPLETED
+     */
+    @PostMapping("/appointments/{appointmentId}/complete")
+    public ResponseEntity<AppointmentResponseDTO> markAppointmentAsCompleted(
+            @PathVariable Long appointmentId) {
+
+        site.utnpf.odontolink.domain.model.User practitionerUser = authenticationFacade.getAuthenticatedUser();
+
+        Appointment appointment = appointmentUseCase.markAppointmentAsCompleted(appointmentId, practitionerUser);
+
+        AppointmentResponseDTO response = AppointmentRestMapper.toResponse(appointment);
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Marca un turno como "ausente" (el paciente no asistió).
+     * Implementa RF9 - CU 4.1: Gestionar Asistencia al Turno.
+     *
+     * Este endpoint permite al practicante registrar que el paciente no asistió a su cita.
+     * El turno debe estar en estado SCHEDULED para poder ser marcado como ausente.
+     *
+     * POST /api/practitioner/appointments/{id}/no-show
+     *
+     * @param appointmentId ID del turno a marcar como ausente
+     * @return El Appointment actualizado con estado NO_SHOW
+     */
+    @PostMapping("/appointments/{appointmentId}/no-show")
+    public ResponseEntity<AppointmentResponseDTO> markAppointmentAsNoShow(
+            @PathVariable Long appointmentId) {
+
+        site.utnpf.odontolink.domain.model.User practitionerUser = authenticationFacade.getAuthenticatedUser();
+
+        Appointment appointment = appointmentUseCase.markAppointmentAsNoShow(appointmentId, practitionerUser);
+
+        AppointmentResponseDTO response = AppointmentRestMapper.toResponse(appointment);
+
+        return ResponseEntity.ok(response);
+    }
 }

@@ -66,14 +66,41 @@ public class Attention {
     }
 
     /**
-     * Lógica de negocio para añadir una "Evolución".
+     * Añade una nota de progreso (evolución) a este caso clínico.
+     * Este método implementa la lógica del RF11 - CU 4.2: Registrar Evolución.
+     *
+     * Reglas de negocio:
+     * - Solo se pueden añadir notas si el caso está en estado IN_PROGRESS
+     * - El autor debe ser el practicante responsable o un supervisor
+     * - Cada nota queda registrada con timestamp automático
+     *
+     * @param noteContent Contenido de la nota de evolución
+     * @param author Usuario que registra la evolución (Practicante o Supervisor)
+     * @throws IllegalStateException si el caso no está en progreso
+     * @throws IllegalArgumentException si el autor no es el practicante o supervisor del caso
      */
-    public void addProgressNote(String note, User author) {
+    public void addProgressNote(String noteContent, User author) {
         if (this.status != AttentionStatus.IN_PROGRESS) {
-            throw new IllegalStateException("No se pueden añadir notas a un caso cerrado o cancelado.");
+            throw new IllegalStateException("No se pueden añadir notas a un caso que no esté 'En Progreso'.");
         }
-        // (Validar que el 'author' sea el 'practitioner' o 'supervisor')
-        this.progressNotes.add(new ProgressNote(this, note, author));
+
+        // Validar que el autor sea el practicante responsable del caso
+        // Comparamos el User del Practitioner con el author
+        boolean isAuthorized = (this.practitioner != null
+                && this.practitioner.getUser() != null
+                && this.practitioner.getUser().getId().equals(author.getId()));
+
+        // Si el autor no es el practicante, verificar si es un supervisor mediante el Role
+        if (!isAuthorized && author.getRole() == Role.ROLE_SUPERVISOR) {
+            isAuthorized = true; // Los supervisores pueden agregar notas a cualquier caso
+        }
+
+        if (!isAuthorized) {
+            throw new IllegalArgumentException("Solo el practicante responsable o un supervisor pueden añadir notas de progreso.");
+        }
+
+        ProgressNote newNote = new ProgressNote(this, noteContent, author);
+        this.progressNotes.add(newNote);
     }
 
     /**

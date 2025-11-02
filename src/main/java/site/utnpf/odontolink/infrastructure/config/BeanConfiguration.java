@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import site.utnpf.odontolink.application.port.in.IAppointmentUseCase;
+import site.utnpf.odontolink.application.port.in.IAttentionUseCase;
 import site.utnpf.odontolink.application.port.in.IAuthUseCase;
 import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
@@ -13,6 +14,7 @@ import site.utnpf.odontolink.application.port.in.ISupervisorRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.ITreatmentUseCase;
 import site.utnpf.odontolink.application.port.out.ITokenProvider;
 import site.utnpf.odontolink.application.service.AppointmentService;
+import site.utnpf.odontolink.application.service.AttentionService;
 import site.utnpf.odontolink.application.service.AuthService;
 import site.utnpf.odontolink.application.service.OfferedTreatmentService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
@@ -25,10 +27,12 @@ import site.utnpf.odontolink.domain.repository.AvailabilitySlotRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 import site.utnpf.odontolink.domain.repository.PatientRepository;
 import site.utnpf.odontolink.domain.repository.PractitionerRepository;
+import site.utnpf.odontolink.domain.repository.ProgressNoteRepository;
 import site.utnpf.odontolink.domain.repository.SupervisorRepository;
 import site.utnpf.odontolink.domain.repository.TreatmentRepository;
 import site.utnpf.odontolink.domain.repository.UserRepository;
 import site.utnpf.odontolink.domain.service.AppointmentBookingService;
+import site.utnpf.odontolink.domain.service.AttentionPolicyService;
 import site.utnpf.odontolink.domain.service.AvailabilityGenerationService;
 import site.utnpf.odontolink.domain.service.OfferedTreatmentDomainService;
 
@@ -202,6 +206,48 @@ public class BeanConfiguration {
                 offeredTreatmentRepository,
                 appointmentBookingService,
                 availabilityGenerationService
+        );
+    }
+
+    /**
+     * Bean para el servicio de dominio de AttentionPolicy.
+     * Este es el "Rulebook" que contiene las reglas de negocio complejas para finalizar casos:
+     * - Validación de que no existan turnos futuros agendados
+     * - Validación de que todos los turnos pasados estén marcados
+     * - Delegación al POJO para el cambio de estado
+     *
+     * Este servicio opera exclusivamente con POJOs de dominio.
+     * Implementa RF10, RF19 - CU 4.4: Finalizar Caso Clínico.
+     */
+    @Bean
+    public AttentionPolicyService attentionPolicyService(AppointmentRepository appointmentRepository) {
+        return new AttentionPolicyService(appointmentRepository);
+    }
+
+    /**
+     * Bean para el caso de uso de gestión de atenciones (casos clínicos).
+     * Expone la interfaz IAttentionUseCase implementada por AttentionService.
+     *
+     * Implementa los casos de uso de la Fase 4 - Trazabilidad del Caso Clínico:
+     * - CU 4.2: Registrar Evolución (RF11)
+     * - CU 4.4: Finalizar Caso Clínico (RF10, RF19)
+     *
+     * Este servicio es el orquestador transaccional que:
+     * 1. Carga entidades desde repositorios
+     * 2. Valida permisos y autorización
+     * 3. Delega al AttentionPolicyService (dominio) para aplicar reglas de negocio complejas
+     * 4. Delega a los POJOs para lógica de negocio simple
+     * 5. Persiste cambios de forma transaccional
+     */
+    @Bean
+    public IAttentionUseCase attentionUseCase(
+            AttentionRepository attentionRepository,
+            ProgressNoteRepository progressNoteRepository,
+            AttentionPolicyService attentionPolicyService) {
+        return new AttentionService(
+                attentionRepository,
+                progressNoteRepository,
+                attentionPolicyService
         );
     }
 }

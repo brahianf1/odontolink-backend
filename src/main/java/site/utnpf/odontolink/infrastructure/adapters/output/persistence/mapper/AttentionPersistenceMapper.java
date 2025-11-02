@@ -2,8 +2,10 @@ package site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper;
 
 import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.Appointment;
+import site.utnpf.odontolink.domain.model.ProgressNote;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AttentionEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AppointmentEntity;
+import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.ProgressNoteEntity;
 
 import java.util.stream.Collectors;
 
@@ -38,6 +40,20 @@ public class AttentionPersistenceMapper {
                                 // Establecer la relación bidireccional
                                 appointment.setAttention(attention);
                                 return appointment;
+                            })
+                            .collect(Collectors.toList())
+            );
+        }
+
+        // Mapear la lista de ProgressNotes
+        if (entity.getProgressNotes() != null) {
+            attention.setProgressNotes(
+                    entity.getProgressNotes().stream()
+                            .map(progressNoteEntity -> {
+                                ProgressNote progressNote = ProgressNotePersistenceMapper.toDomain(progressNoteEntity);
+                                // Establecer la relación bidireccional
+                                progressNote.setAttention(attention);
+                                return progressNote;
                             })
                             .collect(Collectors.toList())
             );
@@ -103,6 +119,20 @@ public class AttentionPersistenceMapper {
                                 // Establecer la relación bidireccional
                                 appointmentEntity.setAttention(entity);
                                 return appointmentEntity;
+                            })
+                            .collect(Collectors.toList())
+            );
+        }
+
+        // Mapear la lista de ProgressNotes y establecer la relación bidireccional
+        if (attention.getProgressNotes() != null) {
+            entity.setProgressNotes(
+                    attention.getProgressNotes().stream()
+                            .map(progressNote -> {
+                                ProgressNoteEntity progressNoteEntity = ProgressNotePersistenceMapper.toEntity(progressNote);
+                                // Establecer la relación bidireccional
+                                progressNoteEntity.setAttention(entity);
+                                return progressNoteEntity;
                             })
                             .collect(Collectors.toList())
             );

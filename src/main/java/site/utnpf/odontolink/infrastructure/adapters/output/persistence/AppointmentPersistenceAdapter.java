@@ -43,6 +43,12 @@ public class AppointmentPersistenceAdapter implements AppointmentRepository {
     }
 
     @Override
+    public Optional<Appointment> findByIdWithAttention(Long id) {
+        return jpaAppointmentRepository.findByIdWithAttention(id)
+                .map(AppointmentPersistenceMapper::toDomainWithRelations);
+    }
+
+    @Override
     public List<Appointment> findByPatient(Patient patient) {
         return findByPatientId(patient.getId());
     }
@@ -161,5 +167,44 @@ public class AppointmentPersistenceAdapter implements AppointmentRepository {
         ).stream()
                 .map(AppointmentPersistenceMapper::toDomain)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public boolean existsByAttentionIdAndStatusAndAppointmentTimeGreaterThanEqual(
+            Long attentionId,
+            AppointmentStatus status,
+            LocalDateTime dateTime) {
+        return jpaAppointmentRepository.existsByAttentionIdAndStatusAndAppointmentTimeGreaterThanEqual(
+                attentionId,
+                status,
+                dateTime
+        );
+    }
+
+    @Override
+    public boolean existsByAttentionIdAndStatusAndAppointmentTimeLessThan(
+            Long attentionId,
+            AppointmentStatus status,
+            LocalDateTime dateTime) {
+        return jpaAppointmentRepository.existsByAttentionIdAndStatusAndAppointmentTimeLessThan(
+                attentionId,
+                status,
+                dateTime
+        );
+    }
+
+    /**
+     * Actualiza únicamente el estado de un turno.
+     * Este método es más eficiente que save() para operaciones que solo modifican el estado,
+     * ya que evita el mapeo completo de la entidad y sus relaciones bidireccionales.
+     *
+     * @param appointmentId ID del turno
+     * @param newStatus Nuevo estado
+     * @return true si se actualizó correctamente, false si el turno no existe
+     */
+    @Override
+    public boolean updateStatus(Long appointmentId, AppointmentStatus newStatus) {
+        int rowsAffected = jpaAppointmentRepository.updateStatus(appointmentId, newStatus);
+        return rowsAffected > 0;
     }
 }

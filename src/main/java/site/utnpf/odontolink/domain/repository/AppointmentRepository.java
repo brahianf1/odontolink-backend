@@ -26,6 +26,16 @@ public interface AppointmentRepository {
     Optional<Appointment> findById(Long id);
 
     /**
+     * Busca un turno por su ID cargando su Attention y Practitioner asociado.
+     * Este método es necesario para operaciones que requieren validar
+     * la propiedad del turno (ej: marcar como completado/no-show).
+     *
+     * @param id ID del turno
+     * @return Optional conteniendo el turno con sus relaciones cargadas
+     */
+    Optional<Appointment> findByIdWithAttention(Long id);
+
+    /**
      * Obtiene todos los turnos de un paciente específico.
      */
     List<Appointment> findByPatient(Patient patient);
@@ -121,4 +131,58 @@ public interface AppointmentRepository {
      * @return Lista de turnos del practicante en esa fecha
      */
     List<Appointment> findByPractitionerIdAndDate(Long practitionerId, LocalDateTime date);
+
+    /**
+     * Verifica si existen turnos agendados (SCHEDULED) para una atención específica
+     * que ocurran en el futuro (después de la fecha/hora especificada).
+     *
+     * Esta consulta es fundamental para la regla de negocio de finalización de casos:
+     * "No se puede cerrar un caso si tiene turnos futuros agendados".
+     *
+     * @param attentionId ID de la atención (caso clínico)
+     * @param status Estado del turno a buscar (típicamente SCHEDULED)
+     * @param dateTime Fecha/hora de referencia (típicamente LocalDateTime.now())
+     * @return true si existen turnos futuros agendados, false en caso contrario
+     */
+    boolean existsByAttentionIdAndStatusAndAppointmentTimeGreaterThanEqual(
+            Long attentionId,
+            AppointmentStatus status,
+            LocalDateTime dateTime
+    );
+
+    /**
+     * Verifica si existen turnos en estado SCHEDULED para una atención específica
+     * que ya ocurrieron en el pasado (antes de la fecha/hora especificada).
+     *
+     * Esta consulta es útil para detectar turnos que no fueron marcados como
+     * COMPLETED o NO_SHOW por el practicante.
+     *
+     * @param attentionId ID de la atención (caso clínico)
+     * @param status Estado del turno a buscar (típicamente SCHEDULED)
+     * @param dateTime Fecha/hora de referencia (típicamente LocalDateTime.now())
+     * @return true si existen turnos pasados sin marcar, false en caso contrario
+     */
+    boolean existsByAttentionIdAndStatusAndAppointmentTimeLessThan(
+            Long attentionId,
+            AppointmentStatus status,
+            LocalDateTime dateTime
+    );
+
+    /**
+     * Actualiza únicamente el estado de un turno sin cargar ni modificar otras relaciones.
+     * Este método es más eficiente y seguro que el método save() tradicional para operaciones
+     * que solo requieren cambiar el estado, ya que:
+     * 1. Evita el problema de referencias bidireccionales nulas en el mapeo
+     * 2. Ejecuta una consulta UPDATE directa en la base de datos
+     * 3. No requiere cargar la entidad completa en memoria
+     * 4. Es más eficiente en términos de rendimiento
+     *
+     * Se utiliza en operaciones como marcar un turno como completado o ausente (no-show),
+     * donde el único cambio necesario es actualizar el campo de estado.
+     *
+     * @param appointmentId ID del turno a actualizar
+     * @param newStatus Nuevo estado a asignar al turno
+     * @return true si se actualizó correctamente (el turno existía), false si no existe
+     */
+    boolean updateStatus(Long appointmentId, AppointmentStatus newStatus);
 }

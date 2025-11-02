@@ -82,4 +82,46 @@ public interface IAppointmentUseCase {
      * @return Lista de LocalDateTime con los slots disponibles (ej: [2025-01-15T08:00, 2025-01-15T08:30, ...])
      */
     List<LocalDateTime> getAvailableSlots(Long offeredTreatmentId, LocalDate requestedDate);
+
+    /**
+     * Marca un turno como completado (el paciente asistió).
+     * Implementa RF9 - CU 4.1: Gestionar Asistencia al Turno.
+     *
+     * Este método orquesta:
+     * 1. La carga del Appointment desde el repositorio
+     * 2. La validación de permisos (el practicante debe ser el dueño de la atención)
+     * 3. La delegación al POJO (Appointment) para cambiar el estado a COMPLETED
+     * 4. La persistencia transaccional del cambio
+     *
+     * Validaciones:
+     * - El turno debe existir
+     * - El turno debe estar en estado SCHEDULED
+     * - El practicante debe ser el responsable de la atención
+     *
+     * @param appointmentId ID del turno a marcar como completado
+     * @param practitionerUser Usuario practicante (obtenido del contexto de seguridad)
+     * @return El Appointment actualizado con estado COMPLETED
+     */
+    Appointment markAppointmentAsCompleted(Long appointmentId, site.utnpf.odontolink.domain.model.User practitionerUser);
+
+    /**
+     * Marca un turno como "ausente" (el paciente no asistió).
+     * Implementa RF9 - CU 4.1: Gestionar Asistencia al Turno.
+     *
+     * Este método orquesta:
+     * 1. La carga del Appointment desde el repositorio
+     * 2. La validación de permisos (el practicante debe ser el dueño de la atención)
+     * 3. La delegación al POJO (Appointment) para cambiar el estado a NO_SHOW
+     * 4. La persistencia transaccional del cambio
+     *
+     * Validaciones:
+     * - El turno debe existir
+     * - El turno debe estar en estado SCHEDULED
+     * - El practicante debe ser el responsable de la atención
+     *
+     * @param appointmentId ID del turno a marcar como ausente
+     * @param practitionerUser Usuario practicante (obtenido del contexto de seguridad)
+     * @return El Appointment actualizado con estado NO_SHOW
+     */
+    Appointment markAppointmentAsNoShow(Long appointmentId, site.utnpf.odontolink.domain.model.User practitionerUser);
 }
