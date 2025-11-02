@@ -6,6 +6,7 @@ import site.utnpf.odontolink.domain.model.*;
 import site.utnpf.odontolink.domain.repository.AppointmentRepository;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.AvailabilitySlotRepository;
+import site.utnpf.odontolink.domain.repository.ChatSessionRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 
 import java.time.LocalDateTime;
@@ -30,16 +31,19 @@ public class AppointmentBookingService {
     private final AvailabilitySlotRepository availabilitySlotRepository;
     private final AppointmentRepository appointmentRepository;
     private final AttentionRepository attentionRepository;
+    private final ChatSessionRepository chatSessionRepository;
 
     public AppointmentBookingService(
             OfferedTreatmentRepository offeredTreatmentRepository,
             AvailabilitySlotRepository availabilitySlotRepository,
             AppointmentRepository appointmentRepository,
-            AttentionRepository attentionRepository) {
+            AttentionRepository attentionRepository,
+            ChatSessionRepository chatSessionRepository) {
         this.offeredTreatmentRepository = offeredTreatmentRepository;
         this.availabilitySlotRepository = availabilitySlotRepository;
         this.appointmentRepository = appointmentRepository;
         this.attentionRepository = attentionRepository;
+        this.chatSessionRepository = chatSessionRepository;
     }
 
     /**
@@ -98,9 +102,27 @@ public class AppointmentBookingService {
                 durationInMinutes
         );
 
+        // Crear ChatSession automáticamente si no existe (RF27)
+        // Esto establece el canal de comunicación entre paciente y practicante
+        createChatSessionIfNotExists(patient, offeredTreatment.getPractitioner());
+
         // Devolver la Attention (con el Appointment en su lista)
         // El servicio de aplicación se encargará de la persistencia transaccional
         return attention;
+    }
+
+    /**
+     * Crea una ChatSession automáticamente si no existe una previa entre el paciente y el practicante.
+     * Implementa RF27: El chat se crea automáticamente al establecerse la relación formal.
+     *
+     * @param patient El paciente
+     * @param practitioner El practicante
+     */
+    private void createChatSessionIfNotExists(Patient patient, Practitioner practitioner) {
+        if (!chatSessionRepository.existsByPatientAndPractitioner(patient, practitioner)) {
+            ChatSession newChatSession = new ChatSession(patient, practitioner);
+            chatSessionRepository.save(newChatSession);
+        }
     }
 
     /**

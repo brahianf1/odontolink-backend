@@ -7,6 +7,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import site.utnpf.odontolink.application.port.in.IAppointmentUseCase;
 import site.utnpf.odontolink.application.port.in.IAttentionUseCase;
 import site.utnpf.odontolink.application.port.in.IAuthUseCase;
+import site.utnpf.odontolink.application.port.in.IChatUseCase;
 import site.utnpf.odontolink.application.port.in.IFeedbackUseCase;
 import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
@@ -17,6 +18,7 @@ import site.utnpf.odontolink.application.port.out.ITokenProvider;
 import site.utnpf.odontolink.application.service.AppointmentService;
 import site.utnpf.odontolink.application.service.AttentionService;
 import site.utnpf.odontolink.application.service.AuthService;
+import site.utnpf.odontolink.application.service.ChatService;
 import site.utnpf.odontolink.application.service.FeedbackService;
 import site.utnpf.odontolink.application.service.OfferedTreatmentService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
@@ -34,9 +36,12 @@ import site.utnpf.odontolink.domain.repository.ProgressNoteRepository;
 import site.utnpf.odontolink.domain.repository.SupervisorRepository;
 import site.utnpf.odontolink.domain.repository.TreatmentRepository;
 import site.utnpf.odontolink.domain.repository.UserRepository;
+import site.utnpf.odontolink.domain.repository.ChatSessionRepository;
+import site.utnpf.odontolink.domain.repository.ChatMessageRepository;
 import site.utnpf.odontolink.domain.service.AppointmentBookingService;
 import site.utnpf.odontolink.domain.service.AttentionPolicyService;
 import site.utnpf.odontolink.domain.service.AvailabilityGenerationService;
+import site.utnpf.odontolink.domain.service.ChatPolicyService;
 import site.utnpf.odontolink.domain.service.FeedbackPolicyService;
 import site.utnpf.odontolink.domain.service.OfferedTreatmentDomainService;
 
@@ -151,12 +156,14 @@ public class BeanConfiguration {
             OfferedTreatmentRepository offeredTreatmentRepository,
             AvailabilitySlotRepository availabilitySlotRepository,
             AppointmentRepository appointmentRepository,
-            AttentionRepository attentionRepository) {
+            AttentionRepository attentionRepository,
+            ChatSessionRepository chatSessionRepository) {
         return new AppointmentBookingService(
                 offeredTreatmentRepository,
                 availabilitySlotRepository,
                 appointmentRepository,
-                attentionRepository
+                attentionRepository,
+                chatSessionRepository
         );
     }
 
@@ -299,6 +306,54 @@ public class BeanConfiguration {
                 feedbackPolicyService,
                 supervisorRepository,
                 practitionerRepository
+        );
+    }
+
+    /**
+     * Bean para el servicio de dominio de ChatPolicy.
+     * Este es el "Rulebook" que contiene las reglas de negocio del sistema de chat:
+     * - Validación de pertenencia a la sesión de chat
+     * - Validación de permisos para enviar y ver mensajes
+     * - Aplicación de las políticas de privacidad del chat (RF26, RF27)
+     *
+     * Este servicio opera exclusivamente con POJOs de dominio.
+     */
+    @Bean
+    public ChatPolicyService chatPolicyService() {
+        return new ChatPolicyService();
+    }
+
+    /**
+     * Bean para el caso de uso de gestión de chat interno.
+     * Expone la interfaz IChatUseCase implementada por ChatService.
+     *
+     * Implementa los casos de uso del sistema de chat interno:
+     * - CU 6.1: Obtener Lista de Sesiones de Chat (El "Inbox")
+     * - CU 6.2: Enviar un Mensaje (RF26)
+     * - CU 6.3: Obtener Mensajes (Polling RESTful)
+     *
+     * Este servicio es el orquestador transaccional que:
+     * 1. Carga entidades desde repositorios
+     * 2. Valida permisos y autorización
+     * 3. Delega al ChatPolicyService (dominio) para aplicar reglas de negocio
+     * 4. Persiste cambios de forma transaccional
+     *
+     * El sistema de chat utiliza Simple Polling (REST) en lugar de WebSockets
+     * para mantener la simplicidad y robustez de la arquitectura.
+     */
+    @Bean
+    public IChatUseCase chatUseCase(
+            ChatSessionRepository chatSessionRepository,
+            ChatMessageRepository chatMessageRepository,
+            PatientRepository patientRepository,
+            PractitionerRepository practitionerRepository,
+            ChatPolicyService chatPolicyService) {
+        return new ChatService(
+                chatSessionRepository,
+                chatMessageRepository,
+                patientRepository,
+                practitionerRepository,
+                chatPolicyService
         );
     }
 }
