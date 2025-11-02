@@ -140,4 +140,29 @@ public class AttentionPersistenceMapper {
 
         return entity;
     }
+
+    /**
+     * Convierte de modelo de dominio a entidad JPA SIN mapear la lista de Appointments.
+     * Usado para evitar ciclos infinitos cuando se necesita solo una referencia a la entidad.
+     *
+     * @param attention Modelo de dominio Attention
+     * @return Entidad JPA AttentionEntity sin colecciones hijas
+     */
+    public static AttentionEntity toEntityShallow(Attention attention) {
+        if (attention == null) {
+            return null;
+        }
+
+        AttentionEntity entity = new AttentionEntity();
+        entity.setId(attention.getId());
+        entity.setPatient(PatientPersistenceMapper.toEntity(attention.getPatient()));
+        entity.setPractitioner(PractitionerPersistenceMapper.toEntity(attention.getPractitioner()));
+        entity.setTreatment(TreatmentPersistenceMapper.toEntity(attention.getTreatment()));
+        entity.setStatus(attention.getStatus());
+        entity.setStartDate(attention.getStartDate());
+
+        // NO mapeamos las colecciones para evitar ciclos infinitos
+
+        return entity;
+    }
 }

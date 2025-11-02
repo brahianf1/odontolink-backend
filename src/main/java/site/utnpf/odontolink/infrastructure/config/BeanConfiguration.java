@@ -7,6 +7,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import site.utnpf.odontolink.application.port.in.IAppointmentUseCase;
 import site.utnpf.odontolink.application.port.in.IAttentionUseCase;
 import site.utnpf.odontolink.application.port.in.IAuthUseCase;
+import site.utnpf.odontolink.application.port.in.IFeedbackUseCase;
 import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.IPractitionerRegistrationUseCase;
@@ -16,6 +17,7 @@ import site.utnpf.odontolink.application.port.out.ITokenProvider;
 import site.utnpf.odontolink.application.service.AppointmentService;
 import site.utnpf.odontolink.application.service.AttentionService;
 import site.utnpf.odontolink.application.service.AuthService;
+import site.utnpf.odontolink.application.service.FeedbackService;
 import site.utnpf.odontolink.application.service.OfferedTreatmentService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
 import site.utnpf.odontolink.application.service.PractitionerRegistrationService;
@@ -24,6 +26,7 @@ import site.utnpf.odontolink.application.service.TreatmentService;
 import site.utnpf.odontolink.domain.repository.AppointmentRepository;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.AvailabilitySlotRepository;
+import site.utnpf.odontolink.domain.repository.FeedbackRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 import site.utnpf.odontolink.domain.repository.PatientRepository;
 import site.utnpf.odontolink.domain.repository.PractitionerRepository;
@@ -34,6 +37,7 @@ import site.utnpf.odontolink.domain.repository.UserRepository;
 import site.utnpf.odontolink.domain.service.AppointmentBookingService;
 import site.utnpf.odontolink.domain.service.AttentionPolicyService;
 import site.utnpf.odontolink.domain.service.AvailabilityGenerationService;
+import site.utnpf.odontolink.domain.service.FeedbackPolicyService;
 import site.utnpf.odontolink.domain.service.OfferedTreatmentDomainService;
 
 /**
@@ -248,6 +252,53 @@ public class BeanConfiguration {
                 attentionRepository,
                 progressNoteRepository,
                 attentionPolicyService
+        );
+    }
+
+    /**
+     * Bean para el servicio de dominio de FeedbackPolicy.
+     * Este es el "Rulebook" que contiene las reglas de negocio complejas del sistema de feedback:
+     * - Validación de que la atención esté finalizada (COMPLETED)
+     * - Validación de pertenencia (paciente o practicante)
+     * - Validación de unicidad (evitar calificaciones duplicadas - RF23)
+     * - Validación de privacidad (acceso segmentado por rol - RF24)
+     *
+     * Este servicio opera exclusivamente con POJOs de dominio.
+     * Implementa RF21, RF22, RF23, RF24 - CU-009, CU-016, CU-010.
+     */
+    @Bean
+    public FeedbackPolicyService feedbackPolicyService(FeedbackRepository feedbackRepository) {
+        return new FeedbackPolicyService(feedbackRepository);
+    }
+
+    /**
+     * Bean para el caso de uso de gestión de feedback.
+     * Expone la interfaz IFeedbackUseCase implementada por FeedbackService.
+     *
+     * Implementa los casos de uso del sistema de feedback bidireccional:
+     * - CU-009: Calificar Paciente (RF21)
+     * - CU-016: Calificar Practicante (RF22)
+     * - CU-010: Visualizar Feedback (RF24, RF25, RF40)
+     *
+     * Este servicio es el orquestador transaccional que:
+     * 1. Carga entidades desde repositorios
+     * 2. Valida permisos y autorización
+     * 3. Delega al FeedbackPolicyService (dominio) para aplicar reglas de negocio complejas
+     * 4. Persiste cambios de forma transaccional
+     */
+    @Bean
+    public IFeedbackUseCase feedbackUseCase(
+            FeedbackRepository feedbackRepository,
+            AttentionRepository attentionRepository,
+            FeedbackPolicyService feedbackPolicyService,
+            SupervisorRepository supervisorRepository,
+            PractitionerRepository practitionerRepository) {
+        return new FeedbackService(
+                feedbackRepository,
+                attentionRepository,
+                feedbackPolicyService,
+                supervisorRepository,
+                practitionerRepository
         );
     }
 }
