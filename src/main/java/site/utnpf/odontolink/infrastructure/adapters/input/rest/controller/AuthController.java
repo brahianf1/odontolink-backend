@@ -71,7 +71,7 @@ public class AuthController {
                                               "message": "Paciente registrado exitosamente",
                                               "userId": 15,
                                               "email": "carlos.rodriguez@gmail.com",
-                                              "role": "PATIENT"
+                                              "role": "ROLE_PATIENT"
                                             }
                                             """
                             )
@@ -147,7 +147,7 @@ public class AuthController {
                                               "message": "Practicante registrado exitosamente",
                                               "userId": 8,
                                               "email": "ana.martinez@fodo.unt.edu.ar",
-                                              "role": "PRACTITIONER"
+                                              "role": "ROLE_PRACTITIONER"
                                             }
                                             """
                             )
@@ -224,7 +224,7 @@ public class AuthController {
                                               "type": "Bearer",
                                               "userId": 15,
                                               "email": "carlos.rodriguez@gmail.com",
-                                              "role": "PATIENT",
+                                              "role": "ROLE_PATIENT",
                                               "firstName": "Carlos",
                                               "lastName": "Rodríguez"
                                             }
