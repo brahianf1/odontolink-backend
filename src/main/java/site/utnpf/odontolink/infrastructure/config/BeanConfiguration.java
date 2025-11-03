@@ -13,6 +13,7 @@ import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.IPractitionerRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorRegistrationUseCase;
+import site.utnpf.odontolink.application.port.in.ISupervisorUseCase;
 import site.utnpf.odontolink.application.port.in.ITreatmentUseCase;
 import site.utnpf.odontolink.application.port.out.ITokenProvider;
 import site.utnpf.odontolink.application.service.AppointmentService;
@@ -24,6 +25,7 @@ import site.utnpf.odontolink.application.service.OfferedTreatmentService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
 import site.utnpf.odontolink.application.service.PractitionerRegistrationService;
 import site.utnpf.odontolink.application.service.SupervisorRegistrationService;
+import site.utnpf.odontolink.application.service.SupervisorService;
 import site.utnpf.odontolink.application.service.TreatmentService;
 import site.utnpf.odontolink.domain.repository.AppointmentRepository;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
@@ -44,6 +46,7 @@ import site.utnpf.odontolink.domain.service.AvailabilityGenerationService;
 import site.utnpf.odontolink.domain.service.ChatPolicyService;
 import site.utnpf.odontolink.domain.service.FeedbackPolicyService;
 import site.utnpf.odontolink.domain.service.OfferedTreatmentDomainService;
+import site.utnpf.odontolink.domain.service.SupervisorPolicyService;
 
 /**
  * Configuración de Beans para la capa de aplicación.
@@ -263,6 +266,48 @@ public class BeanConfiguration {
     }
 
     /**
+     * Bean para el servicio de dominio de SupervisorPolicy.
+     * Este es el "Rulebook" que contiene las reglas de negocio de vinculación académica:
+     * - Gestión de la relación N-a-N entre Supervisor y Practitioner
+     * - Validación de vínculos duplicados
+     * - Validación de acceso del supervisor a información de practicantes
+     * - Mantenimiento de consistencia bidireccional de la relación
+     *
+     * Este servicio opera exclusivamente con POJOs de dominio.
+     * Implementa RF22, RF37, RF40 - CU 7.1, CU 7.2.
+     */
+    @Bean
+    public SupervisorPolicyService supervisorPolicyService() {
+        return new SupervisorPolicyService();
+    }
+
+    /**
+     * Bean para el caso de uso de gestión de supervisión académica.
+     * Expone la interfaz ISupervisorUseCase implementada por SupervisorService.
+     *
+     * Implementa los casos de uso de vinculación académica:
+     * - CU 7.1: Vincular Practicante (RF22, RF37)
+     * - CU 7.2: Desvincular Practicante
+     * - CU 7.3: Visualizar y Buscar Practicantes (RF35, RF38)
+     *
+     * Este servicio es el orquestador transaccional que:
+     * 1. Carga entidades desde repositorios
+     * 2. Delega al SupervisorPolicyService (dominio) para aplicar reglas de negocio
+     * 3. Persiste cambios de forma transaccional
+     */
+    @Bean
+    public ISupervisorUseCase supervisorUseCase(
+            SupervisorRepository supervisorRepository,
+            PractitionerRepository practitionerRepository,
+            SupervisorPolicyService supervisorPolicyService) {
+        return new SupervisorService(
+                supervisorRepository,
+                practitionerRepository,
+                supervisorPolicyService
+        );
+    }
+
+    /**
      * Bean para el servicio de dominio de FeedbackPolicy.
      * Este es el "Rulebook" que contiene las reglas de negocio complejas del sistema de feedback:
      * - Validación de que la atención esté finalizada (COMPLETED)
@@ -290,7 +335,7 @@ public class BeanConfiguration {
      * Este servicio es el orquestador transaccional que:
      * 1. Carga entidades desde repositorios
      * 2. Valida permisos y autorización
-     * 3. Delega al FeedbackPolicyService (dominio) para aplicar reglas de negocio complejas
+     * 3. Delega al FeedbackPolicyService y SupervisorPolicyService (dominio) para aplicar reglas de negocio
      * 4. Persiste cambios de forma transaccional
      */
     @Bean
@@ -299,13 +344,15 @@ public class BeanConfiguration {
             AttentionRepository attentionRepository,
             FeedbackPolicyService feedbackPolicyService,
             SupervisorRepository supervisorRepository,
-            PractitionerRepository practitionerRepository) {
+            PractitionerRepository practitionerRepository,
+            SupervisorPolicyService supervisorPolicyService) {
         return new FeedbackService(
                 feedbackRepository,
                 attentionRepository,
                 feedbackPolicyService,
                 supervisorRepository,
-                practitionerRepository
+                practitionerRepository,
+                supervisorPolicyService
         );
     }
 

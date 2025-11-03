@@ -7,7 +7,9 @@ import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.P
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.jpa_repository.JpaPractitionerRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.PractitionerPersistenceMapper;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Adaptador de persistencia para Practitioner (Hexagonal Architecture).
@@ -45,5 +47,21 @@ public class PractitionerPersistenceAdapter implements PractitionerRepository {
     @Override
     public boolean existsByStudentId(String studentId) {
         return jpaPractitionerRepository.existsByStudentId(studentId);
+    }
+
+    @Override
+    public List<Practitioner> searchByQuery(String query) {
+        return jpaPractitionerRepository.searchByQuery(query)
+                .stream()
+                .map(PractitionerPersistenceMapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<Practitioner> findAll() {
+        return jpaPractitionerRepository.findAll()
+                .stream()
+                .map(PractitionerPersistenceMapper::toDomain)
+                .collect(Collectors.toList());
     }
 }

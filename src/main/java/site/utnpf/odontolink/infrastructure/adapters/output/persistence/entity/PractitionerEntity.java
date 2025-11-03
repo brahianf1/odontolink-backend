@@ -1,6 +1,8 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity;
 
 import jakarta.persistence.*;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Entidad JPA para la tabla 'practitioners'.
@@ -23,6 +25,13 @@ public class PractitionerEntity {
 
     @Column(nullable = false)
     private Integer studyYear;
+
+    /**
+     * Relación N-a-N: Un practicante puede ser supervisado por múltiples supervisores.
+     * Esta es la entidad "no dueña" de la relación (referencia a la tabla de unión).
+     */
+    @ManyToMany(mappedBy = "supervisedPractitioners", fetch = FetchType.LAZY)
+    private Set<SupervisorEntity> supervisors = new HashSet<>();
 
     // Constructores
     public PractitionerEntity() {
@@ -59,5 +68,13 @@ public class PractitionerEntity {
 
     public void setStudyYear(Integer studyYear) {
         this.studyYear = studyYear;
+    }
+
+    public Set<SupervisorEntity> getSupervisors() {
+        return supervisors;
+    }
+
+    public void setSupervisors(Set<SupervisorEntity> supervisors) {
+        this.supervisors = supervisors;
     }
 }

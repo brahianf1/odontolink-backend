@@ -10,6 +10,7 @@ import site.utnpf.odontolink.domain.repository.FeedbackRepository;
 import site.utnpf.odontolink.domain.repository.PractitionerRepository;
 import site.utnpf.odontolink.domain.repository.SupervisorRepository;
 import site.utnpf.odontolink.domain.service.FeedbackPolicyService;
+import site.utnpf.odontolink.domain.service.SupervisorPolicyService;
 
 import java.util.List;
 
@@ -43,18 +44,21 @@ public class FeedbackService implements IFeedbackUseCase {
     private final FeedbackPolicyService feedbackPolicyService;
     private final SupervisorRepository supervisorRepository;
     private final PractitionerRepository practitionerRepository;
+    private final SupervisorPolicyService supervisorPolicyService;
 
     public FeedbackService(
             FeedbackRepository feedbackRepository,
             AttentionRepository attentionRepository,
             FeedbackPolicyService feedbackPolicyService,
             SupervisorRepository supervisorRepository,
-            PractitionerRepository practitionerRepository) {
+            PractitionerRepository practitionerRepository,
+            SupervisorPolicyService supervisorPolicyService) {
         this.feedbackRepository = feedbackRepository;
         this.attentionRepository = attentionRepository;
         this.feedbackPolicyService = feedbackPolicyService;
         this.supervisorRepository = supervisorRepository;
         this.practitionerRepository = practitionerRepository;
+        this.supervisorPolicyService = supervisorPolicyService;
     }
 
     /**
@@ -132,14 +136,18 @@ public class FeedbackService implements IFeedbackUseCase {
      *
      * Orquestación:
      * 1. Valida que el usuario sea un supervisor
-     * 2. Valida que el supervisor gestione al practicante (relación de supervisión)
+     * 2. Delega al SupervisorPolicyService para validar la relación de supervisión
      * 3. Retorna todos los feedbacks de las atenciones del practicante
+     *
+     * Esta implementación ha sido refactorizada para usar SupervisorPolicyService,
+     * centralizando la lógica de validación de supervisión y manteniendo la
+     * separación de responsabilidades entre servicios de dominio.
      *
      * @param practitionerId ID del practicante
      * @param supervisorUser Usuario supervisor que solicita el feedback
      * @return Lista de feedbacks de todas las atenciones del practicante
      * @throws UnauthorizedOperationException si el usuario no es supervisor o no gestiona al practicante
-     * @throws ResourceNotFoundException si el practicante no existe
+     * @throws ResourceNotFoundException si el practicante o supervisor no existen
      */
     @Override
     @Transactional(readOnly = true)
@@ -151,21 +159,16 @@ public class FeedbackService implements IFeedbackUseCase {
             );
         }
 
-        // Verificar que el practicante existe
-        Practitioner practitioner = practitionerRepository.findById(practitionerId)
-                .orElseThrow(() -> new ResourceNotFoundException("Practitioner", "id", practitionerId.toString()));
-
-        // Validar que el supervisor gestione al practicante
+        // Cargar supervisor y practicante desde repositorios
         Supervisor supervisor = supervisorRepository.findByUserId(supervisorUser.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Supervisor", "userId", supervisorUser.getId().toString()));
 
-        // Verificar la relación de supervisión
-        if (!supervisorManagesPractitioner(supervisor, practitioner)) {
-            throw new UnauthorizedOperationException(
-                "No tiene permisos para acceder al feedback de este practicante. " +
-                "Solo puede ver el feedback de los practicantes a su cargo."
-            );
-        }
+        Practitioner practitioner = practitionerRepository.findById(practitionerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Practitioner", "id", practitionerId.toString()));
+
+        // Delegar al servicio de dominio para validar la relación de supervisión
+        // Esto centraliza la lógica de autorización en SupervisorPolicyService
+        supervisorPolicyService.validateSupervisorAccess(supervisorUser, practitionerId, supervisor, practitioner);
 
         // Retornar todos los feedbacks de las atenciones del practicante
         return feedbackRepository.findByPractitionerId(practitionerId);
@@ -183,21 +186,5 @@ public class FeedbackService implements IFeedbackUseCase {
     public Feedback getFeedbackById(Long feedbackId) {
         return feedbackRepository.findById(feedbackId)
                 .orElseThrow(() -> new ResourceNotFoundException("Feedback", "id", feedbackId.toString()));
-    }
-
-    /**
-     * Verifica si un supervisor gestiona a un practicante específico.
-     *
-     * @param supervisor El supervisor
-     * @param practitioner El practicante
-     * @return true si el supervisor gestiona al practicante
-     */
-    private boolean supervisorManagesPractitioner(Supervisor supervisor, Practitioner practitioner) {
-        // Verificar si el practicante está en el conjunto de practicantes supervisados
-        if (supervisor.getSupervisedPractitioners() == null) {
-            return false;
-        }
-        return supervisor.getSupervisedPractitioners().stream()
-                .anyMatch(p -> p.getId().equals(practitioner.getId()));
     }
 }
