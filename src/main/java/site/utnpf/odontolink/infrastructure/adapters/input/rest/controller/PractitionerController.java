@@ -1,5 +1,13 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +49,8 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/practitioner")
 @PreAuthorize("hasRole('PRACTITIONER')")
+@Tag(name = "Practicantes", description = "Operaciones para practicantes: gestionar catálogo de tratamientos ofrecidos y consultar turnos asignados")
+@SecurityRequirement(name = "Bearer Authentication")
 public class PractitionerController {
 
     private final IOfferedTreatmentUseCase offeredTreatmentUseCase;
@@ -55,12 +65,92 @@ public class PractitionerController {
         this.authenticationFacade = authenticationFacade;
     }
 
-    /**
-     * Agrega un tratamiento al catálogo personal del practicante.
-     * Corresponde al CU-005: Agregar Tratamiento al Catálogo Personal.
-     *
-     * POST /api/practitioner/offered-treatments
-     */
+    @Operation(
+            summary = "Agregar tratamiento al catálogo",
+            description = "Agrega un tratamiento al catálogo personal del practicante"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "Tratamiento agregado exitosamente",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = OfferedTreatmentResponseDTO.class),
+                            examples = @ExampleObject(
+                                    value = """
+                                            {
+                                              "id": 1,
+                                              "practitionerId": 1,
+                                              "practitionerName": "Maria Gomez",
+                                              "treatment": {
+                                                "id": 1,
+                                                "name": "Limpieza completa",
+                                                "description": "Eliminación de placa y sarro total",
+                                                "area": "ORTODONCIA"
+                                              },
+                                              "requirements": "Traer cepillo dental propio",
+                                              "durationInMinutes": 60,
+                                              "availabilitySlots": [
+                                                {
+                                                  "dayOfWeek": "WEDNESDAY",
+                                                  "startTime": "14:00:00",
+                                                  "endTime": "18:00:00"
+                                                },
+                                                {
+                                                  "dayOfWeek": "FRIDAY",
+                                                  "startTime": "08:00:00",
+                                                  "endTime": "12:00:00"
+                                                },
+                                                {
+                                                  "dayOfWeek": "MONDAY",
+                                                  "startTime": "08:00:00",
+                                                  "endTime": "12:00:00"
+                                                }
+                                              ]
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Datos inválidos o tratamiento ya existe en el catálogo",
+                    content = @Content(mediaType = "application/json")
+            )
+    })
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Datos del tratamiento a agregar",
+            required = true,
+            content = @Content(
+                    mediaType = "application/json",
+                    examples = @ExampleObject(
+                            value = """
+                                    {
+                                      "treatmentId": 1,
+                                      "requirements": "Traer cepillo dental propio",
+                                      "durationInMinutes": 60,
+                                      "availabilitySlots": [
+                                        {
+                                          "dayOfWeek": "MONDAY",
+                                          "startTime": "08:00:00",
+                                          "endTime": "12:00:00"
+                                        },
+                                        {
+                                          "dayOfWeek": "WEDNESDAY",
+                                          "startTime": "14:00:00",
+                                          "endTime": "18:00:00"
+                                        },
+                                        {
+                                          "dayOfWeek": "FRIDAY",
+                                          "startTime": "08:00:00",
+                                          "endTime": "12:00:00"
+                                        }
+                                      ]
+                                    }
+                                    """
+                    )
+            )
+    )
     @PostMapping("/offered-treatments")
     public ResponseEntity<OfferedTreatmentResponseDTO> addTreatmentToCatalog(
             @Valid @RequestBody AddOfferedTreatmentRequestDTO request) {
@@ -171,18 +261,42 @@ public class PractitionerController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Marca un turno como completado (el paciente asistió).
-     * Implementa RF9 - CU 4.1: Gestionar Asistencia al Turno.
-     *
-     * Este endpoint permite al practicante registrar que el paciente asistió a su cita.
-     * El turno debe estar en estado SCHEDULED para poder ser marcado como completado.
-     *
-     * POST /api/practitioner/appointments/{id}/complete
-     *
-     * @param appointmentId ID del turno a marcar como completado
-     * @return El Appointment actualizado con estado COMPLETED
-     */
+    @Operation(
+            summary = "Marcar turno como completado",
+            description = "Registra la asistencia del paciente al turno"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Turno marcado como completado",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = AppointmentResponseDTO.class),
+                            examples = @ExampleObject(
+                                    value = """
+                                            {
+                                              "id": 45,
+                                              "appointmentTime": "2025-11-15T10:00:00",
+                                              "status": "COMPLETED",
+                                              "durationInMinutes": 45,
+                                              "treatmentId": 3,
+                                              "treatmentName": "Limpieza Dental",
+                                              "patientId": 15,
+                                              "patientName": "Carlos Rodríguez",
+                                              "practitionerId": 8,
+                                              "practitionerName": "Ana Martínez",
+                                              "attentionId": 23
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Turno no encontrado",
+                    content = @Content(mediaType = "application/json")
+            )
+    })
     @PostMapping("/appointments/{appointmentId}/complete")
     public ResponseEntity<AppointmentResponseDTO> markAppointmentAsCompleted(
             @PathVariable Long appointmentId) {

@@ -1,5 +1,14 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -41,6 +50,8 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/patient")
 @PreAuthorize("hasRole('PATIENT')")
+@Tag(name = "Pacientes", description = "Operaciones disponibles para pacientes: consultar tratamientos, reservar citas y gestionar sus turnos")
+@SecurityRequirement(name = "Bearer Authentication")
 public class PatientController {
 
     private final IAppointmentUseCase appointmentUseCase;
@@ -120,26 +131,71 @@ public class PatientController {
         return ResponseEntity.ok(availableSlots);
     }
 
-    /**
-     * Reserva un nuevo turno para el paciente autenticado.
-     * Corresponde al CU-008: "Reservar Turno".
-     *
-     * Flujo:
-     * 1. El paciente selecciona un OfferedTreatment del catálogo
-     * 2. El paciente elige una fecha/hora dentro de la disponibilidad publicada
-     * 3. El sistema valida disponibilidad y conflictos
-     * 4. El sistema crea atómicamente la Attention (caso clínico) y el Appointment (turno)
-     *
-     * Validaciones automáticas (en el servicio de dominio):
-     * - La oferta de tratamiento existe
-     * - El horario está dentro de la disponibilidad del practicante
-     * - Ni el paciente ni el practicante tienen otro turno a esa hora
-     *
-     * POST /api/patient/appointments
-     *
-     * @param request DTO con offeredTreatmentId y appointmentTime
-     * @return La Attention creada/actualizada con el nuevo Appointment
-     */
+    @Operation(
+            summary = "Reservar turno",
+            description = "Crea una cita para el paciente autenticado"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "Turno reservado exitosamente",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = AttentionResponseDTO.class),
+                            examples = @ExampleObject(
+                                    value = """
+                                            {
+                                              "id": 1,
+                                              "status": "IN_PROGRESS",
+                                              "startDate": "2025-11-02",
+                                              "patientId": 1,
+                                              "patientName": "Lucas Malla",
+                                              "practitionerId": 1,
+                                              "practitionerName": "Maria Gomez",
+                                              "treatmentId": 1,
+                                              "treatmentName": "Limpieza completa",
+                                              "appointments": [
+                                                {
+                                                  "id": 1,
+                                                  "appointmentTime": "2025-12-08T11:00:00",
+                                                  "motive": "Primer turno - Inicio de tratamiento",
+                                                  "status": "SCHEDULED",
+                                                  "durationInMinutes": 60,
+                                                  "treatmentId": 1,
+                                                  "treatmentName": "Limpieza completa",
+                                                  "patientId": 1,
+                                                  "patientName": "Lucas Malla",
+                                                  "practitionerId": 1,
+                                                  "practitionerName": "Maria Gomez",
+                                                  "attentionId": 1
+                                                }
+                                              ]
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Horario no disponible o conflicto con otro turno",
+                    content = @Content(mediaType = "application/json")
+            )
+    })
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Datos del turno a reservar",
+            required = true,
+            content = @Content(
+                    mediaType = "application/json",
+                    examples = @ExampleObject(
+                            value = """
+                                    {
+                                      "offeredTreatmentId": 1,
+                                      "appointmentTime": "2025-12-08T11:00:00"
+                                    }
+                                    """
+                    )
+            )
+    )
     @PostMapping("/appointments")
     public ResponseEntity<AttentionResponseDTO> scheduleAppointment(
             @Valid @RequestBody AppointmentRequestDTO request) {

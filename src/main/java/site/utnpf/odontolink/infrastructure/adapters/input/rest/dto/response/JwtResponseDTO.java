@@ -1,17 +1,33 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * DTO de respuesta para operaciones de autenticación.
  * Contiene el token JWT y la información básica del usuario.
  */
+@Schema(description = "Respuesta de autenticación exitosa con token JWT y datos del usuario")
 public class JwtResponseDTO {
 
+    @Schema(description = "Token JWT para autenticación en endpoints protegidos", example = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
     private String token;
+
+    @Schema(description = "Tipo de token", example = "Bearer", defaultValue = "Bearer")
     private String type = "Bearer";
+
+    @Schema(description = "Identificador único del usuario", example = "1")
     private Long userId;
+
+    @Schema(description = "Correo electrónico del usuario", example = "juan.perez@email.com")
     private String email;
+
+    @Schema(description = "Rol del usuario en el sistema", example = "PATIENT")
     private String role;
+
+    @Schema(description = "Nombre del usuario", example = "Juan")
     private String firstName;
+
+    @Schema(description = "Apellido del usuario", example = "Pérez")
     private String lastName;
 
     // Constructores

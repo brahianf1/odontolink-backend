@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.controller;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +19,7 @@ import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.Superviso
  */
 @RestController
 @RequestMapping("/api/supervisors")
+@Tag(name = "Supervisores", description = "Operaciones para registro y gestión de supervisores/docentes del sistema")
 public class SupervisorController {
 
     private final ISupervisorRegistrationUseCase supervisorRegistrationUseCase;

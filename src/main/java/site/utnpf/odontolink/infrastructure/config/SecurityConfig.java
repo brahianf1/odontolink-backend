@@ -58,6 +58,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/practitioners/register").permitAll()
                         .requestMatchers("/api/supervisors/register").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

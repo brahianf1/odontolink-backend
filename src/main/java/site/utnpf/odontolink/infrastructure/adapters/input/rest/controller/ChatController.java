@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.controller;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +37,8 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/chat")
+@Tag(name = "Chat", description = "Sistema de mensajería interna entre pacientes y practicantes durante las atenciones")
+@SecurityRequirement(name = "Bearer Authentication")
 public class ChatController {
 
     private final IChatUseCase chatUseCase;

@@ -1,5 +1,13 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +39,8 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api")
+@Tag(name = "Feedback", description = "Sistema de retroalimentación y calificación de atenciones entre pacientes y practicantes")
+@SecurityRequirement(name = "Bearer Authentication")
 public class FeedbackController {
 
     private final IFeedbackUseCase feedbackUseCase;
@@ -42,25 +52,58 @@ public class FeedbackController {
         this.authenticationFacade = authenticationFacade;
     }
 
-    /**
-     * Crea un nuevo feedback sobre una atención finalizada.
-     * Implementa CU-009, CU-016 (RF21, RF22, RF23).
-     *
-     * Este endpoint permite a pacientes y practicantes calificar una atención
-     * una vez que ha sido finalizada.
-     *
-     * POST /api/feedback
-     *
-     * Seguridad: Solo PATIENT y PRACTITIONER pueden acceder
-     *
-     * Validaciones (aplicadas por el servicio de dominio):
-     * - La atención debe estar en estado COMPLETED
-     * - El usuario debe ser el paciente o practicante de la atención
-     * - No debe existir feedback previo del usuario para esa atención (RF23)
-     *
-     * @param request DTO con attentionId, rating y comment
-     * @return El feedback creado (201 Created)
-     */
+    @Operation(
+            summary = "Crear feedback sobre atención",
+            description = "Permite calificar una atención finalizada"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "Feedback creado exitosamente",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = FeedbackResponseDTO.class),
+                            examples = @ExampleObject(
+                                    value = """
+                                            {
+                                              "id": 12,
+                                              "rating": 5,
+                                              "comment": "Excelente atención, muy profesional y cuidadoso",
+                                              "createdAt": "2025-11-20T14:30:00Z",
+                                              "submittedById": 15,
+                                              "submittedByName": "Carlos Rodríguez",
+                                              "submittedByRole": "PATIENT",
+                                              "attentionId": 23,
+                                              "treatmentName": "Limpieza Dental",
+                                              "patientName": "Carlos Rodríguez",
+                                              "practitionerName": "Ana Martínez"
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Atención no finalizada o feedback ya existe",
+                    content = @Content(mediaType = "application/json")
+            )
+    })
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Datos del feedback",
+            required = true,
+            content = @Content(
+                    mediaType = "application/json",
+                    examples = @ExampleObject(
+                            value = """
+                                    {
+                                      "attentionId": 23,
+                                      "rating": 5,
+                                      "comment": "Excelente atención, muy profesional y cuidadoso"
+                                    }
+                                    """
+                    )
+            )
+    )
     @PostMapping("/feedback")
     @PreAuthorize("hasRole('PATIENT') or hasRole('PRACTITIONER')")
     public ResponseEntity<FeedbackResponseDTO> createFeedback(

@@ -1,5 +1,13 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +44,8 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api")
+@Tag(name = "Atenciones", description = "Gestión de casos clínicos y seguimiento de atenciones odontológicas con notas de evolución")
+@SecurityRequirement(name = "Bearer Authentication")
 public class AttentionController {
 
     private final IAttentionUseCase attentionUseCase;
@@ -84,24 +94,51 @@ public class AttentionController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Finaliza un caso clínico completo, cambiando su estado a COMPLETED.
-     * Implementa RF10, RF19 - CU 4.4: Finalizar Caso Clínico.
-     *
-     * Este endpoint permite al practicante cerrar el caso una vez completado el tratamiento.
-     * Al finalizar, se habilita la funcionalidad de feedback (RF21, RF22).
-     *
-     * POST /api/attentions/{id}/finalize
-     *
-     * Seguridad: Solo PRACTITIONER puede acceder
-     *
-     * Validaciones (aplicadas por el servicio de dominio):
-     * - No deben existir turnos futuros agendados
-     * - Todos los turnos pasados deben estar marcados (COMPLETED o NO_SHOW)
-     *
-     * @param attentionId ID del caso clínico a finalizar
-     * @return La Attention actualizada con estado COMPLETED
-     */
+    @Operation(
+            summary = "Finalizar atención clínica",
+            description = "Marca el caso clínico como finalizado, habilitando el sistema de feedback"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Atención finalizada exitosamente",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = AttentionResponseDTO.class),
+                            examples = @ExampleObject(
+                                    value = """
+                                            {
+                                              "id": 23,
+                                              "status": "COMPLETED",
+                                              "startDate": "2025-11-15",
+                                              "patientId": 15,
+                                              "patientName": "Carlos Rodríguez",
+                                              "practitionerId": 8,
+                                              "practitionerName": "Ana Martínez",
+                                              "treatmentId": 3,
+                                              "treatmentName": "Limpieza Dental",
+                                              "appointments": [{
+                                                "id": 45,
+                                                "appointmentTime": "2025-11-15T10:00:00",
+                                                "status": "COMPLETED",
+                                                "durationInMinutes": 45,
+                                                "treatmentId": 3,
+                                                "treatmentName": "Limpieza Dental",
+                                                "practitionerId": 8,
+                                                "practitionerName": "Ana Martínez",
+                                                "attentionId": 23
+                                              }]
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "La atención no puede finalizarse (tiene turnos pendientes)",
+                    content = @Content(mediaType = "application/json")
+            )
+    })
     @PostMapping("/attentions/{attentionId}/finalize")
     @PreAuthorize("hasRole('PRACTITIONER')")
     public ResponseEntity<AttentionResponseDTO> finalizeAttention(
