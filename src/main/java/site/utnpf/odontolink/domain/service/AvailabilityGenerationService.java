@@ -13,7 +13,6 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -59,7 +58,8 @@ public class AvailabilityGenerationService {
      * 2. Genera una lista de slots teóricos basándose en la duración del servicio
      * 3. Consulta los turnos ya reservados del practicante para ese día
      * 4. Filtra los slots que colisionan con los turnos existentes
-     * 5. Devuelve solo los slots disponibles
+     * 5. Filtra los slots que ya pasaron (solo si es el día actual)
+     * 6. Devuelve solo los slots disponibles
      *
      * Ejemplo:
      * - Bloque: Lunes 08:00-12:00
@@ -104,7 +104,10 @@ public class AvailabilityGenerationService {
         );
 
         // 6. Filtrar los slots que colisionan con los turnos existentes
-        return filterAvailableSlots(theoreticalSlots, existingAppointments, durationInMinutes);
+        List<LocalDateTime> availableSlots = filterAvailableSlots(theoreticalSlots, existingAppointments, durationInMinutes);
+
+        // 7. Filtrar slots pasados si es el día actual
+        return filterPastSlots(availableSlots, requestedDate);
     }
 
     /**
@@ -235,6 +238,29 @@ public class AvailabilityGenerationService {
         }
 
         return availableSlots;
+    }
+
+    /**
+     * Filtra los slots que ya pasaron cuando la fecha solicitada es el día actual.
+     * Esto evita que se muestren horarios que ya transcurrieron.
+     *
+     * @param slots Lista de slots disponibles
+     * @param requestedDate Fecha para la cual se generaron los slots
+     * @return Lista filtrada sin los slots pasados (si es hoy) o la lista completa (si es fecha futura)
+     */
+    private List<LocalDateTime> filterPastSlots(List<LocalDateTime> slots, LocalDate requestedDate) {
+        LocalDate today = LocalDate.now();
+
+        // Si la fecha solicitada no es hoy, devolver todos los slots
+        if (!requestedDate.equals(today)) {
+            return slots;
+        }
+
+        // Si es hoy, filtrar los slots que ya pasaron
+        LocalDateTime now = LocalDateTime.now();
+        return slots.stream()
+                .filter(slot -> slot.isAfter(now))
+                .collect(Collectors.toList());
     }
 
 }

@@ -17,7 +17,7 @@ public interface JpaAvailabilitySlotRepository extends JpaRepository<Availabilit
            "FROM AvailabilitySlotEntity a " +
            "WHERE a.offeredTreatment.id = :offeredTreatmentId " +
            "AND a.dayOfWeek = :dayOfWeek " +
-           "AND :time BETWEEN a.startTime AND a.endTime")
+           "AND :time >= a.startTime AND :time < a.endTime")
     boolean isTimeWithinAvailability(
             @Param("offeredTreatmentId") Long offeredTreatmentId,
             @Param("dayOfWeek") DayOfWeek dayOfWeek,
