@@ -71,4 +71,17 @@ public class Supervisor {
     public void setSupervisedPractitioners(Set<Practitioner> supervisedPractitioners) {
         this.supervisedPractitioners = supervisedPractitioners;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Supervisor that = (Supervisor) o;
+        return id != null && id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

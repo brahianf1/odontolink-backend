@@ -100,4 +100,17 @@ public class Practitioner {
     public void setAttentions(Set<Attention> attentions) {
         this.attentions = attentions;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Practitioner that = (Practitioner) o;
+        return id != null && id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }
