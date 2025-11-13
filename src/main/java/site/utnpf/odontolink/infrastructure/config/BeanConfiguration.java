@@ -172,20 +172,30 @@ public class BeanConfiguration {
 
     /**
      * Bean para el servicio de dominio de AvailabilityGeneration.
-     * Este es el servicio de dominio que implementa el algoritmo de inventario dinámico:
-     * - Genera slots teóricos basados en la duración del servicio
-     * - Filtra slots que colisionan con turnos ya reservados
-     * - Devuelve solo los slots realmente disponibles
+     * Este es el servicio de dominio que implementa el "Rulebook" del sistema de ofertas finitas.
+     *
+     * Implementa el algoritmo de inventario dinámico con tres validaciones secuenciales:
+     * 1. Validación de límite temporal (offerStartDate - offerEndDate)
+     * 2. Validación de límite de cupo (maxCompletedAttentions)
+     * 3. Cálculo de inventario dinámico diario:
+     *    - Genera slots teóricos basados en la duración del servicio
+     *    - Filtra slots que colisionan con turnos ya reservados
+     *    - Devuelve solo los slots realmente disponibles
+     *
+     * Filosofía "Lo que suceda primero": La oferta deja de estar disponible cuando se cumple
+     * UNA de las condiciones (límite temporal o límite de cupo).
      *
      * Este servicio opera exclusivamente con POJOs de dominio.
      */
     @Bean
     public AvailabilityGenerationService availabilityGenerationService(
             AppointmentRepository appointmentRepository,
-            OfferedTreatmentRepository offeredTreatmentRepository) {
+            OfferedTreatmentRepository offeredTreatmentRepository,
+            AttentionRepository attentionRepository) {
         return new AvailabilityGenerationService(
                 appointmentRepository,
-                offeredTreatmentRepository
+                offeredTreatmentRepository,
+                attentionRepository
         );
     }
 

@@ -1,10 +1,8 @@
 package site.utnpf.odontolink.domain.service;
 
-import site.utnpf.odontolink.domain.model.Appointment;
-import site.utnpf.odontolink.domain.model.AppointmentStatus;
-import site.utnpf.odontolink.domain.model.AvailabilitySlot;
-import site.utnpf.odontolink.domain.model.OfferedTreatment;
+import site.utnpf.odontolink.domain.model.*;
 import site.utnpf.odontolink.domain.repository.AppointmentRepository;
+import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 
 import java.time.DayOfWeek;
@@ -18,13 +16,22 @@ import java.util.stream.Collectors;
 /**
  * Servicio de Dominio que implementa el "Rulebook" para la generación de inventario dinámico de turnos.
  *
- * Este servicio es el corazón del nuevo modelo de agendamiento. Calcula los slots disponibles
+ * Este servicio es el corazón del modelo de agendamiento con ofertas finitas. Calcula los slots disponibles
  * en tiempo real basándose en:
- * 1. Los bloques de disponibilidad del practicante (AvailabilitySlot)
- * 2. La duración del servicio (durationInMinutes del OfferedTreatment)
- * 3. Los turnos ya reservados (Appointments en la "Agenda" del practicante)
+ * 1. Límites temporales de la oferta (offerStartDate, offerEndDate)
+ * 2. Límites de cupo de la oferta (maxCompletedAttentions)
+ * 3. Los bloques de disponibilidad del practicante (AvailabilitySlot)
+ * 4. La duración del servicio (durationInMinutes del OfferedTreatment)
+ * 5. Los turnos ya reservados (Appointments en la "Agenda" del practicante)
+ *
+ * Filosofía "Lo que suceda primero":
+ * La oferta deja de estar disponible cuando se cumple UNA de las siguientes condiciones:
+ * - La fecha solicitada está fuera del rango (offerStartDate - offerEndDate)
+ * - Se alcanzó el cupo máximo de casos completados (maxCompletedAttentions)
  *
  * Responsabilidades principales:
+ * - Validar límites temporales de la oferta
+ * - Validar límites de cupo (stock) de la oferta
  * - Generar slots discretos (08:00, 08:30, 09:00, etc.) a partir de bloques continuos
  * - Filtrar slots que colisionan con turnos ya reservados
  * - Devolver solo los slots realmente disponibles para reservar
@@ -37,6 +44,7 @@ public class AvailabilityGenerationService {
 
     private final AppointmentRepository appointmentRepository;
     private final OfferedTreatmentRepository offeredTreatmentRepository;
+    private final AttentionRepository attentionRepository;
 
     /**
      * Intervalo en minutos para generar los slots (cada cuántos minutos se puede reservar).
@@ -45,51 +53,70 @@ public class AvailabilityGenerationService {
     private static final int SLOT_INTERVAL_MINUTES = 30;
 
     public AvailabilityGenerationService(AppointmentRepository appointmentRepository,
-                                         OfferedTreatmentRepository offeredTreatmentRepository) {
+                                         OfferedTreatmentRepository offeredTreatmentRepository,
+                                         AttentionRepository attentionRepository) {
         this.appointmentRepository = appointmentRepository;
         this.offeredTreatmentRepository = offeredTreatmentRepository;
+        this.attentionRepository = attentionRepository;
     }
 
     /**
      * Genera los slots de tiempo disponibles para un tratamiento ofrecido en una fecha específica.
      *
-     * Este es el método principal que implementa el algoritmo de inventario dinámico:
-     * 1. Identifica el bloque de disponibilidad (AvailabilitySlot) para el día de la semana solicitado
-     * 2. Genera una lista de slots teóricos basándose en la duración del servicio
-     * 3. Consulta los turnos ya reservados del practicante para ese día
-     * 4. Filtra los slots que colisionan con los turnos existentes
-     * 5. Filtra los slots que ya pasaron (solo si es el día actual)
-     * 6. Devuelve solo los slots disponibles
+     * Este método implementa el "Rulebook" con validaciones de ofertas finitas:
+     *
+     * VALIDACIÓN 1: Límite de Tiempo
+     * - Verifica que la fecha solicitada esté dentro del rango (offerStartDate - offerEndDate)
+     * - Si está fuera del rango, devuelve lista vacía
+     *
+     * VALIDACIÓN 2: Límite de Cupo (Stock)
+     * - Cuenta las Attentions COMPLETED del practicante para este tratamiento
+     * - Si se alcanzó el cupo máximo, devuelve lista vacía
+     * - Nota: El cupo se mide en CASOS (Attentions) completados, no en turnos
+     *
+     * VALIDACIÓN 3: Inventario Dinámico Diario
+     * - Solo si pasó las validaciones 1 y 2, calcula el inventario:
+     *   1. Identifica el bloque de disponibilidad para el día solicitado
+     *   2. Genera slots teóricos basándose en la duración del servicio
+     *   3. Consulta los turnos ya reservados del practicante
+     *   4. Filtra los slots que colisionan con los turnos existentes
+     *   5. Filtra los slots que ya pasaron (solo si es el día actual)
      *
      * Ejemplo:
+     * - Oferta: 2025-01-01 a 2025-06-30, cupo 10 casos
+     * - Fecha solicitada: 2025-03-15
+     * - Casos completados: 8
      * - Bloque: Lunes 08:00-12:00
-     * - Duración: 60 minutos
      * - Turnos reservados: 09:00-10:00
-     * - Slots generados: [08:00, 08:30, 09:00, 09:30, 10:00, 10:30, 11:00]
-     * - Slots filtrados (excluidos por colisión con 09:00-10:00): [09:00, 09:30]
      * - Resultado: [08:00, 08:30, 10:00, 10:30, 11:00]
      *
-     * @param offeredTreatment La oferta de tratamiento (contiene duración y bloques de disponibilidad)
+     * @param offeredTreatment La oferta de tratamiento (contiene límites, duración y bloques)
      * @param requestedDate La fecha para la cual se solicitan los horarios
-     * @return Lista de LocalDateTime con los slots disponibles (timestamps exactos como 2025-01-15T08:00)
+     * @return Lista de LocalDateTime con los slots disponibles, o lista vacía si la oferta no es válida
      */
     public List<LocalDateTime> generateAvailableSlots(OfferedTreatment offeredTreatment, LocalDate requestedDate) {
 
-        // 1. Obtener el día de la semana de la fecha solicitada
-        DayOfWeek dayOfWeek = requestedDate.getDayOfWeek();
+        // VALIDACIÓN 1: Límite de Tiempo
+        if (!isWithinOfferDateRange(offeredTreatment, requestedDate)) {
+            return new ArrayList<>();
+        }
 
-        // 2. Buscar el AvailabilitySlot que corresponde a ese día de la semana
+        // VALIDACIÓN 2: Límite de Cupo (Stock)
+        if (hasReachedMaxCapacity(offeredTreatment)) {
+            return new ArrayList<>();
+        }
+
+        // VALIDACIÓN 3: Inventario Dinámico Diario
+
+        DayOfWeek dayOfWeek = requestedDate.getDayOfWeek();
         AvailabilitySlot matchingSlot = findAvailabilitySlotForDay(offeredTreatment, dayOfWeek);
 
-        // Si no hay disponibilidad para ese día, devolver lista vacía
         if (matchingSlot == null) {
             return new ArrayList<>();
         }
 
-        // 3. Obtener la duración del servicio
         int durationInMinutes = offeredTreatment.getDurationInMinutes();
 
-        // 4. Generar los slots teóricos para ese bloque de disponibilidad
         List<LocalDateTime> theoreticalSlots = generateTheoreticalSlots(
             requestedDate,
             matchingSlot.getStartTime(),
@@ -97,17 +124,62 @@ public class AvailabilityGenerationService {
             durationInMinutes
         );
 
-        // 5. Obtener los turnos ya reservados del practicante para ese día
         List<Appointment> existingAppointments = getActiveAppointmentsForDate(
             offeredTreatment.getPractitioner().getId(),
             requestedDate
         );
 
-        // 6. Filtrar los slots que colisionan con los turnos existentes
         List<LocalDateTime> availableSlots = filterAvailableSlots(theoreticalSlots, existingAppointments, durationInMinutes);
 
-        // 7. Filtrar slots pasados si es el día actual
         return filterPastSlots(availableSlots, requestedDate);
+    }
+
+    /**
+     * Valida que la fecha solicitada esté dentro del rango de la oferta.
+     *
+     * Los campos offerStartDate y offerEndDate son obligatorios,
+     * por lo que siempre existirán valores para validar.
+     *
+     * @param offeredTreatment La oferta de tratamiento
+     * @param requestedDate La fecha solicitada
+     * @return true si la fecha está dentro del rango, false en caso contrario
+     */
+    private boolean isWithinOfferDateRange(OfferedTreatment offeredTreatment, LocalDate requestedDate) {
+        LocalDate startDate = offeredTreatment.getOfferStartDate();
+        LocalDate endDate = offeredTreatment.getOfferEndDate();
+
+        if (requestedDate.isBefore(startDate)) {
+            return false;
+        }
+
+        if (requestedDate.isAfter(endDate)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Verifica si se alcanzó el cupo máximo de casos completados.
+     *
+     * El cupo se mide en Attentions (casos) con estado COMPLETED, no en Appointments (turnos).
+     * Un caso puede requerir múltiples turnos, pero solo cuenta como 1 para el cupo cuando se completa.
+     *
+     * El campo maxCompletedAttentions es obligatorio, por lo que siempre existirá un valor para validar.
+     *
+     * @param offeredTreatment La oferta de tratamiento
+     * @return true si se alcanzó el cupo máximo, false en caso contrario
+     */
+    private boolean hasReachedMaxCapacity(OfferedTreatment offeredTreatment) {
+        int maxCupo = offeredTreatment.getMaxCompletedAttentions();
+
+        int completedCount = attentionRepository.countByPractitionerAndTreatmentAndStatus(
+            offeredTreatment.getPractitioner(),
+            offeredTreatment.getTreatment(),
+            AttentionStatus.COMPLETED
+        );
+
+        return completedCount >= maxCupo;
     }
 
     /**

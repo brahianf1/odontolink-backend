@@ -4,6 +4,7 @@ import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.AttentionStatus;
 import site.utnpf.odontolink.domain.model.Patient;
 import site.utnpf.odontolink.domain.model.Practitioner;
+import site.utnpf.odontolink.domain.model.Treatment;
 
 import java.util.List;
 import java.util.Optional;
@@ -74,6 +75,22 @@ public interface AttentionRepository {
             Long patientId,
             Long practitionerId,
             Long treatmentId,
+            AttentionStatus status
+    );
+
+    /**
+     * Cuenta el número de atenciones completadas para un practicante y tratamiento específicos.
+     * Este método es fundamental para el sistema de ofertas finitas:
+     * permite verificar si se alcanzó el cupo máximo de casos completados.
+     *
+     * @param practitioner El practicante
+     * @param treatment El tratamiento
+     * @param status El estado de las atenciones a contar (típicamente COMPLETED)
+     * @return Cantidad de atenciones en el estado especificado
+     */
+    int countByPractitionerAndTreatmentAndStatus(
+            Practitioner practitioner,
+            Treatment treatment,
             AttentionStatus status
     );
 }

@@ -38,4 +38,10 @@ public interface JpaAttentionRepository extends JpaRepository<AttentionEntity, L
             Long treatmentId,
             AttentionStatus status
     );
+
+    int countByPractitioner_IdAndTreatment_IdAndStatus(
+            Long practitionerId,
+            Long treatmentId,
+            AttentionStatus status
+    );
 }
