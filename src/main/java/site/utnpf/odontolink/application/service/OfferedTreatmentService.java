@@ -81,7 +81,10 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
                                                   Long treatmentId,
                                                   String requirements,
                                                   int durationInMinutes,
-                                                  Set<AvailabilitySlot> availabilitySlots) {
+                                                  Set<AvailabilitySlot> availabilitySlots,
+                                                  java.time.LocalDate offerStartDate,
+                                                  java.time.LocalDate offerEndDate,
+                                                  Integer maxCompletedAttentions) {
 
         Practitioner practitioner = practitionerRepository.findById(practitionerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Practitioner", "id", practitionerId.toString()));
@@ -94,7 +97,10 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
                 treatment,
                 requirements,
                 durationInMinutes,
-                availabilitySlots
+                availabilitySlots,
+                offerStartDate,
+                offerEndDate,
+                maxCompletedAttentions
         );
 
         return offeredTreatmentRepository.save(offeredTreatment);
@@ -113,7 +119,11 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
      * @param practitionerId ID del practicante (para verificación de permisos)
      * @param offeredTreatmentId ID de la oferta a modificar
      * @param requirements Nuevos requisitos
+     * @param durationInMinutes Nueva duración (null para no modificar)
      * @param availabilitySlots Nuevos horarios de disponibilidad (objetos de dominio)
+     * @param offerStartDate Nueva fecha de inicio (null para no modificar)
+     * @param offerEndDate Nueva fecha de fin (null para no modificar)
+     * @param maxCompletedAttentions Nuevo cupo máximo (null para no modificar)
      * @return El tratamiento ofrecido actualizado
      * @throws ResourceNotFoundException si la oferta no existe
      * @throws UnauthorizedOperationException si el practicante no es el propietario
@@ -123,7 +133,10 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
                                                    Long offeredTreatmentId,
                                                    String requirements,
                                                    Integer durationInMinutes,
-                                                   Set<AvailabilitySlot> availabilitySlots) {
+                                                   Set<AvailabilitySlot> availabilitySlots,
+                                                   java.time.LocalDate offerStartDate,
+                                                   java.time.LocalDate offerEndDate,
+                                                   Integer maxCompletedAttentions) {
 
         OfferedTreatment existingOffer = offeredTreatmentRepository.findById(offeredTreatmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("OfferedTreatment", "id", offeredTreatmentId.toString()));
@@ -136,7 +149,10 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
                 existingOffer,
                 requirements,
                 durationInMinutes,
-                availabilitySlots
+                availabilitySlots,
+                offerStartDate,
+                offerEndDate,
+                maxCompletedAttentions
         );
 
         return offeredTreatmentRepository.save(updatedOffer);

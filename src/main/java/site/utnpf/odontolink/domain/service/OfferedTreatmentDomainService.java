@@ -40,6 +40,9 @@ public class OfferedTreatmentDomainService {
      * @param requirements Los requisitos específicos del practicante
      * @param durationInMinutes Duración del tratamiento en minutos
      * @param availabilitySlots Los horarios de disponibilidad
+     * @param offerStartDate Fecha de inicio de la oferta
+     * @param offerEndDate Fecha de fin de la oferta
+     * @param maxCompletedAttentions Cupo máximo de casos completados
      * @return El OfferedTreatment creado (sin persistir aún)
      * @throws DuplicateResourceException si el practicante ya ofrece este tratamiento
      * @throws DomainException si alguna validación falla
@@ -48,27 +51,26 @@ public class OfferedTreatmentDomainService {
                                         Treatment treatment,
                                         String requirements,
                                         int durationInMinutes,
-                                        Set<AvailabilitySlot> availabilitySlots) {
+                                        Set<AvailabilitySlot> availabilitySlots,
+                                        java.time.LocalDate offerStartDate,
+                                        java.time.LocalDate offerEndDate,
+                                        Integer maxCompletedAttentions) {
 
-        // Regla 1: Verificar unicidad (el practicante no puede ofrecer el mismo tratamiento dos veces)
         validateUniqueness(practitioner, treatment);
-
-        // Regla 2: Validar duración
         validateDuration(durationInMinutes);
-
-        // Regla 3: Validar que todos los slots de disponibilidad sean válidos
         validateAvailabilitySlots(availabilitySlots);
 
-        // Crear la oferta
-        OfferedTreatment offeredTreatment = new OfferedTreatment(practitioner, treatment, requirements);
-        offeredTreatment.setDurationInMinutes(durationInMinutes);
+        OfferedTreatment offeredTreatment = new OfferedTreatment(
+                practitioner,
+                treatment,
+                availabilitySlots,
+                durationInMinutes,
+                offerStartDate,
+                offerEndDate,
+                maxCompletedAttentions
+        );
 
-        // Agregar los slots de disponibilidad (estableciendo la relación bidireccional)
-        if (availabilitySlots != null) {
-            for (AvailabilitySlot slot : availabilitySlots) {
-                offeredTreatment.addAvailabilitySlot(slot);
-            }
-        }
+        offeredTreatment.setRequirements(requirements);
 
         return offeredTreatment;
     }
@@ -76,43 +78,68 @@ public class OfferedTreatmentDomainService {
     /**
      * Actualiza una oferta de tratamiento existente aplicando las reglas de negocio.
      *
+     * Todos los campos relacionados con límites son obligatorios en la actualización
+     * para garantizar que las ofertas siempre mantengan límites claros definidos.
+     *
      * @param existingOffer La oferta existente a actualizar
      * @param newRequirements Los nuevos requisitos
      * @param newDurationInMinutes Nueva duración en minutos (null para no modificar)
      * @param newAvailabilitySlots Los nuevos slots de disponibilidad
+     * @param newOfferStartDate Nueva fecha de inicio (obligatoria)
+     * @param newOfferEndDate Nueva fecha de fin (obligatoria)
+     * @param newMaxCompletedAttentions Nuevo cupo máximo (obligatorio)
      * @return La oferta actualizada
      * @throws DomainException si alguna validación falla
      */
     public OfferedTreatment updateOffer(OfferedTreatment existingOffer,
                                         String newRequirements,
                                         Integer newDurationInMinutes,
-                                        Set<AvailabilitySlot> newAvailabilitySlots) {
+                                        Set<AvailabilitySlot> newAvailabilitySlots,
+                                        java.time.LocalDate newOfferStartDate,
+                                        java.time.LocalDate newOfferEndDate,
+                                        Integer newMaxCompletedAttentions) {
 
-        // Validar duración si se proporciona
+        validateRequiredUpdateFields(newOfferStartDate, newOfferEndDate, newMaxCompletedAttentions);
+
         if (newDurationInMinutes != null) {
             validateDuration(newDurationInMinutes);
             existingOffer.setDurationInMinutes(newDurationInMinutes);
         }
 
-        // Validar los nuevos slots de disponibilidad
         validateAvailabilitySlots(newAvailabilitySlots);
 
-        // Actualizar requisitos
         existingOffer.setRequirements(newRequirements);
 
-        // Limpiar slots antiguos
         if (existingOffer.getAvailabilitySlots() != null) {
             existingOffer.getAvailabilitySlots().clear();
         }
 
-        // Agregar los nuevos slots
         if (newAvailabilitySlots != null) {
             for (AvailabilitySlot slot : newAvailabilitySlots) {
                 existingOffer.addAvailabilitySlot(slot);
             }
         }
 
+        existingOffer.setOfferStartDate(newOfferStartDate);
+        existingOffer.setOfferEndDate(newOfferEndDate);
+        existingOffer.setMaxCompletedAttentions(newMaxCompletedAttentions);
+
         return existingOffer;
+    }
+
+    /**
+     * Valida que los campos obligatorios de la actualización no sean nulos.
+     */
+    private void validateRequiredUpdateFields(java.time.LocalDate startDate, java.time.LocalDate endDate, Integer maxAttentions) {
+        if (startDate == null) {
+            throw new InvalidBusinessRuleException("La fecha de inicio de la oferta es obligatoria.");
+        }
+        if (endDate == null) {
+            throw new InvalidBusinessRuleException("La fecha de fin de la oferta es obligatoria.");
+        }
+        if (maxAttentions == null) {
+            throw new InvalidBusinessRuleException("El cupo máximo de casos completados es obligatorio.");
+        }
     }
 
     /**

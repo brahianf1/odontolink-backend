@@ -28,6 +28,9 @@ public class OfferedTreatmentPersistenceMapper {
         entity.setId(domain.getId());
         entity.setRequirements(domain.getRequirements());
         entity.setDurationInMinutes(domain.getDurationInMinutes());
+        entity.setOfferStartDate(domain.getOfferStartDate());
+        entity.setOfferEndDate(domain.getOfferEndDate());
+        entity.setMaxCompletedAttentions(domain.getMaxCompletedAttentions());
 
         // Mapear las relaciones
         if (domain.getPractitioner() != null) {
@@ -43,7 +46,7 @@ public class OfferedTreatmentPersistenceMapper {
             Set<AvailabilitySlotEntity> slotEntities = domain.getAvailabilitySlots().stream()
                     .map(slot -> {
                         AvailabilitySlotEntity slotEntity = AvailabilitySlotPersistenceMapper.toEntity(slot);
-                        slotEntity.setOfferedTreatment(entity); // Establecer la relación bidireccional
+                        slotEntity.setOfferedTreatment(entity);
                         return slotEntity;
                     })
                     .collect(Collectors.toSet());
@@ -66,6 +69,9 @@ public class OfferedTreatmentPersistenceMapper {
         domain.setId(entity.getId());
         domain.setRequirements(entity.getRequirements());
         domain.setDurationInMinutes(entity.getDurationInMinutes());
+        domain.setOfferStartDate(entity.getOfferStartDate());
+        domain.setOfferEndDate(entity.getOfferEndDate());
+        domain.setMaxCompletedAttentions(entity.getMaxCompletedAttentions());
 
         // Mapear las relaciones
         if (entity.getPractitioner() != null) {
@@ -81,7 +87,7 @@ public class OfferedTreatmentPersistenceMapper {
             Set<AvailabilitySlot> slots = entity.getAvailabilitySlots().stream()
                     .map(slotEntity -> {
                         AvailabilitySlot slot = AvailabilitySlotPersistenceMapper.toDomain(slotEntity);
-                        slot.setOfferedTreatment(domain); // Establecer la relación bidireccional
+                        slot.setOfferedTreatment(domain);
                         return slot;
                     })
                     .collect(Collectors.toSet());

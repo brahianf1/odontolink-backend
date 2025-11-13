@@ -3,6 +3,7 @@ package site.utnpf.odontolink.application.port.in;
 import site.utnpf.odontolink.domain.model.AvailabilitySlot;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
@@ -27,13 +28,19 @@ public interface IOfferedTreatmentUseCase {
      * @param requirements Requisitos específicos del practicante
      * @param durationInMinutes Duración del tratamiento en minutos
      * @param availabilitySlots Horarios de disponibilidad (objetos de dominio)
+     * @param offerStartDate Fecha de inicio de la oferta
+     * @param offerEndDate Fecha de fin de la oferta
+     * @param maxCompletedAttentions Cupo máximo de casos completados
      * @return El tratamiento ofrecido creado
      */
     OfferedTreatment addTreatmentToCatalog(Long practitionerId,
                                            Long treatmentId,
                                            String requirements,
                                            int durationInMinutes,
-                                           Set<AvailabilitySlot> availabilitySlots);
+                                           Set<AvailabilitySlot> availabilitySlots,
+                                           LocalDate offerStartDate,
+                                           LocalDate offerEndDate,
+                                           Integer maxCompletedAttentions);
 
     /**
      * Modifica un tratamiento del catálogo personal del practicante.
@@ -44,13 +51,19 @@ public interface IOfferedTreatmentUseCase {
      * @param requirements Nuevos requisitos específicos
      * @param durationInMinutes Duración del tratamiento en minutos (null para no modificar)
      * @param availabilitySlots Nuevos horarios de disponibilidad (objetos de dominio)
+     * @param offerStartDate Nueva fecha de inicio (null para no modificar)
+     * @param offerEndDate Nueva fecha de fin (null para no modificar)
+     * @param maxCompletedAttentions Nuevo cupo máximo (null para no modificar)
      * @return El tratamiento ofrecido actualizado
      */
     OfferedTreatment updateOfferedTreatment(Long practitionerId,
                                             Long offeredTreatmentId,
                                             String requirements,
                                             Integer durationInMinutes,
-                                            Set<AvailabilitySlot> availabilitySlots);
+                                            Set<AvailabilitySlot> availabilitySlots,
+                                            LocalDate offerStartDate,
+                                            LocalDate offerEndDate,
+                                            Integer maxCompletedAttentions);
 
     /**
      * Elimina un tratamiento del catálogo personal del practicante.

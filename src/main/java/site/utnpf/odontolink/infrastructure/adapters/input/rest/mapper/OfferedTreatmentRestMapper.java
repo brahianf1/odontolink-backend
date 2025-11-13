@@ -50,6 +50,9 @@ public class OfferedTreatmentRestMapper {
 
         response.setRequirements(domain.getRequirements());
         response.setDurationInMinutes(domain.getDurationInMinutes());
+        response.setOfferStartDate(domain.getOfferStartDate());
+        response.setOfferEndDate(domain.getOfferEndDate());
+        response.setMaxCompletedAttentions(domain.getMaxCompletedAttentions());
 
         if (domain.getAvailabilitySlots() != null) {
             response.setAvailabilitySlots(

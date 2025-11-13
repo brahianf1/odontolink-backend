@@ -5,10 +5,13 @@ import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.AttentionStatus;
 import site.utnpf.odontolink.domain.model.Patient;
 import site.utnpf.odontolink.domain.model.Practitioner;
+import site.utnpf.odontolink.domain.model.Treatment;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AttentionEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.jpa_repository.JpaAttentionRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.AttentionPersistenceMapper;
+import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.PractitionerPersistenceMapper;
+import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.TreatmentPersistenceMapper;
 
 import java.util.List;
 import java.util.Optional;
@@ -113,5 +116,17 @@ public class AttentionPersistenceAdapter implements AttentionRepository {
                         status
                 )
                 .map(AttentionPersistenceMapper::toDomain);
+    }
+
+    @Override
+    public int countByPractitionerAndTreatmentAndStatus(
+            Practitioner practitioner,
+            Treatment treatment,
+            AttentionStatus status) {
+        return jpaAttentionRepository.countByPractitioner_IdAndTreatment_IdAndStatus(
+                practitioner.getId(),
+                treatment.getId(),
+                status
+        );
     }
 }

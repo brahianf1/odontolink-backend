@@ -106,7 +106,10 @@ public class PractitionerController {
                                                   "startTime": "08:00:00",
                                                   "endTime": "12:00:00"
                                                 }
-                                              ]
+                                              ],
+                                              "offerStartDate": "2025-01-15",
+                                              "offerEndDate": "2025-06-30",
+                                              "maxCompletedAttentions": 10
                                             }
                                             """
                             )
@@ -145,7 +148,10 @@ public class PractitionerController {
                                           "startTime": "08:00:00",
                                           "endTime": "12:00:00"
                                         }
-                                      ]
+                                      ],
+                                      "offerStartDate": "2025-01-15",
+                                      "offerEndDate": "2025-06-30",
+                                      "maxCompletedAttentions": 10
                                     }
                                     """
                     )
@@ -163,7 +169,10 @@ public class PractitionerController {
                 request.getTreatmentId(),
                 request.getRequirements(),
                 request.getDurationInMinutes(),
-                availabilitySlots
+                availabilitySlots,
+                request.getOfferStartDate(),
+                request.getOfferEndDate(),
+                request.getMaxCompletedAttentions()
         );
 
         OfferedTreatmentResponseDTO response = OfferedTreatmentRestMapper.toResponse(offeredTreatment);
@@ -208,7 +217,10 @@ public class PractitionerController {
                 id,
                 request.getRequirements(),
                 request.getDurationInMinutes(),
-                availabilitySlots
+                availabilitySlots,
+                request.getOfferStartDate(),
+                request.getOfferEndDate(),
+                request.getMaxCompletedAttentions()
         );
 
         OfferedTreatmentResponseDTO response = OfferedTreatmentRestMapper.toResponse(offeredTreatment);
