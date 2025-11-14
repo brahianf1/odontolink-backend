@@ -9,12 +9,14 @@ import site.utnpf.odontolink.domain.model.AvailabilitySlot;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
 import site.utnpf.odontolink.domain.model.Practitioner;
 import site.utnpf.odontolink.domain.model.Treatment;
+import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 import site.utnpf.odontolink.domain.repository.PractitionerRepository;
 import site.utnpf.odontolink.domain.repository.TreatmentRepository;
 import site.utnpf.odontolink.domain.service.OfferedTreatmentDomainService;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -48,15 +50,18 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
     private final OfferedTreatmentRepository offeredTreatmentRepository;
     private final PractitionerRepository practitionerRepository;
     private final TreatmentRepository treatmentRepository;
+    private final AttentionRepository attentionRepository;
     private final OfferedTreatmentDomainService domainService;
 
     public OfferedTreatmentService(OfferedTreatmentRepository offeredTreatmentRepository,
                                    PractitionerRepository practitionerRepository,
                                    TreatmentRepository treatmentRepository,
+                                   AttentionRepository attentionRepository,
                                    OfferedTreatmentDomainService domainService) {
         this.offeredTreatmentRepository = offeredTreatmentRepository;
         this.practitionerRepository = practitionerRepository;
         this.treatmentRepository = treatmentRepository;
+        this.attentionRepository = attentionRepository;
         this.domainService = domainService;
     }
 
@@ -217,5 +222,26 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
     public OfferedTreatment getOfferedTreatmentById(Long offeredTreatmentId) {
         return offeredTreatmentRepository.findById(offeredTreatmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("OfferedTreatment", "id", offeredTreatmentId.toString()));
+    }
+
+    /**
+     * Obtiene el progreso de atenciones completadas para un practicante,
+     * agrupadas por tratamiento.
+     *
+     * Este método implementa una consulta optimizada que evita el problema N+1:
+     * en lugar de ejecutar una consulta por cada oferta del practicante,
+     * se ejecuta una única consulta con GROUP BY que retorna todos los conteos.
+     *
+     * @param practitionerId ID del practicante
+     * @return Map donde la clave es el ID del tratamiento y el valor es el conteo de atenciones completadas
+     * @throws ResourceNotFoundException si el practicante no existe
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Long, Long> getCompletedAttentionsProgressForPractitioner(Long practitionerId) {
+        Practitioner practitioner = practitionerRepository.findById(practitionerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Practitioner", "id", practitionerId.toString()));
+
+        return attentionRepository.countCompletedByPractitionerGroupByTreatment(practitioner);
     }
 }

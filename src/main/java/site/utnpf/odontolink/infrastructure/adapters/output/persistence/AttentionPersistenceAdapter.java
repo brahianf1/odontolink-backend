@@ -13,7 +13,9 @@ import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.A
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.PractitionerPersistenceMapper;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.TreatmentPersistenceMapper;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -128,5 +130,30 @@ public class AttentionPersistenceAdapter implements AttentionRepository {
                 treatment.getId(),
                 status
         );
+    }
+
+    /**
+     * Implementa la consulta optimizada de agregación GROUP BY.
+     * Transforma el resultado de la consulta JPA (List<Object[]>) en un Map<Long, Long>
+     * para facilitar el acceso por tratamiento en la capa de aplicación.
+     *
+     * Esta implementación evita el problema N+1 al obtener todos los conteos
+     * en una sola consulta SQL con GROUP BY.
+     */
+    @Override
+    public Map<Long, Long> countCompletedByPractitionerGroupByTreatment(Practitioner practitioner) {
+        List<Object[]> results = jpaAttentionRepository.countCompletedByPractitionerGroupByTreatment(
+                practitioner.getId(),
+                AttentionStatus.COMPLETED
+        );
+
+        Map<Long, Long> countMap = new HashMap<>();
+        for (Object[] row : results) {
+            Long treatmentId = (Long) row[0];
+            Long count = (Long) row[1];
+            countMap.put(treatmentId, count);
+        }
+
+        return countMap;
     }
 }

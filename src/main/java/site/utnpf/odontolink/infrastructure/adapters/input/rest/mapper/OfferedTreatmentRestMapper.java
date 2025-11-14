@@ -22,11 +22,27 @@ public class OfferedTreatmentRestMapper {
 
     /**
      * Convierte un OfferedTreatment del dominio a DTO de respuesta.
+     * El progreso actual de atenciones completadas se establece en 0.
      *
      * @param domain Objeto de dominio OfferedTreatment
      * @return DTO para respuesta HTTP
      */
     public static OfferedTreatmentResponseDTO toResponse(OfferedTreatment domain) {
+        return toResponse(domain, 0);
+    }
+
+    /**
+     * Convierte un OfferedTreatment del dominio a DTO de respuesta,
+     * incluyendo el progreso actual de atenciones completadas.
+     *
+     * Este método permite enriquecer el DTO con información calculada dinámicamente
+     * (el progreso actual) que no forma parte del modelo de dominio persistente.
+     *
+     * @param domain Objeto de dominio OfferedTreatment
+     * @param currentCompletedAttentions Número actual de atenciones completadas para este tratamiento
+     * @return DTO para respuesta HTTP enriquecido con progreso
+     */
+    public static OfferedTreatmentResponseDTO toResponse(OfferedTreatment domain, int currentCompletedAttentions) {
         if (domain == null) {
             return null;
         }
@@ -53,6 +69,7 @@ public class OfferedTreatmentRestMapper {
         response.setOfferStartDate(domain.getOfferStartDate());
         response.setOfferEndDate(domain.getOfferEndDate());
         response.setMaxCompletedAttentions(domain.getMaxCompletedAttentions());
+        response.setCurrentCompletedAttentions(currentCompletedAttentions);
 
         if (domain.getAvailabilitySlots() != null) {
             response.setAvailabilitySlots(

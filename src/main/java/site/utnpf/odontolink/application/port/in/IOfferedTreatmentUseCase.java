@@ -5,6 +5,7 @@ import site.utnpf.odontolink.domain.model.OfferedTreatment;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -90,4 +91,16 @@ public interface IOfferedTreatmentUseCase {
      * @return El tratamiento ofrecido encontrado
      */
     OfferedTreatment getOfferedTreatmentById(Long offeredTreatmentId);
+
+    /**
+     * Obtiene el progreso (cantidad de atenciones completadas) para todas las ofertas
+     * de un practicante, agrupadas por tratamiento.
+     *
+     * Este método soporta el cálculo eficiente del progreso de ofertas,
+     * evitando consultas N+1 a la base de datos.
+     *
+     * @param practitionerId ID del practicante
+     * @return Map donde la clave es el ID del tratamiento y el valor es la cantidad de atenciones completadas
+     */
+    Map<Long, Long> getCompletedAttentionsProgressForPractitioner(Long practitionerId);
 }
