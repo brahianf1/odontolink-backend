@@ -28,6 +28,7 @@ import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.OfferedTr
 import site.utnpf.odontolink.infrastructure.security.AuthenticationFacade;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -180,8 +181,14 @@ public class PractitionerController {
     }
 
     /**
-     * Obtiene todos los tratamientos que ofrece el practicante autenticado.
+     * Obtiene todos los tratamientos que ofrece el practicante autenticado,
+     * enriquecidos con el progreso actual de atenciones completadas.
      * Corresponde al "Mi Catálogo Personal".
+     *
+     * Este endpoint implementa una consulta optimizada que evita el problema N+1:
+     * - Realiza una consulta para obtener las ofertas del practicante
+     * - Realiza una única consulta con GROUP BY para obtener el progreso de todas las ofertas
+     * - Combina ambos resultados en memoria para construir los DTOs enriquecidos
      *
      * GET /api/practitioner/offered-treatments
      */
@@ -189,10 +196,16 @@ public class PractitionerController {
     public ResponseEntity<List<OfferedTreatmentResponseDTO>> getMyOfferedTreatments() {
 
         Long practitionerId = authenticationFacade.getAuthenticatedPractitionerId();
+
         List<OfferedTreatment> offeredTreatments = offeredTreatmentUseCase.getMyOfferedTreatments(practitionerId);
+        Map<Long, Long> progressMap = offeredTreatmentUseCase.getCompletedAttentionsProgressForPractitioner(practitionerId);
 
         List<OfferedTreatmentResponseDTO> response = offeredTreatments.stream()
-                .map(OfferedTreatmentRestMapper::toResponse)
+                .map(offer -> {
+                    Long treatmentId = offer.getTreatment().getId();
+                    int currentProgress = progressMap.getOrDefault(treatmentId, 0L).intValue();
+                    return OfferedTreatmentRestMapper.toResponse(offer, currentProgress);
+                })
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(response);

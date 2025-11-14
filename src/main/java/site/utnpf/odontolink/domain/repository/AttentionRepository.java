@@ -7,6 +7,7 @@ import site.utnpf.odontolink.domain.model.Practitioner;
 import site.utnpf.odontolink.domain.model.Treatment;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -93,4 +94,17 @@ public interface AttentionRepository {
             Treatment treatment,
             AttentionStatus status
     );
+
+    /**
+     * Cuenta todas las atenciones completadas para un practicante específico
+     * y las agrupa por el ID del tratamiento.
+     * Esto previene el problema N+1 al obtener el progreso de todas las ofertas de un practicante.
+     *
+     * Este método permite calcular el progreso de múltiples ofertas en una sola consulta,
+     * evitando hacer una consulta por cada oferta del practicante.
+     *
+     * @param practitioner El practicante del cual se requiere el conteo
+     * @return Un Map donde la clave es el ID del Treatment y el valor es el conteo de atenciones completadas
+     */
+    Map<Long, Long> countCompletedByPractitionerGroupByTreatment(Practitioner practitioner);
 }

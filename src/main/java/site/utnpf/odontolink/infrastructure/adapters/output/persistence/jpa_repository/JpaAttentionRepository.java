@@ -7,6 +7,7 @@ import site.utnpf.odontolink.domain.model.AttentionStatus;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AttentionEntity;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface JpaAttentionRepository extends JpaRepository<AttentionEntity, Long> {
@@ -43,5 +44,27 @@ public interface JpaAttentionRepository extends JpaRepository<AttentionEntity, L
             Long practitionerId,
             Long treatmentId,
             AttentionStatus status
+    );
+
+    /**
+     * Consulta optimizada para calcular el progreso de todas las ofertas de un practicante
+     * en una sola operación de base de datos (evita problema N+1).
+     *
+     * Esta consulta agrupa las atenciones completadas por tratamiento,
+     * retornando un Map<TreatmentId, Count> que permite enriquecer el DTO de respuesta
+     * con el progreso actual sin ejecutar múltiples consultas.
+     *
+     * @param practitionerId ID del practicante
+     * @param status Estado de las atenciones a contar (típicamente COMPLETED)
+     * @return Map donde la clave es el ID del tratamiento y el valor es el conteo
+     */
+    @Query("SELECT a.treatment.id AS treatmentId, COUNT(a) AS count " +
+           "FROM AttentionEntity a " +
+           "WHERE a.practitioner.id = :practitionerId " +
+           "AND a.status = :status " +
+           "GROUP BY a.treatment.id")
+    List<Object[]> countCompletedByPractitionerGroupByTreatment(
+            @Param("practitionerId") Long practitionerId,
+            @Param("status") AttentionStatus status
     );
 }

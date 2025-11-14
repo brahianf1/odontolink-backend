@@ -135,11 +135,13 @@ public class BeanConfiguration {
     public IOfferedTreatmentUseCase offeredTreatmentUseCase(OfferedTreatmentRepository offeredTreatmentRepository,
                                                             PractitionerRepository practitionerRepository,
                                                             TreatmentRepository treatmentRepository,
+                                                            AttentionRepository attentionRepository,
                                                             OfferedTreatmentDomainService domainService) {
         return new OfferedTreatmentService(
                 offeredTreatmentRepository,
                 practitionerRepository,
                 treatmentRepository,
+                attentionRepository,
                 domainService
         );
     }

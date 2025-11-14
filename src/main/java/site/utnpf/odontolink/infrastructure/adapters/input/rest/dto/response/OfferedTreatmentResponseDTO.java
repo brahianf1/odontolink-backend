@@ -42,6 +42,9 @@ public class OfferedTreatmentResponseDTO {
     @Schema(description = "Cupo máximo de casos completados (límite de stock)", example = "10")
     private Integer maxCompletedAttentions;
 
+    @Schema(description = "Número actual de casos completados (progreso en tiempo real)", example = "3")
+    private int currentCompletedAttentions;
+
     // Constructores
     public OfferedTreatmentResponseDTO() {
     }
@@ -142,5 +145,13 @@ public class OfferedTreatmentResponseDTO {
 
     public void setMaxCompletedAttentions(Integer maxCompletedAttentions) {
         this.maxCompletedAttentions = maxCompletedAttentions;
+    }
+
+    public int getCurrentCompletedAttentions() {
+        return currentCompletedAttentions;
+    }
+
+    public void setCurrentCompletedAttentions(int currentCompletedAttentions) {
+        this.currentCompletedAttentions = currentCompletedAttentions;
     }
 }
