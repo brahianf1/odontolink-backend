@@ -4,6 +4,7 @@ import site.utnpf.odontolink.domain.model.*;
 import site.utnpf.odontolink.domain.repository.AppointmentRepository;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
+import site.utnpf.odontolink.domain.service.slotstrategy.SlotGenerationStrategy;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -45,19 +46,16 @@ public class AvailabilityGenerationService {
     private final AppointmentRepository appointmentRepository;
     private final OfferedTreatmentRepository offeredTreatmentRepository;
     private final AttentionRepository attentionRepository;
-
-    /**
-     * Intervalo en minutos para generar los slots (cada cuántos minutos se puede reservar).
-     * Típicamente 30 minutos para la mayoría de servicios odontológicos.
-     */
-    private static final int SLOT_INTERVAL_MINUTES = 30;
+    private final SlotGenerationStrategy slotGenerationStrategy;
 
     public AvailabilityGenerationService(AppointmentRepository appointmentRepository,
                                          OfferedTreatmentRepository offeredTreatmentRepository,
-                                         AttentionRepository attentionRepository) {
+                                         AttentionRepository attentionRepository,
+                                         SlotGenerationStrategy slotGenerationStrategy) {
         this.appointmentRepository = appointmentRepository;
         this.offeredTreatmentRepository = offeredTreatmentRepository;
         this.attentionRepository = attentionRepository;
+        this.slotGenerationStrategy = slotGenerationStrategy;
     }
 
     /**
@@ -116,7 +114,7 @@ public class AvailabilityGenerationService {
 
         int durationInMinutes = offeredTreatment.getDurationInMinutes();
 
-        List<LocalDateTime> theoreticalSlots = generateTheoreticalSlots(
+        List<LocalDateTime> theoreticalSlots = slotGenerationStrategy.generateTheoreticalSlots(
             requestedDate,
             matchingSlot.getStartTime(),
             matchingSlot.getEndTime(),
@@ -218,53 +216,6 @@ public class AvailabilityGenerationService {
             .filter(slot -> slot.getDayOfWeek() == dayOfWeek)
             .findFirst()
             .orElse(null);
-    }
-
-    /**
-     * Genera una lista de slots teóricos para un bloque de disponibilidad.
-     *
-     * Los slots se generan cada SLOT_INTERVAL_MINUTES (típicamente 30 minutos).
-     * Solo se incluyen slots donde el servicio completo puede completarse dentro del bloque.
-     *
-     * Ejemplo:
-     * - Bloque: 08:00-12:00 (4 horas)
-     * - Duración servicio: 60 minutos
-     * - Intervalo: 30 minutos
-     * - Slots generados: 08:00, 08:30, 09:00, 09:30, 10:00, 10:30, 11:00
-     *   (11:30 se excluye porque el servicio terminaría a las 12:30, fuera del bloque)
-     *
-     * @param date La fecha para los slots
-     * @param blockStart Hora de inicio del bloque de disponibilidad
-     * @param blockEnd Hora de fin del bloque de disponibilidad
-     * @param serviceDuration Duración del servicio en minutos
-     * @return Lista de timestamps representando cada slot teórico
-     */
-    private List<LocalDateTime> generateTheoreticalSlots(
-            LocalDate date,
-            LocalTime blockStart,
-            LocalTime blockEnd,
-            int serviceDuration) {
-
-        List<LocalDateTime> slots = new ArrayList<>();
-        LocalTime currentTime = blockStart;
-
-        while (currentTime.isBefore(blockEnd)) {
-            // Verificar si el servicio completo cabe en el bloque
-            LocalTime serviceEndTime = currentTime.plusMinutes(serviceDuration);
-
-            if (serviceEndTime.isAfter(blockEnd)) {
-                // El servicio se extendería más allá del bloque, no agregar este slot
-                break;
-            }
-
-            // Agregar el slot como un LocalDateTime completo
-            slots.add(LocalDateTime.of(date, currentTime));
-
-            // Avanzar al siguiente intervalo
-            currentTime = currentTime.plusMinutes(SLOT_INTERVAL_MINUTES);
-        }
-
-        return slots;
     }
 
     /**
