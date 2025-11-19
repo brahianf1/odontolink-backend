@@ -63,7 +63,7 @@ public interface JpaAttentionRepository extends JpaRepository<AttentionEntity, L
            "WHERE a.practitioner.id = :practitionerId " +
            "AND a.status = :status " +
            "GROUP BY a.treatment.id")
-    List<Object[]> countCompletedByPractitionerGroupByTreatment(
+    List<Object[]> countByPractitionerGroupByTreatment(
             @Param("practitionerId") Long practitionerId,
             @Param("status") AttentionStatus status
     );

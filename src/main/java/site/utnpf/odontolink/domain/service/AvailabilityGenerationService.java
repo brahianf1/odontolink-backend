@@ -69,10 +69,11 @@ public class AvailabilityGenerationService {
      * - Verifica que la fecha solicitada esté dentro del rango (offerStartDate - offerEndDate)
      * - Si está fuera del rango, devuelve lista vacía
      *
-     * VALIDACIÓN 2: Límite de Cupo (Stock)
-     * - Cuenta las Attentions COMPLETED del practicante para este tratamiento
-     * - Si se alcanzó el cupo máximo, devuelve lista vacía
-     * - Nota: El cupo se mide en CASOS (Attentions) completados, no en turnos
+     * VALIDACIÓN 2: Límite de Cupo (Meta Académica)
+     * - Cuenta (COMPLETED + IN_PROGRESS) del practicante para este tratamiento.
+     * - Si la suma alcanza el cupo máximo, devuelve lista vacía.
+     * - Esto cubre tanto la protección contra sobrecarga (muchos activos)
+     *   como el cumplimiento de la meta académica (ya completó los requeridos).
      *
      * VALIDACIÓN 3: Inventario Dinámico Diario
      * - Solo si pasó las validaciones 1 y 2, calcula el inventario:
@@ -85,10 +86,8 @@ public class AvailabilityGenerationService {
      * Ejemplo:
      * - Oferta: 2025-01-01 a 2025-06-30, cupo 10 casos
      * - Fecha solicitada: 2025-03-15
-     * - Casos completados: 8
-     * - Bloque: Lunes 08:00-12:00
-     * - Turnos reservados: 09:00-10:00
-     * - Resultado: [08:00, 08:30, 10:00, 10:30, 11:00]
+     * - Casos: 6 Completados + 4 En Progreso = 10 (Cupo lleno)
+     * - Resultado: [] (Lista vacía, no se ofrecen turnos)
      *
      * @param offeredTreatment La oferta de tratamiento (contiene límites, duración y bloques)
      * @param requestedDate La fecha para la cual se solicitan los horarios
@@ -160,26 +159,47 @@ public class AvailabilityGenerationService {
     }
 
     /**
-     * Verifica si se alcanzó el cupo máximo de casos completados.
+     * Verifica si se alcanzó el cupo máximo (Meta Académica).
      *
-     * El cupo se mide en Attentions (casos) con estado COMPLETED, no en Appointments (turnos).
-     * Un caso puede requerir múltiples turnos, pero solo cuenta como 1 para el cupo cuando se completa.
+     * REGLA DE NEGOCIO (Refinada):
+     * El cupo representa la "Meta Académica" del practicante.
+     * Se considera alcanzado cuando la suma de casos COMPLETED (meta cumplida)
+     * más los casos IN_PROGRESS (compromisos activos) iguala o supera el límite.
      *
-     * El campo maxCompletedAttentions es obligatorio, por lo que siempre existirá un valor para validar.
+     * Escenarios:
+     * 1. Protección de Carga: Si tengo 5 completas y 5 en curso (Total 10/10),
+     *    se cierra la oferta. Si cancelo una en curso, baja a 9/10 y se reabre.
+     * 2. Meta Cumplida: Si tengo 10 completas (Total 10/10), se cierra la oferta
+     *    porque ya cumplí. Si necesito atender más, debo aumentar mi cupo manualmente.
      *
      * @param offeredTreatment La oferta de tratamiento
      * @return true si se alcanzó el cupo máximo, false en caso contrario
      */
     private boolean hasReachedMaxCapacity(OfferedTreatment offeredTreatment) {
+        // Si maxCompletedAttentions es null, asumimos que no hay límite
+        if (offeredTreatment.getMaxCompletedAttentions() == null) {
+            return false;
+        }
+
         int maxCupo = offeredTreatment.getMaxCompletedAttentions();
 
+        // Contar IN_PROGRESS (Compromisos activos)
+        int activeCount = attentionRepository.countByPractitionerAndTreatmentAndStatus(
+            offeredTreatment.getPractitioner(),
+            offeredTreatment.getTreatment(),
+            AttentionStatus.IN_PROGRESS
+        );
+
+        // Contar COMPLETED (Meta ya cumplida)
         int completedCount = attentionRepository.countByPractitionerAndTreatmentAndStatus(
             offeredTreatment.getPractitioner(),
             offeredTreatment.getTreatment(),
             AttentionStatus.COMPLETED
         );
 
-        return completedCount >= maxCupo;
+        int totalConsumedQuota = activeCount + completedCount;
+
+        return totalConsumedQuota >= maxCupo;
     }
 
     /**

@@ -22,27 +22,32 @@ public class OfferedTreatmentRestMapper {
 
     /**
      * Convierte un OfferedTreatment del dominio a DTO de respuesta.
-     * El progreso actual de atenciones completadas se establece en 0.
+     * El progreso actual de atenciones completadas, activas y canceladas se establece en 0.
      *
      * @param domain Objeto de dominio OfferedTreatment
      * @return DTO para respuesta HTTP
      */
     public static OfferedTreatmentResponseDTO toResponse(OfferedTreatment domain) {
-        return toResponse(domain, 0);
+        return toResponse(domain, 0, 0, 0);
     }
 
     /**
      * Convierte un OfferedTreatment del dominio a DTO de respuesta,
-     * incluyendo el progreso actual de atenciones completadas.
+     * incluyendo el progreso detallado (completadas, activas y canceladas).
      *
      * Este método permite enriquecer el DTO con información calculada dinámicamente
-     * (el progreso actual) que no forma parte del modelo de dominio persistente.
+     * para eliminar la ambigüedad entre "Meta Académica", "Carga de Trabajo" y "Estadísticas".
      *
      * @param domain Objeto de dominio OfferedTreatment
-     * @param currentCompletedAttentions Número actual de atenciones completadas para este tratamiento
-     * @return DTO para respuesta HTTP enriquecido con progreso
+     * @param currentCompletedAttentions Número actual de atenciones completadas (Meta)
+     * @param currentActiveAttentions Número actual de atenciones activas (Carga)
+     * @param currentCancelledAttentions Número histórico de atenciones canceladas (Estadística)
+     * @return DTO para respuesta HTTP enriquecido con progreso detallado
      */
-    public static OfferedTreatmentResponseDTO toResponse(OfferedTreatment domain, int currentCompletedAttentions) {
+    public static OfferedTreatmentResponseDTO toResponse(OfferedTreatment domain,
+                                                         int currentCompletedAttentions,
+                                                         int currentActiveAttentions,
+                                                         int currentCancelledAttentions) {
         if (domain == null) {
             return null;
         }
@@ -69,7 +74,19 @@ public class OfferedTreatmentRestMapper {
         response.setOfferStartDate(domain.getOfferStartDate());
         response.setOfferEndDate(domain.getOfferEndDate());
         response.setMaxCompletedAttentions(domain.getMaxCompletedAttentions());
+        
+        // Nuevos campos detallados
         response.setCurrentCompletedAttentions(currentCompletedAttentions);
+        response.setCurrentActiveAttentions(currentActiveAttentions);
+        response.setCurrentCancelledAttentions(currentCancelledAttentions);
+
+        // Cálculo de bloqueo (Lógica de Negocio replicada para visualización)
+        boolean isBlocked = false;
+        if (domain.getMaxCompletedAttentions() != null) {
+            int totalConsumed = currentCompletedAttentions + currentActiveAttentions;
+            isBlocked = totalConsumed >= domain.getMaxCompletedAttentions();
+        }
+        response.setAvailabilityBlocked(isBlocked);
 
         if (domain.getAvailabilitySlots() != null) {
             response.setAvailabilitySlots(

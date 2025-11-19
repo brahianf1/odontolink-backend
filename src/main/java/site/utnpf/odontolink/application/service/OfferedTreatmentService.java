@@ -244,4 +244,38 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
 
         return attentionRepository.countCompletedByPractitionerGroupByTreatment(practitioner);
     }
+
+    /**
+     * Obtiene la carga de trabajo actual (cantidad de atenciones activas/en progreso)
+     * para todas las ofertas de un practicante, agrupadas por tratamiento.
+     *
+     * @param practitionerId ID del practicante
+     * @return Map donde la clave es el ID del tratamiento y el valor es la cantidad de atenciones activas
+     * @throws ResourceNotFoundException si el practicante no existe
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Long, Long> getActiveAttentionsProgressForPractitioner(Long practitionerId) {
+        Practitioner practitioner = practitionerRepository.findById(practitionerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Practitioner", "id", practitionerId.toString()));
+
+        return attentionRepository.countInProgressByPractitionerGroupByTreatment(practitioner);
+    }
+
+    /**
+     * Obtiene la cantidad de atenciones canceladas históricamente
+     * para todas las ofertas de un practicante, agrupadas por tratamiento.
+     *
+     * @param practitionerId ID del practicante
+     * @return Map donde la clave es el ID del tratamiento y el valor es la cantidad de atenciones canceladas
+     * @throws ResourceNotFoundException si el practicante no existe
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Long, Long> getCancelledAttentionsProgressForPractitioner(Long practitionerId) {
+        Practitioner practitioner = practitionerRepository.findById(practitionerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Practitioner", "id", practitionerId.toString()));
+
+        return attentionRepository.countCancelledByPractitionerGroupByTreatment(practitioner);
+    }
 }

@@ -142,9 +142,23 @@ public class AttentionPersistenceAdapter implements AttentionRepository {
      */
     @Override
     public Map<Long, Long> countCompletedByPractitionerGroupByTreatment(Practitioner practitioner) {
-        List<Object[]> results = jpaAttentionRepository.countCompletedByPractitionerGroupByTreatment(
+        return executeCountQuery(practitioner, AttentionStatus.COMPLETED);
+    }
+
+    @Override
+    public Map<Long, Long> countInProgressByPractitionerGroupByTreatment(Practitioner practitioner) {
+        return executeCountQuery(practitioner, AttentionStatus.IN_PROGRESS);
+    }
+
+    @Override
+    public Map<Long, Long> countCancelledByPractitionerGroupByTreatment(Practitioner practitioner) {
+        return executeCountQuery(practitioner, AttentionStatus.CANCELLED);
+    }
+
+    private Map<Long, Long> executeCountQuery(Practitioner practitioner, AttentionStatus status) {
+        List<Object[]> results = jpaAttentionRepository.countByPractitionerGroupByTreatment(
                 practitioner.getId(),
-                AttentionStatus.COMPLETED
+                status
         );
 
         Map<Long, Long> countMap = new HashMap<>();

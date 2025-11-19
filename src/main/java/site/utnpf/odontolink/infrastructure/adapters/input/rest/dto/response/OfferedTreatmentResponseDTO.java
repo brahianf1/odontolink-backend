@@ -42,8 +42,17 @@ public class OfferedTreatmentResponseDTO {
     @Schema(description = "Cupo máximo de casos completados (límite de stock)", example = "10")
     private Integer maxCompletedAttentions;
 
-    @Schema(description = "Número actual de casos completados (progreso en tiempo real)", example = "3")
+    @Schema(description = "Número actual de casos completados (Meta Académica)", example = "3")
     private int currentCompletedAttentions;
+
+    @Schema(description = "Número actual de casos activos/en progreso (Carga de Trabajo)", example = "2")
+    private int currentActiveAttentions;
+
+    @Schema(description = "Número histórico de casos cancelados (Estadística de Deserción)", example = "1")
+    private int currentCancelledAttentions;
+
+    @Schema(description = "Indica si la oferta está bloqueada por alcanzar el cupo máximo (Completed + Active >= Max)", example = "false")
+    private boolean isAvailabilityBlocked;
 
     // Constructores
     public OfferedTreatmentResponseDTO() {
@@ -153,5 +162,29 @@ public class OfferedTreatmentResponseDTO {
 
     public void setCurrentCompletedAttentions(int currentCompletedAttentions) {
         this.currentCompletedAttentions = currentCompletedAttentions;
+    }
+
+    public int getCurrentActiveAttentions() {
+        return currentActiveAttentions;
+    }
+
+    public void setCurrentActiveAttentions(int currentActiveAttentions) {
+        this.currentActiveAttentions = currentActiveAttentions;
+    }
+
+    public int getCurrentCancelledAttentions() {
+        return currentCancelledAttentions;
+    }
+
+    public void setCurrentCancelledAttentions(int currentCancelledAttentions) {
+        this.currentCancelledAttentions = currentCancelledAttentions;
+    }
+
+    public boolean isAvailabilityBlocked() {
+        return isAvailabilityBlocked;
+    }
+
+    public void setAvailabilityBlocked(boolean availabilityBlocked) {
+        isAvailabilityBlocked = availabilityBlocked;
     }
 }
