@@ -1,5 +1,6 @@
 package site.utnpf.odontolink.infrastructure.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -47,6 +48,9 @@ import site.utnpf.odontolink.domain.service.ChatPolicyService;
 import site.utnpf.odontolink.domain.service.FeedbackPolicyService;
 import site.utnpf.odontolink.domain.service.OfferedTreatmentDomainService;
 import site.utnpf.odontolink.domain.service.SupervisorPolicyService;
+import site.utnpf.odontolink.domain.service.slotstrategy.DynamicDurationSlotStrategy;
+import site.utnpf.odontolink.domain.service.slotstrategy.FixedIntervalSlotStrategy;
+import site.utnpf.odontolink.domain.service.slotstrategy.SlotGenerationStrategy;
 
 /**
  * Configuración de Beans para la capa de aplicación.
@@ -173,6 +177,21 @@ public class BeanConfiguration {
     }
 
     /**
+     * Bean para la estrategia de generación de slots.
+     * Se configura mediante la propiedad odontolink.slot-strategy.
+     * Valores posibles: FIXED (por defecto), DYNAMIC.
+     */
+    @Bean
+    public SlotGenerationStrategy slotGenerationStrategy(
+            @Value("${odontolink.slot-strategy:FIXED}") String strategyType) {
+
+        if ("DYNAMIC".equalsIgnoreCase(strategyType)) {
+            return new DynamicDurationSlotStrategy();
+        }
+        return new FixedIntervalSlotStrategy();
+    }
+
+    /**
      * Bean para el servicio de dominio de AvailabilityGeneration.
      * Este es el servicio de dominio que implementa el "Rulebook" del sistema de ofertas finitas.
      *
@@ -193,11 +212,13 @@ public class BeanConfiguration {
     public AvailabilityGenerationService availabilityGenerationService(
             AppointmentRepository appointmentRepository,
             OfferedTreatmentRepository offeredTreatmentRepository,
-            AttentionRepository attentionRepository) {
+            AttentionRepository attentionRepository,
+            SlotGenerationStrategy slotGenerationStrategy) {
         return new AvailabilityGenerationService(
                 appointmentRepository,
                 offeredTreatmentRepository,
-                attentionRepository
+                attentionRepository,
+                slotGenerationStrategy
         );
     }
 

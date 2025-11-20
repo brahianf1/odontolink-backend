@@ -198,13 +198,17 @@ public class PractitionerController {
         Long practitionerId = authenticationFacade.getAuthenticatedPractitionerId();
 
         List<OfferedTreatment> offeredTreatments = offeredTreatmentUseCase.getMyOfferedTreatments(practitionerId);
-        Map<Long, Long> progressMap = offeredTreatmentUseCase.getCompletedAttentionsProgressForPractitioner(practitionerId);
+        Map<Long, Long> completedMap = offeredTreatmentUseCase.getCompletedAttentionsProgressForPractitioner(practitionerId);
+        Map<Long, Long> activeMap = offeredTreatmentUseCase.getActiveAttentionsProgressForPractitioner(practitionerId);
+        Map<Long, Long> cancelledMap = offeredTreatmentUseCase.getCancelledAttentionsProgressForPractitioner(practitionerId);
 
         List<OfferedTreatmentResponseDTO> response = offeredTreatments.stream()
                 .map(offer -> {
                     Long treatmentId = offer.getTreatment().getId();
-                    int currentProgress = progressMap.getOrDefault(treatmentId, 0L).intValue();
-                    return OfferedTreatmentRestMapper.toResponse(offer, currentProgress);
+                    int completedCount = completedMap.getOrDefault(treatmentId, 0L).intValue();
+                    int activeCount = activeMap.getOrDefault(treatmentId, 0L).intValue();
+                    int cancelledCount = cancelledMap.getOrDefault(treatmentId, 0L).intValue();
+                    return OfferedTreatmentRestMapper.toResponse(offer, completedCount, activeCount, cancelledCount);
                 })
                 .collect(Collectors.toList());
 

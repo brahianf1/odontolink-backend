@@ -107,4 +107,26 @@ public interface AttentionRepository {
      * @return Un Map donde la clave es el ID del Treatment y el valor es el conteo de atenciones completadas
      */
     Map<Long, Long> countCompletedByPractitionerGroupByTreatment(Practitioner practitioner);
+
+    /**
+     * Cuenta todas las atenciones EN PROGRESO (activas) para un practicante específico
+     * y las agrupa por el ID del tratamiento.
+     *
+     * Útil para calcular la carga de trabajo actual y validar cupos.
+     *
+     * @param practitioner El practicante
+     * @return Un Map donde la clave es el ID del Treatment y el valor es el conteo de atenciones activas
+     */
+    Map<Long, Long> countInProgressByPractitionerGroupByTreatment(Practitioner practitioner);
+
+    /**
+     * Cuenta todas las atenciones CANCELADAS para un practicante específico
+     * y las agrupa por el ID del tratamiento.
+     *
+     * Útil para estadísticas de deserción o cancelaciones históricas.
+     *
+     * @param practitioner El practicante
+     * @return Un Map donde la clave es el ID del Treatment y el valor es el conteo de atenciones canceladas
+     */
+    Map<Long, Long> countCancelledByPractitionerGroupByTreatment(Practitioner practitioner);
 }

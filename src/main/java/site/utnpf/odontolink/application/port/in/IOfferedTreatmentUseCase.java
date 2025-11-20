@@ -96,11 +96,26 @@ public interface IOfferedTreatmentUseCase {
      * Obtiene el progreso (cantidad de atenciones completadas) para todas las ofertas
      * de un practicante, agrupadas por tratamiento.
      *
-     * Este método soporta el cálculo eficiente del progreso de ofertas,
-     * evitando consultas N+1 a la base de datos.
-     *
      * @param practitionerId ID del practicante
      * @return Map donde la clave es el ID del tratamiento y el valor es la cantidad de atenciones completadas
      */
     Map<Long, Long> getCompletedAttentionsProgressForPractitioner(Long practitionerId);
+
+    /**
+     * Obtiene la carga de trabajo actual (cantidad de atenciones activas/en progreso)
+     * para todas las ofertas de un practicante, agrupadas por tratamiento.
+     *
+     * @param practitionerId ID del practicante
+     * @return Map donde la clave es el ID del tratamiento y el valor es la cantidad de atenciones activas
+     */
+    Map<Long, Long> getActiveAttentionsProgressForPractitioner(Long practitionerId);
+
+    /**
+     * Obtiene la cantidad de atenciones canceladas históricamente
+     * para todas las ofertas de un practicante, agrupadas por tratamiento.
+     *
+     * @param practitionerId ID del practicante
+     * @return Map donde la clave es el ID del tratamiento y el valor es la cantidad de atenciones canceladas
+     */
+    Map<Long, Long> getCancelledAttentionsProgressForPractitioner(Long practitionerId);
 }

@@ -4,6 +4,7 @@ import site.utnpf.odontolink.domain.model.*;
 import site.utnpf.odontolink.domain.repository.AppointmentRepository;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
+import site.utnpf.odontolink.domain.service.slotstrategy.SlotGenerationStrategy;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -45,19 +46,16 @@ public class AvailabilityGenerationService {
     private final AppointmentRepository appointmentRepository;
     private final OfferedTreatmentRepository offeredTreatmentRepository;
     private final AttentionRepository attentionRepository;
-
-    /**
-     * Intervalo en minutos para generar los slots (cada cuántos minutos se puede reservar).
-     * Típicamente 30 minutos para la mayoría de servicios odontológicos.
-     */
-    private static final int SLOT_INTERVAL_MINUTES = 30;
+    private final SlotGenerationStrategy slotGenerationStrategy;
 
     public AvailabilityGenerationService(AppointmentRepository appointmentRepository,
                                          OfferedTreatmentRepository offeredTreatmentRepository,
-                                         AttentionRepository attentionRepository) {
+                                         AttentionRepository attentionRepository,
+                                         SlotGenerationStrategy slotGenerationStrategy) {
         this.appointmentRepository = appointmentRepository;
         this.offeredTreatmentRepository = offeredTreatmentRepository;
         this.attentionRepository = attentionRepository;
+        this.slotGenerationStrategy = slotGenerationStrategy;
     }
 
     /**
@@ -69,10 +67,11 @@ public class AvailabilityGenerationService {
      * - Verifica que la fecha solicitada esté dentro del rango (offerStartDate - offerEndDate)
      * - Si está fuera del rango, devuelve lista vacía
      *
-     * VALIDACIÓN 2: Límite de Cupo (Stock)
-     * - Cuenta las Attentions COMPLETED del practicante para este tratamiento
-     * - Si se alcanzó el cupo máximo, devuelve lista vacía
-     * - Nota: El cupo se mide en CASOS (Attentions) completados, no en turnos
+     * VALIDACIÓN 2: Límite de Cupo (Meta Académica)
+     * - Cuenta (COMPLETED + IN_PROGRESS) del practicante para este tratamiento.
+     * - Si la suma alcanza el cupo máximo, devuelve lista vacía.
+     * - Esto cubre tanto la protección contra sobrecarga (muchos activos)
+     *   como el cumplimiento de la meta académica (ya completó los requeridos).
      *
      * VALIDACIÓN 3: Inventario Dinámico Diario
      * - Solo si pasó las validaciones 1 y 2, calcula el inventario:
@@ -85,10 +84,8 @@ public class AvailabilityGenerationService {
      * Ejemplo:
      * - Oferta: 2025-01-01 a 2025-06-30, cupo 10 casos
      * - Fecha solicitada: 2025-03-15
-     * - Casos completados: 8
-     * - Bloque: Lunes 08:00-12:00
-     * - Turnos reservados: 09:00-10:00
-     * - Resultado: [08:00, 08:30, 10:00, 10:30, 11:00]
+     * - Casos: 6 Completados + 4 En Progreso = 10 (Cupo lleno)
+     * - Resultado: [] (Lista vacía, no se ofrecen turnos)
      *
      * @param offeredTreatment La oferta de tratamiento (contiene límites, duración y bloques)
      * @param requestedDate La fecha para la cual se solicitan los horarios
@@ -117,7 +114,7 @@ public class AvailabilityGenerationService {
 
         int durationInMinutes = offeredTreatment.getDurationInMinutes();
 
-        List<LocalDateTime> theoreticalSlots = generateTheoreticalSlots(
+        List<LocalDateTime> theoreticalSlots = slotGenerationStrategy.generateTheoreticalSlots(
             requestedDate,
             matchingSlot.getStartTime(),
             matchingSlot.getEndTime(),
@@ -160,26 +157,47 @@ public class AvailabilityGenerationService {
     }
 
     /**
-     * Verifica si se alcanzó el cupo máximo de casos completados.
+     * Verifica si se alcanzó el cupo máximo (Meta Académica).
      *
-     * El cupo se mide en Attentions (casos) con estado COMPLETED, no en Appointments (turnos).
-     * Un caso puede requerir múltiples turnos, pero solo cuenta como 1 para el cupo cuando se completa.
+     * REGLA DE NEGOCIO (Refinada):
+     * El cupo representa la "Meta Académica" del practicante.
+     * Se considera alcanzado cuando la suma de casos COMPLETED (meta cumplida)
+     * más los casos IN_PROGRESS (compromisos activos) iguala o supera el límite.
      *
-     * El campo maxCompletedAttentions es obligatorio, por lo que siempre existirá un valor para validar.
+     * Escenarios:
+     * 1. Protección de Carga: Si tengo 5 completas y 5 en curso (Total 10/10),
+     *    se cierra la oferta. Si cancelo una en curso, baja a 9/10 y se reabre.
+     * 2. Meta Cumplida: Si tengo 10 completas (Total 10/10), se cierra la oferta
+     *    porque ya cumplí. Si necesito atender más, debo aumentar mi cupo manualmente.
      *
      * @param offeredTreatment La oferta de tratamiento
      * @return true si se alcanzó el cupo máximo, false en caso contrario
      */
     private boolean hasReachedMaxCapacity(OfferedTreatment offeredTreatment) {
+        // Si maxCompletedAttentions es null, asumimos que no hay límite
+        if (offeredTreatment.getMaxCompletedAttentions() == null) {
+            return false;
+        }
+
         int maxCupo = offeredTreatment.getMaxCompletedAttentions();
 
+        // Contar IN_PROGRESS (Compromisos activos)
+        int activeCount = attentionRepository.countByPractitionerAndTreatmentAndStatus(
+            offeredTreatment.getPractitioner(),
+            offeredTreatment.getTreatment(),
+            AttentionStatus.IN_PROGRESS
+        );
+
+        // Contar COMPLETED (Meta ya cumplida)
         int completedCount = attentionRepository.countByPractitionerAndTreatmentAndStatus(
             offeredTreatment.getPractitioner(),
             offeredTreatment.getTreatment(),
             AttentionStatus.COMPLETED
         );
 
-        return completedCount >= maxCupo;
+        int totalConsumedQuota = activeCount + completedCount;
+
+        return totalConsumedQuota >= maxCupo;
     }
 
     /**
@@ -198,53 +216,6 @@ public class AvailabilityGenerationService {
             .filter(slot -> slot.getDayOfWeek() == dayOfWeek)
             .findFirst()
             .orElse(null);
-    }
-
-    /**
-     * Genera una lista de slots teóricos para un bloque de disponibilidad.
-     *
-     * Los slots se generan cada SLOT_INTERVAL_MINUTES (típicamente 30 minutos).
-     * Solo se incluyen slots donde el servicio completo puede completarse dentro del bloque.
-     *
-     * Ejemplo:
-     * - Bloque: 08:00-12:00 (4 horas)
-     * - Duración servicio: 60 minutos
-     * - Intervalo: 30 minutos
-     * - Slots generados: 08:00, 08:30, 09:00, 09:30, 10:00, 10:30, 11:00
-     *   (11:30 se excluye porque el servicio terminaría a las 12:30, fuera del bloque)
-     *
-     * @param date La fecha para los slots
-     * @param blockStart Hora de inicio del bloque de disponibilidad
-     * @param blockEnd Hora de fin del bloque de disponibilidad
-     * @param serviceDuration Duración del servicio en minutos
-     * @return Lista de timestamps representando cada slot teórico
-     */
-    private List<LocalDateTime> generateTheoreticalSlots(
-            LocalDate date,
-            LocalTime blockStart,
-            LocalTime blockEnd,
-            int serviceDuration) {
-
-        List<LocalDateTime> slots = new ArrayList<>();
-        LocalTime currentTime = blockStart;
-
-        while (currentTime.isBefore(blockEnd)) {
-            // Verificar si el servicio completo cabe en el bloque
-            LocalTime serviceEndTime = currentTime.plusMinutes(serviceDuration);
-
-            if (serviceEndTime.isAfter(blockEnd)) {
-                // El servicio se extendería más allá del bloque, no agregar este slot
-                break;
-            }
-
-            // Agregar el slot como un LocalDateTime completo
-            slots.add(LocalDateTime.of(date, currentTime));
-
-            // Avanzar al siguiente intervalo
-            currentTime = currentTime.plusMinutes(SLOT_INTERVAL_MINUTES);
-        }
-
-        return slots;
     }
 
     /**
