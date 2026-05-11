@@ -1,0 +1,59 @@
+# Keep the build context small and prevent secrets from entering image layers.
+
+# Build output
+target/
+build/
+out/
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# IDE / editor metadata
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+.apt_generated/
+.factorypath
+.claude/
+nbproject/
+
+# Local environment and secrets (must never leak into images)
+.env
+.env.*
+!.env.example
+*.secret
+*.key
+*.pem
+*.p12
+*.jks
+ssl/
+certs/
+*.crt
+
+# Logs and runtime artifacts
+logs/
+*.log
+*.sql
+*.dump
+*.backup
+
+# Documentation that is not needed at runtime
+docs/
+*.md
+
+# Maven wrapper jar is downloaded on first run via the properties file
+.mvn/wrapper/maven-wrapper.jar
+
+# Docker artifacts themselves
+Dockerfile
+.dockerignore
+docker-compose*.yml
