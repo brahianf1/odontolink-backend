@@ -1,17 +1,19 @@
 # syntax=docker/dockerfile:1.7
 
 # =============================================================================
-# Stage 1 — Build
-#   Uses Eclipse Temurin JDK 17 (official multi-arch image including linux/arm64).
-#   Builds the Spring Boot fat jar and extracts it into layered directories so
-#   the runtime image can copy each layer separately for better cache reuse.
+# Etapa 1 — Build
+#   Usa la imagen oficial Eclipse Temurin JDK 17 (multiarquitectura, incluye
+#   linux/arm64). Construye el jar fat de Spring Boot y lo extrae en capas
+#   para que la imagen de runtime pueda copiar cada capa por separado y
+#   reutilizar mejor la caché.
 # =============================================================================
 FROM eclipse-temurin:17-jdk-jammy AS builder
 
 WORKDIR /workspace
 
-# Copy Maven wrapper and project descriptor first to maximize cache hits on
-# dependency resolution when only source files change.
+# Copiamos primero el wrapper de Maven y el descriptor del proyecto para
+# maximizar los aciertos de caché en la resolución de dependencias cuando
+# sólo cambian archivos fuente.
 COPY mvnw ./
 COPY .mvn .mvn
 COPY pom.xml ./
@@ -19,8 +21,9 @@ COPY pom.xml ./
 RUN chmod +x mvnw \
     && ./mvnw -B -ntp dependency:go-offline
 
-# Copy sources and build. Tests are skipped here because CI runs them before
-# deployment; the container build focuses on producing the deployable artifact.
+# Copiamos las fuentes y compilamos. Los tests se omiten aquí porque CI los
+# corre antes del despliegue; el build del contenedor se enfoca en producir
+# el artefacto desplegable.
 COPY src src
 
 RUN ./mvnw -B -ntp clean package -DskipTests \
@@ -29,28 +32,29 @@ RUN ./mvnw -B -ntp clean package -DskipTests \
 
 
 # =============================================================================
-# Stage 2 — Runtime
-#   Uses Eclipse Temurin JRE 17 (multi-arch, linux/arm64 included).
-#   Runs as an unprivileged user, exposes the application on port 8080 and
-#   reports liveness via Spring Boot Actuator.
+# Etapa 2 — Runtime
+#   Usa Eclipse Temurin JRE 17 (multiarquitectura, linux/arm64 incluida).
+#   Corre con un usuario sin privilegios, expone la aplicación en el puerto
+#   8080 y reporta su salud vía Spring Boot Actuator.
 # =============================================================================
 FROM eclipse-temurin:17-jre-jammy AS runtime
 
-# curl is required for the HEALTHCHECK; tini gives proper signal handling
-# so the JVM receives SIGTERM and shuts down gracefully on Dokploy redeploys.
+# curl es necesario para el HEALTHCHECK; tini se encarga del manejo correcto
+# de señales como PID 1 para que la JVM reciba SIGTERM y haga un apagado
+# ordenado en los redeploys de Dokploy.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl tini \
     && rm -rf /var/lib/apt/lists/*
 
-# Unprivileged runtime user.
+# Usuario sin privilegios para el runtime.
 RUN groupadd --system --gid 1001 spring \
     && useradd --system --uid 1001 --gid spring --home-dir /app --shell /usr/sbin/nologin spring
 
 WORKDIR /app
 
-# Copy Spring Boot layers in order of expected change frequency (least to
-# most volatile). Each COPY produces an independent image layer, so rebuilds
-# only invalidate the layers that actually changed.
+# Copiamos las capas de Spring Boot en orden de frecuencia de cambio esperada
+# (de menor a mayor volatilidad). Cada COPY genera una capa de imagen
+# independiente, así los rebuilds sólo invalidan las capas que cambiaron.
 COPY --from=builder --chown=spring:spring /workspace/target/extracted/dependencies/         ./
 COPY --from=builder --chown=spring:spring /workspace/target/extracted/spring-boot-loader/   ./
 COPY --from=builder --chown=spring:spring /workspace/target/extracted/snapshot-dependencies/ ./
@@ -58,11 +62,13 @@ COPY --from=builder --chown=spring:spring /workspace/target/extracted/applicatio
 
 USER spring:spring
 
-# Container-aware JVM tuning. MaxRAMPercentage lets the heap follow whatever
-# memory limit Dokploy assigns from the UI, so no value is hard-coded.
+# Tuning de JVM consciente del contenedor. MaxRAMPercentage hace que el heap
+# siga el límite de memoria que asigne Dokploy desde la UI, así no se
+# hardcodea ningún valor.
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
 
-# Documents the in-container port. Dokploy/Traefik handles external routing.
+# Documenta el puerto dentro del contenedor. Dokploy/Traefik maneja el
+# enrutamiento externo.
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \

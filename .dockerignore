@@ -1,16 +1,17 @@
-# Keep the build context small and prevent secrets from entering image layers.
+# Mantiene reducido el contexto de build y evita que secretos terminen en las
+# capas de la imagen.
 
-# Build output
+# Salida de compilación
 target/
 build/
 out/
 
-# Version control
+# Control de versiones
 .git/
 .gitignore
 .gitattributes
 
-# IDE / editor metadata
+# Metadatos de IDE y editores
 .idea/
 .vscode/
 *.iml
@@ -26,7 +27,7 @@ out/
 .claude/
 nbproject/
 
-# Local environment and secrets (must never leak into images)
+# Entorno local y secretos (nunca deben filtrarse a las imágenes)
 .env
 .env.*
 !.env.example
@@ -39,21 +40,22 @@ ssl/
 certs/
 *.crt
 
-# Logs and runtime artifacts
+# Logs y artefactos de ejecución
 logs/
 *.log
 *.sql
 *.dump
 *.backup
 
-# Documentation that is not needed at runtime
+# Documentación que no se necesita en tiempo de ejecución
 docs/
 *.md
 
-# Maven wrapper jar is downloaded on first run via the properties file
+# El jar del wrapper de Maven se descarga en la primera ejecución a partir del
+# archivo .properties; no hace falta enviarlo en el contexto.
 .mvn/wrapper/maven-wrapper.jar
 
-# Docker artifacts themselves
+# Los propios artefactos de Docker
 Dockerfile
 .dockerignore
 docker-compose*.yml
