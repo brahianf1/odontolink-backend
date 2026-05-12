@@ -5,11 +5,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import site.utnpf.odontolink.application.port.in.IAdminUserManagementUseCase;
 import site.utnpf.odontolink.application.port.in.IAppointmentUseCase;
 import site.utnpf.odontolink.application.port.in.IAttentionUseCase;
 import site.utnpf.odontolink.application.port.in.IAuthUseCase;
 import site.utnpf.odontolink.application.port.in.IChatUseCase;
 import site.utnpf.odontolink.application.port.in.IFeedbackUseCase;
+import site.utnpf.odontolink.application.port.in.IInstitutionalSettingsUseCase;
 import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
 import site.utnpf.odontolink.application.port.in.IPasswordResetUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
@@ -19,11 +21,13 @@ import site.utnpf.odontolink.application.port.in.ISupervisorUseCase;
 import site.utnpf.odontolink.application.port.in.ITreatmentUseCase;
 import site.utnpf.odontolink.application.port.out.IEmailSenderPort;
 import site.utnpf.odontolink.application.port.out.ITokenProvider;
+import site.utnpf.odontolink.application.service.AdminUserManagementService;
 import site.utnpf.odontolink.application.service.AppointmentService;
 import site.utnpf.odontolink.application.service.AttentionService;
 import site.utnpf.odontolink.application.service.AuthService;
 import site.utnpf.odontolink.application.service.ChatService;
 import site.utnpf.odontolink.application.service.FeedbackService;
+import site.utnpf.odontolink.application.service.InstitutionalSettingsService;
 import site.utnpf.odontolink.application.service.OfferedTreatmentService;
 import site.utnpf.odontolink.application.service.PasswordResetService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
@@ -35,6 +39,7 @@ import site.utnpf.odontolink.domain.repository.AppointmentRepository;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.AvailabilitySlotRepository;
 import site.utnpf.odontolink.domain.repository.FeedbackRepository;
+import site.utnpf.odontolink.domain.repository.InstitutionalSettingsRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 import site.utnpf.odontolink.domain.repository.PasswordResetTokenRepository;
 import site.utnpf.odontolink.domain.repository.PatientRepository;
@@ -462,5 +467,42 @@ public class BeanConfiguration {
                 practitionerRepository,
                 chatPolicyService
         );
+    }
+
+    /**
+     * Bean para el caso de uso de gestión administrativa de usuarios (RF05).
+     *
+     * Se compone por delegación con los tres casos de uso de registro
+     * existentes para evitar duplicar las validaciones de unicidad y la
+     * creación de los perfiles específicos por rol. Cualquier nueva regla
+     * que se incorpore al auto-registro se propagará automáticamente al
+     * alta administrativa.
+     */
+    @Bean
+    public IAdminUserManagementUseCase adminUserManagementUseCase(
+            UserRepository userRepository,
+            IPatientRegistrationUseCase patientRegistrationUseCase,
+            IPractitionerRegistrationUseCase practitionerRegistrationUseCase,
+            ISupervisorRegistrationUseCase supervisorRegistrationUseCase) {
+        return new AdminUserManagementService(
+                userRepository,
+                patientRegistrationUseCase,
+                practitionerRegistrationUseCase,
+                supervisorRegistrationUseCase
+        );
+    }
+
+    /**
+     * Bean para el caso de uso de configuración institucional (RF07).
+     *
+     * El servicio aplica las modificaciones de forma inmediata sobre la
+     * fila singleton de la tabla {@code institutional_settings} y crea la
+     * fila con valores por defecto en el primer acceso, garantizando que
+     * los consumidores nunca vean un 404.
+     */
+    @Bean
+    public IInstitutionalSettingsUseCase institutionalSettingsUseCase(
+            InstitutionalSettingsRepository institutionalSettingsRepository) {
+        return new InstitutionalSettingsService(institutionalSettingsRepository);
     }
 }
