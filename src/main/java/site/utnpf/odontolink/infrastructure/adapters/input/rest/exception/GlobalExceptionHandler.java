@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import site.utnpf.odontolink.domain.exception.AuthenticationFailedException;
 import site.utnpf.odontolink.domain.exception.DuplicateResourceException;
 import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
+import site.utnpf.odontolink.domain.exception.InvalidPasswordResetTokenException;
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
 import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ErrorResponseDTO;
@@ -146,6 +147,28 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
+    }
+
+    /**
+     * Maneja excepciones de token de recuperación inválido (RF04).
+     *
+     * Se devuelve HTTP 400 con un mensaje genérico y no detalla si el motivo
+     * fue expiración, consumo previo o inexistencia, evitando filtrar
+     * información útil para un atacante que intente adivinar tokens.
+     */
+    @ExceptionHandler(InvalidPasswordResetTokenException.class)
+    public ResponseEntity<ErrorResponseDTO> handleInvalidPasswordResetTokenException(
+            InvalidPasswordResetTokenException ex,
+            HttpServletRequest request) {
+
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                HttpStatus.BAD_REQUEST.value(),
+                "Invalid Password Reset Token",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
     /**

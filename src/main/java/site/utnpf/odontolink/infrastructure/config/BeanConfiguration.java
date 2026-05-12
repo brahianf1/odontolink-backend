@@ -11,11 +11,13 @@ import site.utnpf.odontolink.application.port.in.IAuthUseCase;
 import site.utnpf.odontolink.application.port.in.IChatUseCase;
 import site.utnpf.odontolink.application.port.in.IFeedbackUseCase;
 import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
+import site.utnpf.odontolink.application.port.in.IPasswordResetUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.IPractitionerRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorUseCase;
 import site.utnpf.odontolink.application.port.in.ITreatmentUseCase;
+import site.utnpf.odontolink.application.port.out.IEmailSenderPort;
 import site.utnpf.odontolink.application.port.out.ITokenProvider;
 import site.utnpf.odontolink.application.service.AppointmentService;
 import site.utnpf.odontolink.application.service.AttentionService;
@@ -23,6 +25,7 @@ import site.utnpf.odontolink.application.service.AuthService;
 import site.utnpf.odontolink.application.service.ChatService;
 import site.utnpf.odontolink.application.service.FeedbackService;
 import site.utnpf.odontolink.application.service.OfferedTreatmentService;
+import site.utnpf.odontolink.application.service.PasswordResetService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
 import site.utnpf.odontolink.application.service.PractitionerRegistrationService;
 import site.utnpf.odontolink.application.service.SupervisorRegistrationService;
@@ -33,6 +36,7 @@ import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.AvailabilitySlotRepository;
 import site.utnpf.odontolink.domain.repository.FeedbackRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
+import site.utnpf.odontolink.domain.repository.PasswordResetTokenRepository;
 import site.utnpf.odontolink.domain.repository.PatientRepository;
 import site.utnpf.odontolink.domain.repository.PractitionerRepository;
 import site.utnpf.odontolink.domain.repository.ProgressNoteRepository;
@@ -88,6 +92,29 @@ public class BeanConfiguration {
                                                                   PatientRepository patientRepository,
                                                                   PasswordEncoder passwordEncoder) {
         return new PatientRegistrationService(userRepository, patientRepository, passwordEncoder);
+    }
+
+    /**
+     * Bean para el caso de uso de recuperación de contraseña (RF04).
+     *
+     * El TTL del token se inyecta desde {@code application.properties} para
+     * permitir ajustar la ventana de vigencia por ambiente sin recompilar.
+     * El valor por defecto (30 minutos) sigue la recomendación de OWASP para
+     * tokens de un solo uso entregados por email.
+     */
+    @Bean
+    public IPasswordResetUseCase passwordResetUseCase(UserRepository userRepository,
+                                                      PasswordResetTokenRepository passwordResetTokenRepository,
+                                                      IEmailSenderPort emailSenderPort,
+                                                      PasswordEncoder passwordEncoder,
+                                                      @Value("${odontolink.password-reset.token-ttl-minutes:30}") long tokenTtlMinutes) {
+        return new PasswordResetService(
+                userRepository,
+                passwordResetTokenRepository,
+                emailSenderPort,
+                passwordEncoder,
+                tokenTtlMinutes
+        );
     }
 
     /**
