@@ -1,0 +1,61 @@
+# Mantiene reducido el contexto de build y evita que secretos terminen en las
+# capas de la imagen.
+
+# Salida de compilación
+target/
+build/
+out/
+
+# Control de versiones
+.git/
+.gitignore
+.gitattributes
+
+# Metadatos de IDE y editores
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+.apt_generated/
+.factorypath
+.claude/
+nbproject/
+
+# Entorno local y secretos (nunca deben filtrarse a las imágenes)
+.env
+.env.*
+!.env.example
+*.secret
+*.key
+*.pem
+*.p12
+*.jks
+ssl/
+certs/
+*.crt
+
+# Logs y artefactos de ejecución
+logs/
+*.log
+*.sql
+*.dump
+*.backup
+
+# Documentación que no se necesita en tiempo de ejecución
+docs/
+*.md
+
+# El jar del wrapper de Maven se descarga en la primera ejecución a partir del
+# archivo .properties; no hace falta enviarlo en el contexto.
+.mvn/wrapper/maven-wrapper.jar
+
+# Los propios artefactos de Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
