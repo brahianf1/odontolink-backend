@@ -59,6 +59,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/supervisors/register").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // RF05 y RF07: todo lo que cuelgue de /api/admin/** queda
+                        // reservado al rol ROLE_ADMIN. Esta regla declarativa se
+                        // suma a los @PreAuthorize de los controllers como
+                        // defensa en profundidad: si alguien retira la anotación
+                        // por accidente, la cadena de filtros sigue bloqueando.
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

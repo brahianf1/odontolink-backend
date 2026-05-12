@@ -45,13 +45,47 @@ public class User {
     // Comportamientos del Dominio Rico
 
     /**
-     * Lógica de negocio para desactivar un usuario.
+     * Lógica de negocio para desactivar un usuario (baja lógica, RF05).
      */
     public void deactivate() {
         if (!this.isActive) {
             throw new IllegalStateException("El usuario ya está inactivo.");
         }
         this.isActive = false;
+    }
+
+    /**
+     * Lógica de negocio para reactivar un usuario previamente dado de baja (RF05).
+     * Permite revertir la baja lógica sin necesidad de recrear el registro y, por
+     * lo tanto, sin perder el historial clínico/administrativo asociado.
+     */
+    public void activate() {
+        if (this.isActive) {
+            throw new IllegalStateException("El usuario ya está activo.");
+        }
+        this.isActive = true;
+    }
+
+    /**
+     * Actualiza únicamente los campos del perfil que el administrador está
+     * autorizado a modificar (RF05). El email, el DNI, el rol y la contraseña
+     * quedan deliberadamente fuera de esta operación: cambiar el email/DNI
+     * compromete unicidad y trazabilidad, y cambiar el rol o la contraseña
+     * pertenece a flujos dedicados (recuperación o re-registro).
+     */
+    public void updateProfile(String firstName, String lastName, String phone, LocalDate birthDate) {
+        if (firstName != null) {
+            this.firstName = firstName;
+        }
+        if (lastName != null) {
+            this.lastName = lastName;
+        }
+        // phone y birthDate son opcionales en el modelo: aceptamos null como
+        // limpieza explícita sólo si el caller envió la clave; por simplicidad
+        // los reemplazamos siempre, dejando al adapter REST la decisión de qué
+        // mandar.
+        this.phone = phone;
+        this.birthDate = birthDate;
     }
 
     /**

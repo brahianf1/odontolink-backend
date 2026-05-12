@@ -1,7 +1,9 @@
 package site.utnpf.odontolink.domain.repository;
 
+import site.utnpf.odontolink.domain.model.Role;
 import site.utnpf.odontolink.domain.model.User;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -15,4 +17,27 @@ public interface UserRepository {
     Optional<User> findByDni(String dni);
     boolean existsByEmail(String email);
     boolean existsByDni(String dni);
+
+    /**
+     * Listado filtrado para el panel de administración (RF05).
+     *
+     * Los tres parámetros son opcionales (null = sin filtrar) y se combinan
+     * con AND. El parámetro {@code query} busca de forma case-insensitive
+     * sobre el nombre completo, el email y el DNI, lo que cubre las
+     * búsquedas operativas más habituales del administrador.
+     */
+    List<User> findAllByFilters(Role role, Boolean isActive, String query);
+
+    /**
+     * Indica si existe otro usuario con el email dado, distinto al identificado
+     * por {@code excludingId}. Es la versión "segura para actualizaciones" de
+     * {@link #existsByEmail(String)}: permite validar unicidad sin acusar de
+     * duplicado al propio usuario que se está modificando.
+     */
+    boolean existsByEmailAndIdNot(String email, Long excludingId);
+
+    /**
+     * Análogo a {@link #existsByEmailAndIdNot(String, Long)} pero sobre el DNI.
+     */
+    boolean existsByDniAndIdNot(String dni, Long excludingId);
 }
