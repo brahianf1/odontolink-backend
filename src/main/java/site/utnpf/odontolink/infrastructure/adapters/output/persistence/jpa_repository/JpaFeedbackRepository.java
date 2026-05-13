@@ -1,8 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence.jpa_repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.FeedbackEntity;
 
 import java.util.List;
@@ -10,13 +9,20 @@ import java.util.Optional;
 
 /**
  * Repositorio JPA para operaciones de base de datos de FeedbackEntity.
- * Extiende JpaRepository para obtener operaciones CRUD básicas.
  *
- * Spring Data JPA generará automáticamente la implementación en tiempo de ejecución.
+ * Hereda de {@link JpaSpecificationExecutor} para habilitar la API de
+ * Criteria desde {@code FeedbackSpecifications} (motor del Panel Docente
+ * de Feedback - RF25). El mecanismo es el mismo que se usa en RF09 para
+ * el catálogo público de tratamientos.
+ *
+ * Spring Data JPA generará automáticamente la implementación en tiempo de
+ * ejecución.
  *
  * @author OdontoLink Team
  */
-public interface JpaFeedbackRepository extends JpaRepository<FeedbackEntity, Long> {
+public interface JpaFeedbackRepository
+        extends JpaRepository<FeedbackEntity, Long>,
+                JpaSpecificationExecutor<FeedbackEntity> {
 
     /**
      * Busca todos los feedbacks de una atención específica.
@@ -35,19 +41,6 @@ public interface JpaFeedbackRepository extends JpaRepository<FeedbackEntity, Lon
      * @return true si existe un feedback, false en caso contrario
      */
     boolean existsByAttention_IdAndSubmittedBy_Id(Long attentionId, Long submittedById);
-
-    /**
-     * Busca todos los feedbacks de las atenciones de un practicante específico.
-     * Implementa RF25, RF40: Panel docente de supervisión de feedback.
-     *
-     * @param practitionerId ID del practicante
-     * @return Lista de feedbacks de todas las atenciones del practicante
-     */
-    @Query("SELECT f FROM FeedbackEntity f " +
-           "JOIN f.attention a " +
-           "WHERE a.practitioner.id = :practitionerId " +
-           "ORDER BY f.createdAt DESC")
-    List<FeedbackEntity> findByPractitionerId(@Param("practitionerId") Long practitionerId);
 
     /**
      * Busca todos los feedbacks enviados por un usuario específico.

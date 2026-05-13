@@ -4,33 +4,34 @@ import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.application.port.in.IFeedbackUseCase;
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
 import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
-import site.utnpf.odontolink.domain.model.*;
+import site.utnpf.odontolink.domain.model.Attention;
+import site.utnpf.odontolink.domain.model.Feedback;
+import site.utnpf.odontolink.domain.model.User;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.FeedbackRepository;
-import site.utnpf.odontolink.domain.repository.PractitionerRepository;
-import site.utnpf.odontolink.domain.repository.SupervisorRepository;
 import site.utnpf.odontolink.domain.service.FeedbackPolicyService;
-import site.utnpf.odontolink.domain.service.SupervisorPolicyService;
 
 import java.util.List;
 
 /**
- * Servicio de aplicación para la gestión de Feedback.
+ * Servicio de aplicación para la gestión MICRO-contexto de Feedback (atención puntual).
  * Implementa el puerto de entrada IFeedbackUseCase siguiendo la Arquitectura Hexagonal.
  *
- * Este servicio es el orquestador transaccional de los casos de uso:
- * - CU-009: Calificar Paciente (RF21)
- * - CU-016: Calificar Practicante (RF22)
- * - CU-010: Visualizar Feedback (RF24, RF25, RF40)
+ * Casos de uso orquestados:
+ *  - CU-009: Calificar Paciente (RF21)
+ *  - CU-016: Calificar Practicante (RF22)
+ *  - CU-010: Visualizar Feedback de una atención (RF24)
  *
- * Su responsabilidad principal es coordinar:
- * 1. La carga de entidades de dominio desde los repositorios
- * 2. La validación de permisos y autorización
- * 3. La delegación de lógica de negocio al servicio de dominio (FeedbackPolicyService)
- * 4. La persistencia transaccional de los cambios
+ * El MACRO-contexto del docente (Panel de Supervisión RF25) vive en
+ * {@code SupervisorFeedbackDashboardService}. Mantener ambos servicios
+ * separados respeta Responsabilidad Única y mantiene este servicio libre
+ * de dependencias analíticas (paginación, agregados, cerco multi-alumno).
  *
- * Flujo de ejecución típico:
- * Controller -> FeedbackService (aquí) -> FeedbackPolicyService (dominio) -> Repositories
+ * Responsabilidades:
+ *  1. Cargar entidades de dominio desde los repositorios.
+ *  2. Validar permisos y autorización.
+ *  3. Delegar la lógica de negocio al servicio de dominio (FeedbackPolicyService).
+ *  4. Persistir transaccionalmente los cambios.
  *
  * @Transactional asegura que toda la operación sea atómica.
  *
@@ -42,23 +43,13 @@ public class FeedbackService implements IFeedbackUseCase {
     private final FeedbackRepository feedbackRepository;
     private final AttentionRepository attentionRepository;
     private final FeedbackPolicyService feedbackPolicyService;
-    private final SupervisorRepository supervisorRepository;
-    private final PractitionerRepository practitionerRepository;
-    private final SupervisorPolicyService supervisorPolicyService;
 
-    public FeedbackService(
-            FeedbackRepository feedbackRepository,
-            AttentionRepository attentionRepository,
-            FeedbackPolicyService feedbackPolicyService,
-            SupervisorRepository supervisorRepository,
-            PractitionerRepository practitionerRepository,
-            SupervisorPolicyService supervisorPolicyService) {
+    public FeedbackService(FeedbackRepository feedbackRepository,
+                           AttentionRepository attentionRepository,
+                           FeedbackPolicyService feedbackPolicyService) {
         this.feedbackRepository = feedbackRepository;
         this.attentionRepository = attentionRepository;
         this.feedbackPolicyService = feedbackPolicyService;
-        this.supervisorRepository = supervisorRepository;
-        this.practitionerRepository = practitionerRepository;
-        this.supervisorPolicyService = supervisorPolicyService;
     }
 
     /**
@@ -128,50 +119,6 @@ public class FeedbackService implements IFeedbackUseCase {
 
         // Retornar todos los feedbacks de la atención
         return feedbackRepository.findByAttention(attention);
-    }
-
-    /**
-     * Implementa el caso de uso CU-010: "Visualizar Feedback de un Practicante".
-     * Para supervisores (docentes) - RF25, RF40.
-     *
-     * Orquestación:
-     * 1. Valida que el usuario sea un supervisor
-     * 2. Delega al SupervisorPolicyService para validar la relación de supervisión
-     * 3. Retorna todos los feedbacks de las atenciones del practicante
-     *
-     * Esta implementación ha sido refactorizada para usar SupervisorPolicyService,
-     * centralizando la lógica de validación de supervisión y manteniendo la
-     * separación de responsabilidades entre servicios de dominio.
-     *
-     * @param practitionerId ID del practicante
-     * @param supervisorUser Usuario supervisor que solicita el feedback
-     * @return Lista de feedbacks de todas las atenciones del practicante
-     * @throws UnauthorizedOperationException si el usuario no es supervisor o no gestiona al practicante
-     * @throws ResourceNotFoundException si el practicante o supervisor no existen
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public List<Feedback> getFeedbackForPractitioner(Long practitionerId, User supervisorUser) {
-        // Validar que el usuario sea un supervisor
-        if (supervisorUser.getRole() != Role.ROLE_SUPERVISOR) {
-            throw new UnauthorizedOperationException(
-                "Solo los supervisores pueden acceder al feedback de practicantes."
-            );
-        }
-
-        // Cargar supervisor y practicante desde repositorios
-        Supervisor supervisor = supervisorRepository.findByUserId(supervisorUser.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Supervisor", "userId", supervisorUser.getId().toString()));
-
-        Practitioner practitioner = practitionerRepository.findById(practitionerId)
-                .orElseThrow(() -> new ResourceNotFoundException("Practitioner", "id", practitionerId.toString()));
-
-        // Delegar al servicio de dominio para validar la relación de supervisión
-        // Esto centraliza la lógica de autorización en SupervisorPolicyService
-        supervisorPolicyService.validateSupervisorAccess(supervisorUser, practitionerId, supervisor, practitioner);
-
-        // Retornar todos los feedbacks de las atenciones del practicante
-        return feedbackRepository.findByPractitionerId(practitionerId);
     }
 
     /**

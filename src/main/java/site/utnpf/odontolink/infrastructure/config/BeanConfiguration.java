@@ -11,6 +11,7 @@ import site.utnpf.odontolink.application.port.in.IAttentionUseCase;
 import site.utnpf.odontolink.application.port.in.IAuthUseCase;
 import site.utnpf.odontolink.application.port.in.IChatUseCase;
 import site.utnpf.odontolink.application.port.in.IFeedbackUseCase;
+import site.utnpf.odontolink.application.port.in.ISupervisorFeedbackDashboardUseCase;
 import site.utnpf.odontolink.application.port.in.IInstitutionalSettingsUseCase;
 import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
 import site.utnpf.odontolink.application.port.in.ISearchOfferedTreatmentsUseCase;
@@ -30,6 +31,7 @@ import site.utnpf.odontolink.application.service.AttentionService;
 import site.utnpf.odontolink.application.service.AuthService;
 import site.utnpf.odontolink.application.service.ChatService;
 import site.utnpf.odontolink.application.service.FeedbackService;
+import site.utnpf.odontolink.application.service.SupervisorFeedbackDashboardService;
 import site.utnpf.odontolink.application.service.InstitutionalSettingsService;
 import site.utnpf.odontolink.application.service.OfferedTreatmentService;
 import site.utnpf.odontolink.application.service.SearchOfferedTreatmentsService;
@@ -445,36 +447,45 @@ public class BeanConfiguration {
     }
 
     /**
-     * Bean para el caso de uso de gestión de feedback.
+     * Bean para el caso de uso MICRO-contexto de feedback (atención puntual).
      * Expone la interfaz IFeedbackUseCase implementada por FeedbackService.
      *
-     * Implementa los casos de uso del sistema de feedback bidireccional:
+     * Casos de uso orquestados:
      * - CU-009: Calificar Paciente (RF21)
      * - CU-016: Calificar Practicante (RF22)
-     * - CU-010: Visualizar Feedback (RF24, RF25, RF40)
+     * - CU-010: Visualizar Feedback de una atención (RF24)
      *
-     * Este servicio es el orquestador transaccional que:
-     * 1. Carga entidades desde repositorios
-     * 2. Valida permisos y autorización
-     * 3. Delega al FeedbackPolicyService y SupervisorPolicyService (dominio) para aplicar reglas de negocio
-     * 4. Persiste cambios de forma transaccional
+     * El MACRO-contexto del docente (Panel de Supervisión RF25) se cablea en
+     * {@link #supervisorFeedbackDashboardUseCase(FeedbackRepository, SupervisorRepository)}.
      */
     @Bean
     public IFeedbackUseCase feedbackUseCase(
             FeedbackRepository feedbackRepository,
             AttentionRepository attentionRepository,
-            FeedbackPolicyService feedbackPolicyService,
-            SupervisorRepository supervisorRepository,
-            PractitionerRepository practitionerRepository,
-            SupervisorPolicyService supervisorPolicyService) {
+            FeedbackPolicyService feedbackPolicyService) {
         return new FeedbackService(
                 feedbackRepository,
                 attentionRepository,
-                feedbackPolicyService,
-                supervisorRepository,
-                practitionerRepository,
-                supervisorPolicyService
+                feedbackPolicyService
         );
+    }
+
+    /**
+     * Bean para el Panel Docente de Supervisión de Feedback (RF25).
+     *
+     * Es un caso de uso EXCLUSIVO del macro-contexto evaluador de desempeño:
+     * análisis agregado del feedback recibido por los practicantes a cargo.
+     * Se mantiene separado de {@link IFeedbackUseCase} (micro-contexto) por
+     * Responsabilidad Única — distinto sombrero del docente, distintas reglas.
+     *
+     * Reutiliza el {@link SupervisorRepository} para resolver el cerco
+     * docente-alumno sin duplicar la lógica de N-a-N ya validada en RF22/RF37/RF39.
+     */
+    @Bean
+    public ISupervisorFeedbackDashboardUseCase supervisorFeedbackDashboardUseCase(
+            FeedbackRepository feedbackRepository,
+            SupervisorRepository supervisorRepository) {
+        return new SupervisorFeedbackDashboardService(feedbackRepository, supervisorRepository);
     }
 
     /**

@@ -2,6 +2,9 @@ package site.utnpf.odontolink.domain.repository;
 
 import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.Feedback;
+import site.utnpf.odontolink.domain.model.FeedbackSearchCriteria;
+import site.utnpf.odontolink.domain.model.PageQuery;
+import site.utnpf.odontolink.domain.model.PageResult;
 import site.utnpf.odontolink.domain.model.User;
 
 import java.util.List;
@@ -65,13 +68,41 @@ public interface FeedbackRepository {
     boolean existsByAttentionAndSubmittedBy(Attention attention, User submittedBy);
 
     /**
-     * Obtiene todos los feedbacks de las atenciones de un practicante específico.
-     * Implementa RF25, RF40: Panel docente de supervisión de feedback.
+     * Búsqueda paginada del Panel Docente de Supervisión de Feedback (RF25).
      *
-     * @param practitionerId El ID del practicante
-     * @return Lista de feedbacks de todas las atenciones del practicante
+     * Aplica los criterios opcionales en AND lógico junto con el cerco
+     * obligatorio {@code practitioner.id IN allowedPractitionerIds} para
+     * impedir que un supervisor vea feedback de alumnos que no le están
+     * vinculados. La traducción a SQL se realiza vía JPA Specifications en
+     * el adaptador.
+     *
+     * Si {@code allowedPractitionerIds} viene vacío, el resultado debe ser
+     * una página vacía: representa al supervisor recién creado sin
+     * practicantes a cargo.
+     *
+     * @param criteria Filtros del docente + cerco de practicantes permitidos
+     * @param pageQuery Página y ordenamiento solicitados
+     * @return Página de feedbacks (puede ser vacía, nunca null)
      */
-    List<Feedback> findByPractitionerId(Long practitionerId);
+    PageResult<Feedback> searchDashboard(FeedbackSearchCriteria criteria, PageQuery pageQuery);
+
+    /**
+     * Calcula el promedio de la calificación (rating) sobre EXACTAMENTE el
+     * mismo universo de filtros usado por {@link #searchDashboard}.
+     *
+     * Decisión: la agregación se ejecuta en el motor de base de datos, no
+     * en memoria, para que el panel funcione bien aunque el supervisor
+     * tenga miles de feedbacks. Por la misma razón se devuelve un
+     * {@code double} sin requerir cargar las filas paginadas.
+     *
+     * Si el universo está vacío, se devuelve {@code 0.0} (no se lanza
+     * excepción): el frontend interpreta este valor junto con
+     * {@code totalFeedbacksCount} para decidir si mostrar el indicador.
+     *
+     * @param criteria Filtros del docente + cerco de practicantes permitidos
+     * @return Promedio de rating sobre el universo filtrado, o 0.0 si está vacío
+     */
+    double averageRating(FeedbackSearchCriteria criteria);
 
     /**
      * Obtiene los feedbacks enviados por un usuario específico.
