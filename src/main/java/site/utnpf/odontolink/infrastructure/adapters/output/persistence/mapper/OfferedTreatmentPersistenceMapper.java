@@ -31,6 +31,7 @@ public class OfferedTreatmentPersistenceMapper {
         entity.setOfferStartDate(domain.getOfferStartDate());
         entity.setOfferEndDate(domain.getOfferEndDate());
         entity.setMaxCompletedAttentions(domain.getMaxCompletedAttentions());
+        entity.setActive(domain.isActive());
 
         // Mapear las relaciones
         if (domain.getPractitioner() != null) {
@@ -72,6 +73,7 @@ public class OfferedTreatmentPersistenceMapper {
         domain.setOfferStartDate(entity.getOfferStartDate());
         domain.setOfferEndDate(entity.getOfferEndDate());
         domain.setMaxCompletedAttentions(entity.getMaxCompletedAttentions());
+        domain.setActive(entity.isActive());
 
         // Mapear las relaciones
         if (entity.getPractitioner() != null) {

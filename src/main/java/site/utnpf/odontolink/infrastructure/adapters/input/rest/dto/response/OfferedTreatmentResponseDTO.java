@@ -54,6 +54,9 @@ public class OfferedTreatmentResponseDTO {
     @Schema(description = "Indica si la oferta está bloqueada por alcanzar el cupo máximo (Completed + Active >= Max)", example = "false")
     private boolean isAvailabilityBlocked;
 
+    @Schema(description = "Indica si la oferta está activa en el catálogo. Las ofertas con baja lógica (RF16) no aparecen en el catálogo público.", example = "true")
+    private boolean active;
+
     // Constructores
     public OfferedTreatmentResponseDTO() {
     }
@@ -186,5 +189,13 @@ public class OfferedTreatmentResponseDTO {
 
     public void setAvailabilityBlocked(boolean availabilityBlocked) {
         isAvailabilityBlocked = availabilityBlocked;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
     }
 }

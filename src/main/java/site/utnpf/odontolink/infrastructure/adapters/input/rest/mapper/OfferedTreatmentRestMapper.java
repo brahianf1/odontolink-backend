@@ -74,6 +74,7 @@ public class OfferedTreatmentRestMapper {
         response.setOfferStartDate(domain.getOfferStartDate());
         response.setOfferEndDate(domain.getOfferEndDate());
         response.setMaxCompletedAttentions(domain.getMaxCompletedAttentions());
+        response.setActive(domain.isActive());
         
         // Nuevos campos detallados
         response.setCurrentCompletedAttentions(currentCompletedAttentions);

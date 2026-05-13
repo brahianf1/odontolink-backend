@@ -16,19 +16,25 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import site.utnpf.odontolink.application.port.in.IAppointmentUseCase;
+import site.utnpf.odontolink.application.port.in.ISearchOfferedTreatmentsUseCase;
 import site.utnpf.odontolink.domain.model.Appointment;
 import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
+import site.utnpf.odontolink.domain.model.OfferedTreatmentSearchCriteria;
+import site.utnpf.odontolink.domain.model.PageQuery;
+import site.utnpf.odontolink.domain.model.PageResult;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.AppointmentRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.CancelAppointmentByPatientRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AppointmentResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AttentionResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.OfferedTreatmentResponseDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.PageResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.AppointmentRestMapper;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.AttentionRestMapper;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.OfferedTreatmentRestMapper;
 import site.utnpf.odontolink.infrastructure.security.AuthenticationFacade;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -56,39 +62,68 @@ import java.util.stream.Collectors;
 public class PatientController {
 
     private final IAppointmentUseCase appointmentUseCase;
+    private final ISearchOfferedTreatmentsUseCase searchOfferedTreatmentsUseCase;
     private final AuthenticationFacade authenticationFacade;
 
     public PatientController(IAppointmentUseCase appointmentUseCase,
+                            ISearchOfferedTreatmentsUseCase searchOfferedTreatmentsUseCase,
                             AuthenticationFacade authenticationFacade) {
         this.appointmentUseCase = appointmentUseCase;
+        this.searchOfferedTreatmentsUseCase = searchOfferedTreatmentsUseCase;
         this.authenticationFacade = authenticationFacade;
     }
 
     /**
-     * Obtiene el catálogo público de tratamientos ofrecidos por los practicantes.
-     * Permite al paciente ver el catálogo antes de reservar un turno.
+     * Catálogo público con motor de búsqueda dinámica (RF09) + paginación (UX/Performance).
      *
-     * El paciente puede ver:
-     * - Todos los tratamientos disponibles
-     * - Los practicantes que los ofrecen
-     * - La disponibilidad horaria de cada uno
-     * - Los requisitos específicos
+     * Los filtros son OPCIONALES y combinables vía AND:
+     *  - keyword: busca en nombre/descripción del tratamiento y en nombre/apellido del practicante (case-insensitive).
+     *  - specialty: área odontológica exacta del tratamiento (case-insensitive).
+     *  - availability: día de la semana (DayOfWeek: MONDAY..SUNDAY) sobre el que la oferta publica disponibilidad.
+     *
+     * Paginación:
+     *  - page: 0-based, default 0.
+     *  - size: default {@link PageQuery#DEFAULT_PAGE_SIZE}, máximo {@link PageQuery#MAX_PAGE_SIZE}.
+     *  - sortBy: alias permitido (treatmentName | specialty | duration | offerStartDate | offerEndDate | id).
+     *  - sortDirection: ASC (default) | DESC.
+     *
+     * Sólo se retornan ofertas {@code active=true}: las bajas lógicas de RF16
+     * no se exponen al paciente bajo ninguna combinación de filtros.
      *
      * GET /api/patient/offered-treatments
-     * Query param opcional: treatmentId (para filtrar por tipo de tratamiento)
-     *
-     * @param treatmentId ID del tipo de tratamiento para filtrar (opcional)
-     * @return Lista de tratamientos ofrecidos disponibles
      */
+    @Operation(
+            summary = "Buscar catálogo público de tratamientos (RF09)",
+            description = "Motor de búsqueda dinámica y paginada del catálogo público. " +
+                    "Todos los filtros son opcionales y se combinan con AND. " +
+                    "Sólo se retornan ofertas activas — las bajas lógicas de RF16 no se exponen."
+    )
     @GetMapping("/offered-treatments")
-    public ResponseEntity<List<OfferedTreatmentResponseDTO>> getAvailableTreatments(
-            @RequestParam(required = false) Long treatmentId) {
+    public ResponseEntity<PageResponseDTO<OfferedTreatmentResponseDTO>> searchAvailableTreatments(
+            @Parameter(description = "Texto libre para coincidir en nombre/descripción de tratamiento o nombre/apellido del practicante")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "Área/Especialidad del tratamiento (ej. ORTODONCIA)")
+            @RequestParam(required = false) String specialty,
+            @Parameter(description = "Día de la semana en el que la oferta tiene disponibilidad publicada (MONDAY..SUNDAY)")
+            @RequestParam(required = false) DayOfWeek availability,
+            @Parameter(description = "Número de página (0-based)")
+            @RequestParam(required = false, defaultValue = "0") Integer page,
+            @Parameter(description = "Tamaño de página (máx 100)")
+            @RequestParam(required = false, defaultValue = "20") Integer size,
+            @Parameter(description = "Campo de ordenamiento (treatmentName | specialty | duration | offerStartDate | offerEndDate | id)")
+            @RequestParam(required = false) String sortBy,
+            @Parameter(description = "Dirección de ordenamiento (ASC | DESC)")
+            @RequestParam(required = false, defaultValue = "ASC") String sortDirection) {
 
-        List<OfferedTreatment> offeredTreatments = appointmentUseCase.getAvailableOfferedTreatments(treatmentId);
+        OfferedTreatmentSearchCriteria criteria =
+                new OfferedTreatmentSearchCriteria(keyword, specialty, availability);
+        PageQuery pageQuery = PageQuery.of(page, size, sortBy, sortDirection);
 
-        List<OfferedTreatmentResponseDTO> response = offeredTreatments.stream()
-                .map(OfferedTreatmentRestMapper::toResponse)
-                .collect(Collectors.toList());
+        PageResult<OfferedTreatment> result =
+                searchOfferedTreatmentsUseCase.search(criteria, pageQuery);
+
+        PageResponseDTO<OfferedTreatmentResponseDTO> response =
+                PageResponseDTO.of(result, OfferedTreatmentRestMapper::toResponse);
 
         return ResponseEntity.ok(response);
     }

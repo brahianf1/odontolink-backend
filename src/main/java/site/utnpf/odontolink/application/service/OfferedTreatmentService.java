@@ -7,6 +7,7 @@ import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
 import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
 import site.utnpf.odontolink.domain.model.AvailabilitySlot;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
+import site.utnpf.odontolink.domain.model.OfferedTreatmentDeletionResult;
 import site.utnpf.odontolink.domain.model.Practitioner;
 import site.utnpf.odontolink.domain.model.Treatment;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
@@ -164,23 +165,27 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
     }
 
     /**
-     * Elimina un tratamiento del catálogo personal del practicante.
-     * Implementa el caso de uso CU-007.
+     * Elimina (o desactiva por integridad) un tratamiento del catálogo personal
+     * del practicante. Implementa el CU-007 con la política de RF16.
      *
      * Flujo:
-     * 1. Carga la oferta existente desde el repositorio
+     * 1. Carga la oferta existente desde el repositorio.
      * 2. Verifica que el practicante autenticado sea el propietario
-     * 3. Valida con el servicio de dominio que no existan turnos activos
-     * 4. Elimina la oferta del catálogo
+     *    (ID viene del JWT por el AuthenticationFacade del controller).
+     * 3. Consulta al servicio de Dominio qué estrategia aplica:
+     *      - SOFT_DELETED: setActive(false) + save() — preserva integridad.
+     *      - HARD_DELETED: deleteById() — sólo si no hay rastro histórico.
+     * 4. Retorna el outcome para que el adaptador REST informe al usuario
+     *    qué consecuencia tuvo su clic (mejor UX que un 204 ciego).
      *
-     * @param practitionerId ID del practicante (para verificación de permisos)
+     * @param practitionerId ID del practicante (verificación de permisos)
      * @param offeredTreatmentId ID de la oferta a eliminar
+     * @return Resultado del Dominio: SOFT o HARD delete con la razón
      * @throws ResourceNotFoundException si la oferta no existe
-     * @throws UnauthorizedOperationException si el practicante no es el propietario
-     * @throws InvalidBusinessRuleException si existen turnos activos asociados
+     * @throws UnauthorizedOperationException si el practicante no es propietario
      */
     @Override
-    public void removeFromCatalog(Long practitionerId, Long offeredTreatmentId) {
+    public OfferedTreatmentDeletionResult removeFromCatalog(Long practitionerId, Long offeredTreatmentId) {
 
         OfferedTreatment existingOffer = offeredTreatmentRepository.findById(offeredTreatmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("OfferedTreatment", "id", offeredTreatmentId.toString()));
@@ -189,8 +194,21 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
             throw new UnauthorizedOperationException("No tiene permisos para eliminar este tratamiento.");
         }
 
-        domainService.validateCanDelete(offeredTreatmentId);
-        offeredTreatmentRepository.deleteById(offeredTreatmentId);
+        OfferedTreatmentDeletionResult result = domainService.resolveDeletionStrategy(existingOffer);
+
+        if (result.isSoftDeleted()) {
+            // Baja Lógica: la oferta sigue existiendo en la BD pero deja de
+            // aparecer en el catálogo público. La cadena Appointment → Attention
+            // queda intacta porque no se borra ninguna fila.
+            existingOffer.deactivate();
+            offeredTreatmentRepository.save(existingOffer);
+        } else {
+            // Baja Física: sólo aplica cuando no hay ningún rastro histórico
+            // (no hay Appointments ni Attentions para el par practitioner+treatment).
+            offeredTreatmentRepository.deleteById(offeredTreatmentId);
+        }
+
+        return result;
     }
 
     /**

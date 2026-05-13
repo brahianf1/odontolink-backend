@@ -60,9 +60,24 @@ public class OfferedTreatment {
      */
     private Integer maxCompletedAttentions;
 
+    /**
+     * Bandera de Baja Lógica (Soft Delete) — RF16.
+     *
+     * Cuando la oferta tiene compromisos vivos (turnos SCHEDULED futuros
+     * o Atenciones IN_PROGRESS del mismo par practitioner/treatment) no
+     * se puede borrar físicamente sin romper la integridad referencial
+     * del historial clínico. En ese caso esta bandera pasa a false:
+     * - La oferta desaparece del catálogo público.
+     * - Los turnos y la cadena de Atenciones permanecen consultables.
+     *
+     * Por defecto las ofertas se crean activas (true).
+     */
+    private boolean active = true;
+
     // Constructores
     public OfferedTreatment() {
         this.availabilitySlots = new HashSet<>();
+        this.active = true;
     }
 
     public OfferedTreatment(Practitioner practitioner, Treatment treatment, String requirements) {
@@ -115,6 +130,9 @@ public class OfferedTreatment {
         this.offerStartDate = offerStartDate;
         this.offerEndDate = offerEndDate;
         this.maxCompletedAttentions = maxCompletedAttentions;
+        // Toda oferta nace activa: la baja lógica sólo se aplica como
+        // consecuencia explícita de RF16, nunca por defecto al construir.
+        this.active = true;
     }
 
     /**
@@ -240,6 +258,31 @@ public class OfferedTreatment {
 
     public void setMaxCompletedAttentions(Integer maxCompletedAttentions) {
         this.maxCompletedAttentions = maxCompletedAttentions;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
+    /**
+     * Aplica la Baja Lógica de la oferta (RF16).
+     * Idempotente: si ya está desactivada no produce efectos secundarios.
+     */
+    public void deactivate() {
+        this.active = false;
+    }
+
+    /**
+     * Reactiva la oferta para que vuelva al catálogo público.
+     * Permite revertir manualmente una Baja Lógica si las restricciones
+     * de integridad que la justificaron desaparecen.
+     */
+    public void activate() {
+        this.active = true;
     }
 
     // Métodos de utilidad

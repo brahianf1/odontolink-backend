@@ -66,6 +66,23 @@ public class OfferedTreatmentEntity {
     @Column(name = "max_completed_attentions")
     private Integer maxCompletedAttentions;
 
+    /**
+     * Flag de Baja Lógica (RF16).
+     *
+     * - {@code columnDefinition} fija el DEFAULT a nivel de BD para que el ALTER
+     *   TABLE que aplica Hibernate en {@code ddl-auto=update} no falle al
+     *   poblar las filas preexistentes (que no tenían la columna).
+     * - En producción ({@code ddl-auto=validate}) se requiere ejecutar
+     *   manualmente la migración SQL antes del primer deploy de esta versión:
+     *     ALTER TABLE offered_treatments
+     *       ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE;
+     *
+     * Se inicializa a {@code true} en el campo para los flujos en memoria
+     * (constructor por defecto, tests) donde la BD no interviene.
+     */
+    @Column(name = "active", nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT TRUE")
+    private boolean active = true;
+
     // Constructores
     public OfferedTreatmentEntity() {
     }
@@ -141,6 +158,14 @@ public class OfferedTreatmentEntity {
 
     public void setMaxCompletedAttentions(Integer maxCompletedAttentions) {
         this.maxCompletedAttentions = maxCompletedAttentions;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
     }
 
     // Métodos de utilidad para mantener la consistencia bidireccional

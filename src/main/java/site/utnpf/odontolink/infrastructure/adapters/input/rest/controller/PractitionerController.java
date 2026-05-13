@@ -18,10 +18,12 @@ import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
 import site.utnpf.odontolink.domain.model.Appointment;
 import site.utnpf.odontolink.domain.model.AvailabilitySlot;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
+import site.utnpf.odontolink.domain.model.OfferedTreatmentDeletionResult;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.AddOfferedTreatmentRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.CancelAppointmentByPractitionerRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.UpdateOfferedTreatmentRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AppointmentResponseDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.OfferedTreatmentDeletionResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.OfferedTreatmentResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.AppointmentRestMapper;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.AvailabilitySlotInputMapper;
@@ -246,18 +248,50 @@ public class PractitionerController {
     }
 
     /**
-     * Elimina un tratamiento del catálogo personal del practicante.
-     * Corresponde al CU-007: Eliminar Tratamiento del Catálogo Personal.
+     * Elimina (o desactiva por integridad) un tratamiento del catálogo personal.
+     * Corresponde al CU-007 con la política de RF16:
+     *
+     * - Si la oferta tiene turnos SCHEDULED a futuro o Atenciones IN_PROGRESS
+     *   o cualquier Atención histórica → SOFT DELETE (active=false).
+     * - Sólo si no hay ningún rastro → HARD DELETE.
+     *
+     * En ambos casos se devuelve {@code 200 OK} con un cuerpo que explica
+     * la decisión al frontend, en lugar de un genérico {@code 204 No Content}.
+     * El motivo es estrictamente de UX: la consecuencia de eliminar puede
+     * ser silenciosa (la fila sigue en BD) y queremos que el practicante
+     * vea ese hecho de forma explícita.
+     *
+     * Defensa de ownership: la verificación contra el ID derivado del JWT
+     * la aplica el caso de uso; si la oferta no pertenece al practicante
+     * autenticado responderá 403.
      *
      * DELETE /api/practitioner/offered-treatments/{id}
      */
+    @Operation(
+            summary = "Eliminar/desactivar tratamiento del catálogo (RF16)",
+            description = "Si la oferta tiene turnos agendados a futuro o atenciones asociadas, " +
+                    "se aplica Baja Lógica (soft delete) preservando integridad. " +
+                    "Si no hay rastro, se elimina físicamente. El body de la respuesta indica el outcome."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200",
+                    description = "Resultado de la operación (SOFT_DELETED | HARD_DELETED)",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = OfferedTreatmentDeletionResponseDTO.class))),
+            @ApiResponse(responseCode = "403",
+                    description = "La oferta no pertenece al practicante autenticado",
+                    content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "404",
+                    description = "Oferta no encontrada",
+                    content = @Content(mediaType = "application/json"))
+    })
     @DeleteMapping("/offered-treatments/{id}")
-    public ResponseEntity<Void> removeFromCatalog(@PathVariable Long id) {
+    public ResponseEntity<OfferedTreatmentDeletionResponseDTO> removeFromCatalog(@PathVariable Long id) {
 
         Long practitionerId = authenticationFacade.getAuthenticatedPractitionerId();
-        offeredTreatmentUseCase.removeFromCatalog(practitionerId, id);
+        OfferedTreatmentDeletionResult result = offeredTreatmentUseCase.removeFromCatalog(practitionerId, id);
 
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(OfferedTreatmentDeletionResponseDTO.from(result));
     }
 
     /**

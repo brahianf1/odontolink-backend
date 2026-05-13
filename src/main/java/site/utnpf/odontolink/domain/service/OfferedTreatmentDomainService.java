@@ -5,6 +5,7 @@ import site.utnpf.odontolink.domain.exception.DuplicateResourceException;
 import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.model.AvailabilitySlot;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
+import site.utnpf.odontolink.domain.model.OfferedTreatmentDeletionResult;
 import site.utnpf.odontolink.domain.model.Practitioner;
 import site.utnpf.odontolink.domain.model.Treatment;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
@@ -143,30 +144,62 @@ public class OfferedTreatmentDomainService {
     }
 
     /**
-     * Valida que un tratamiento se pueda eliminar del catálogo.
+     * Decide la estrategia de eliminación de una oferta del catálogo (RF16).
      *
-     * Regla Preventiva: No se puede eliminar un tratamiento si existen turnos históricos que lo referencian.
-     * Esto garantiza integridad referencial y preserva el historial clínico completo.
+     * Política del Dominio:
+     * 1. Si existen turnos SCHEDULED a futuro asociados al par practitioner+treatment
+     *    de la oferta, hay compromisos vivos con pacientes: NO se puede borrar físicamente,
+     *    se aplica Baja Lógica (soft delete) para retirarla del catálogo público
+     *    preservando la cadena Appointment → Attention.
+     * 2. Si existen Atenciones IN_PROGRESS para el par, hay casos clínicos abiertos
+     *    que aún pueden recibir nuevos turnos/evolutivos: también Baja Lógica.
+     * 3. Si existen Atenciones históricas (COMPLETED / CANCELLED) pero ningún
+     *    compromiso vivo, igualmente preferimos Baja Lógica para no perder la
+     *    cadena de navegación del historial clínico desde Attention.treatment.
+     *    El dato histórico siempre se conserva, alineado con el espíritu de RF16.
+     * 4. Sólo si NO existe ningún rastro histórico (oferta nunca usada) se permite
+     *    el borrado físico (hard delete) — limpieza barata para errores de catálogo.
      *
-     * Razón de diseño: Los Appointments almacenan un snapshot de la duración en el momento de la reserva,
-     * pero mantienen referencia a la Attention que a su vez referencia al Treatment.
-     * Eliminar el OfferedTreatment rompería la cadena de navegación del dominio y podría causar
-     * inconsistencias en reportes históricos.
+     * El método NO muta ni persiste: devuelve la decisión y deja al servicio
+     * de aplicación coordinar la operación correspondiente y la transacción.
      *
-     * Alternativa recomendada: En lugar de eliminar, implementar un flag "activo/inactivo" para
-     * que no aparezca en el catálogo público pero preserve el historial.
-     *
-     * @param offeredTreatmentId El ID de la oferta a eliminar
-     * @throws InvalidBusinessRuleException si la oferta tiene turnos en cualquier estado
+     * @param offer La oferta cargada en memoria sobre la que se está decidiendo
+     * @return El outcome del Dominio: SOFT_DELETED o HARD_DELETED, con su razón
      */
-    public void validateCanDelete(Long offeredTreatmentId) {
-        if (offeredTreatmentRepository.hasActiveAppointments(offeredTreatmentId)) {
-            throw new InvalidBusinessRuleException(
-                "No se puede eliminar el tratamiento porque existen turnos asociados (activos o históricos). " +
-                "Esto protege la integridad del historial clínico. " +
-                "Recomendación: Desactive el tratamiento en lugar de eliminarlo."
+    public OfferedTreatmentDeletionResult resolveDeletionStrategy(OfferedTreatment offer) {
+        Long offerId = offer.getId();
+
+        if (offeredTreatmentRepository.hasFutureScheduledAppointments(offerId)) {
+            return new OfferedTreatmentDeletionResult(
+                    OfferedTreatmentDeletionResult.Outcome.SOFT_DELETED,
+                    "La oferta se desactivó: existen turnos agendados a futuro. " +
+                    "Se conserva la integridad referencial de las citas ya otorgadas. " +
+                    "Ya no aparecerá en el catálogo público."
             );
         }
+
+        if (offeredTreatmentRepository.hasInProgressAttentions(offerId)) {
+            return new OfferedTreatmentDeletionResult(
+                    OfferedTreatmentDeletionResult.Outcome.SOFT_DELETED,
+                    "La oferta se desactivó: existen casos clínicos en curso para este tratamiento. " +
+                    "Se conserva la integridad de los expedientes activos. " +
+                    "Ya no aparecerá en el catálogo público."
+            );
+        }
+
+        if (offeredTreatmentRepository.hasHistoricalAttentions(offerId)) {
+            return new OfferedTreatmentDeletionResult(
+                    OfferedTreatmentDeletionResult.Outcome.SOFT_DELETED,
+                    "La oferta se desactivó: existen atenciones históricas asociadas. " +
+                    "Se conserva el historial clínico navegable. " +
+                    "Ya no aparecerá en el catálogo público."
+            );
+        }
+
+        return new OfferedTreatmentDeletionResult(
+                OfferedTreatmentDeletionResult.Outcome.HARD_DELETED,
+                "La oferta fue eliminada del catálogo. No existían turnos ni atenciones asociadas."
+        );
     }
 
     /**

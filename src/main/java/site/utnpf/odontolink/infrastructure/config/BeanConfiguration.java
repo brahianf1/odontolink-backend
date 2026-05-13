@@ -13,6 +13,7 @@ import site.utnpf.odontolink.application.port.in.IChatUseCase;
 import site.utnpf.odontolink.application.port.in.IFeedbackUseCase;
 import site.utnpf.odontolink.application.port.in.IInstitutionalSettingsUseCase;
 import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
+import site.utnpf.odontolink.application.port.in.ISearchOfferedTreatmentsUseCase;
 import site.utnpf.odontolink.application.port.in.IPasswordResetUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.IPractitionerRegistrationUseCase;
@@ -31,6 +32,7 @@ import site.utnpf.odontolink.application.service.ChatService;
 import site.utnpf.odontolink.application.service.FeedbackService;
 import site.utnpf.odontolink.application.service.InstitutionalSettingsService;
 import site.utnpf.odontolink.application.service.OfferedTreatmentService;
+import site.utnpf.odontolink.application.service.SearchOfferedTreatmentsService;
 import site.utnpf.odontolink.application.service.PasswordResetService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
 import site.utnpf.odontolink.application.service.PractitionerRegistrationService;
@@ -184,6 +186,20 @@ public class BeanConfiguration {
                 attentionRepository,
                 domainService
         );
+    }
+
+    /**
+     * Bean para el motor de búsqueda paginada del catálogo público (RF09).
+     *
+     * Se expone como caso de uso independiente para respetar Segregación de
+     * Interfaces: el flujo de búsqueda del paciente no comparte dependencias
+     * con la administración del catálogo del practicante ni con la reserva
+     * de turnos.
+     */
+    @Bean
+    public ISearchOfferedTreatmentsUseCase searchOfferedTreatmentsUseCase(
+            OfferedTreatmentRepository offeredTreatmentRepository) {
+        return new SearchOfferedTreatmentsService(offeredTreatmentRepository);
     }
 
     /**
