@@ -43,6 +43,14 @@ public class AppointmentEntity {
     @Column(name = "duration_in_minutes", nullable = false)
     private int durationInMinutes;
 
+    /**
+     * Motivo de cancelación. Es nullable porque solo se materializa
+     * cuando el turno transita a CANCELLED y, en el caso del paciente,
+     * el motivo puede no informarse.
+     */
+    @Column(name = "cancellation_reason", columnDefinition = "TEXT")
+    private String cancellationReason;
+
     // Constructores
     public AppointmentEntity() {
     }
@@ -94,5 +102,13 @@ public class AppointmentEntity {
 
     public void setDurationInMinutes(int durationInMinutes) {
         this.durationInMinutes = durationInMinutes;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
     }
 }

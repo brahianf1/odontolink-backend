@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.domain.model;
 
+import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
+
 import java.time.Instant;
 
 /**
@@ -29,6 +31,15 @@ public class InstitutionalSettings {
      */
     public static final Long SINGLETON_ID = 1L;
 
+    /**
+     * Valor por defecto para el límite de turnos SCHEDULED concurrentes
+     * por Atención. Se elige 1 deliberadamente: en el modelo académico,
+     * el caso normal es que el paciente tenga un único turno reservado
+     * a la vez por tratamiento, evitando "acaparar" la agenda del
+     * practicante estudiante mientras existan otros pacientes en lista.
+     */
+    public static final int DEFAULT_MAX_CONCURRENT_APPOINTMENTS = 1;
+
     private Long id;
     private String institutionName;
     private String openingHours;
@@ -36,6 +47,16 @@ public class InstitutionalSettings {
     private String contactEmail;
     private String contactPhone;
     private String contactAddress;
+    /**
+     * Política dinámica anti-acaparamiento (RF protección de agenda).
+     *
+     * Representa la cantidad máxima de turnos SCHEDULED concurrentes que un
+     * paciente puede mantener vivos dentro de una misma Atención. Vive en
+     * los parámetros institucionales (y no hardcodeado en el dominio de
+     * turnos) porque el administrador puede ajustarlo en caliente según la
+     * demanda académica del cuatrimestre, sin requerir un redeploy.
+     */
+    private int maxConcurrentAppointmentsPerAttention;
     private Instant updatedAt;
 
     public InstitutionalSettings() {
@@ -48,6 +69,7 @@ public class InstitutionalSettings {
                                  String contactEmail,
                                  String contactPhone,
                                  String contactAddress,
+                                 int maxConcurrentAppointmentsPerAttention,
                                  Instant updatedAt) {
         this.id = id;
         this.institutionName = institutionName;
@@ -56,6 +78,7 @@ public class InstitutionalSettings {
         this.contactEmail = contactEmail;
         this.contactPhone = contactPhone;
         this.contactAddress = contactAddress;
+        this.maxConcurrentAppointmentsPerAttention = maxConcurrentAppointmentsPerAttention;
         this.updatedAt = updatedAt;
     }
 
@@ -77,6 +100,7 @@ public class InstitutionalSettings {
                 "contacto@odontolink.local",
                 "",
                 "",
+                DEFAULT_MAX_CONCURRENT_APPOINTMENTS,
                 Instant.now()
         );
     }
@@ -87,20 +111,38 @@ public class InstitutionalSettings {
      * llamante a enviar la fotografía completa, lo cual elimina ambigüedades
      * del tipo "¿este null significa borrar o no enviar?" que ensucian las
      * APIs de actualización parcial.
+     *
+     * El parámetro {@code maxConcurrentAppointmentsPerAttention} se valida
+     * aquí (≥1) porque un valor de 0 o negativo bloquearía completamente la
+     * reserva de turnos, dejando la plataforma inservible. Mantener la
+     * invariante dentro del dominio impide configurar la fila singleton en
+     * un estado inválido aunque el adapter REST llegue a fallar la
+     * validación de Bean Validation.
      */
     public void apply(String institutionName,
                       String openingHours,
                       String usagePolicies,
                       String contactEmail,
                       String contactPhone,
-                      String contactAddress) {
+                      String contactAddress,
+                      int maxConcurrentAppointmentsPerAttention) {
+        validateMaxConcurrent(maxConcurrentAppointmentsPerAttention);
         this.institutionName = institutionName;
         this.openingHours = openingHours;
         this.usagePolicies = usagePolicies;
         this.contactEmail = contactEmail;
         this.contactPhone = contactPhone;
         this.contactAddress = contactAddress;
+        this.maxConcurrentAppointmentsPerAttention = maxConcurrentAppointmentsPerAttention;
         this.updatedAt = Instant.now();
+    }
+
+    private void validateMaxConcurrent(int value) {
+        if (value < 1) {
+            throw new InvalidBusinessRuleException(
+                    "El límite de turnos concurrentes por atención debe ser al menos 1."
+            );
+        }
     }
 
     public Long getId() {
@@ -157,6 +199,14 @@ public class InstitutionalSettings {
 
     public void setContactAddress(String contactAddress) {
         this.contactAddress = contactAddress;
+    }
+
+    public int getMaxConcurrentAppointmentsPerAttention() {
+        return maxConcurrentAppointmentsPerAttention;
+    }
+
+    public void setMaxConcurrentAppointmentsPerAttention(int maxConcurrentAppointmentsPerAttention) {
+        this.maxConcurrentAppointmentsPerAttention = maxConcurrentAppointmentsPerAttention;
     }
 
     public Instant getUpdatedAt() {

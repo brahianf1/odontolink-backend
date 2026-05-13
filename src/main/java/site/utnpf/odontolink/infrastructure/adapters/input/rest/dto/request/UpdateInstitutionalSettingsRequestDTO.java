@@ -2,7 +2,9 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -41,6 +43,14 @@ public class UpdateInstitutionalSettingsRequestDTO {
     @Schema(description = "Dirección física de la institución", example = "Av. Benjamín Aráoz 800, San Miguel de Tucumán")
     @Size(max = 250, message = "La dirección no puede superar los 250 caracteres")
     private String contactAddress;
+
+    @Schema(description = "Cantidad máxima de turnos SCHEDULED concurrentes por Atención. " +
+            "Controla la política anti-acaparamiento: a mayor valor, más turnos puede tener vivos " +
+            "un paciente dentro del mismo caso clínico (ej. 1 = solo el próximo turno reservado).",
+            example = "1", required = true)
+    @NotNull(message = "El límite de turnos concurrentes por atención es obligatorio")
+    @Min(value = 1, message = "El límite de turnos concurrentes por atención debe ser al menos 1")
+    private Integer maxConcurrentAppointmentsPerAttention;
 
     public UpdateInstitutionalSettingsRequestDTO() {
     }
@@ -91,5 +101,13 @@ public class UpdateInstitutionalSettingsRequestDTO {
 
     public void setContactAddress(String contactAddress) {
         this.contactAddress = contactAddress;
+    }
+
+    public Integer getMaxConcurrentAppointmentsPerAttention() {
+        return maxConcurrentAppointmentsPerAttention;
+    }
+
+    public void setMaxConcurrentAppointmentsPerAttention(Integer maxConcurrentAppointmentsPerAttention) {
+        this.maxConcurrentAppointmentsPerAttention = maxConcurrentAppointmentsPerAttention;
     }
 }

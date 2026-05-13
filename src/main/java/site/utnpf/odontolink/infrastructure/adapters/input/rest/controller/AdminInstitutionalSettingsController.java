@@ -59,7 +59,8 @@ public class AdminInstitutionalSettingsController {
                 request.getUsagePolicies(),
                 request.getContactEmail(),
                 request.getContactPhone(),
-                request.getContactAddress()
+                request.getContactAddress(),
+                request.getMaxConcurrentAppointmentsPerAttention()
         );
         return ResponseEntity.ok(InstitutionalSettingsRestMapper.toDTO(updated));
     }

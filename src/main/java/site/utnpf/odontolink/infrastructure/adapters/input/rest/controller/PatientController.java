@@ -20,6 +20,7 @@ import site.utnpf.odontolink.domain.model.Appointment;
 import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.AppointmentRequestDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.CancelAppointmentByPatientRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AppointmentResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AttentionResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.OfferedTreatmentResponseDTO;
@@ -203,8 +204,11 @@ public class PatientController {
         // Obtener el ID del paciente autenticado
         Long patientId = authenticationFacade.getAuthenticatedPatientId();
 
-        // Delegar al caso de uso (servicio de aplicación)
-        Attention attention = appointmentUseCase.scheduleFirstAppointment(
+        // Delegar al caso de uso (servicio de aplicación).
+        // El caso de uso decide si crea una Atención nueva o agrupa el turno
+        // dentro de una IN_PROGRESS existente, y aplica la regla
+        // anti-acaparamiento usando el límite dinámico de InstitutionalSettings.
+        Attention attention = appointmentUseCase.bookAppointment(
                 patientId,
                 request.getOfferedTreatmentId(),
                 request.getAppointmentTime()
@@ -214,6 +218,46 @@ public class PatientController {
         AttentionResponseDTO response = AttentionRestMapper.toResponse(attention);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(
+            summary = "Cancelar turno (paciente)",
+            description = "Cancela un turno SCHEDULED por iniciativa del paciente. " +
+                    "El motivo es opcional; si la Atención padre queda sin turnos efectivos " +
+                    "ni próximos se cierra automáticamente."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200",
+                    description = "Turno cancelado",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = AppointmentResponseDTO.class))),
+            @ApiResponse(responseCode = "403",
+                    description = "El paciente no es titular del turno",
+                    content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "404",
+                    description = "Turno no encontrado",
+                    content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "422",
+                    description = "El turno no está en estado SCHEDULED",
+                    content = @Content(mediaType = "application/json"))
+    })
+    @PostMapping("/appointments/{appointmentId}/cancel")
+    public ResponseEntity<AppointmentResponseDTO> cancelAppointment(
+            @PathVariable Long appointmentId,
+            @Valid @RequestBody(required = false) CancelAppointmentByPatientRequestDTO request) {
+
+        site.utnpf.odontolink.domain.model.User patientUser = authenticationFacade.getAuthenticatedUser();
+        // El motivo es opcional: si el body viene vacío o sin reason, se pasa null
+        // y el dominio normaliza la ausencia de texto sin error.
+        String reason = (request != null) ? request.getReason() : null;
+
+        Appointment cancelled = appointmentUseCase.cancelAppointmentByPatient(
+                appointmentId,
+                reason,
+                patientUser
+        );
+
+        return ResponseEntity.ok(AppointmentRestMapper.toResponse(cancelled));
     }
 
     /**

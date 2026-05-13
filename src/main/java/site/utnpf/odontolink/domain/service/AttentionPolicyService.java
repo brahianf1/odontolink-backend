@@ -2,10 +2,13 @@ package site.utnpf.odontolink.domain.service;
 
 import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.model.Attention;
+import site.utnpf.odontolink.domain.model.AttentionStatus;
 import site.utnpf.odontolink.domain.model.AppointmentStatus;
 import site.utnpf.odontolink.domain.repository.AppointmentRepository;
+import site.utnpf.odontolink.domain.repository.AttentionRepository;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 /**
  * Servicio de Dominio que implementa las políticas y reglas de negocio complejas
@@ -16,6 +19,8 @@ import java.time.LocalDateTime;
  *
  * Implementa las reglas de negocio de:
  * - RF10, RF19: Finalizar Caso Clínico (CU 4.4)
+ * - Funnel tracking: cierre lógico por abandono temprano cuando el último
+ *   turno de una Atención queda CANCELLED o NO_SHOW.
  *
  * Responsabilidades:
  * 1. Validar que se cumplan todas las precondiciones antes de finalizar un caso
@@ -27,9 +32,12 @@ import java.time.LocalDateTime;
 public class AttentionPolicyService {
 
     private final AppointmentRepository appointmentRepository;
+    private final AttentionRepository attentionRepository;
 
-    public AttentionPolicyService(AppointmentRepository appointmentRepository) {
+    public AttentionPolicyService(AppointmentRepository appointmentRepository,
+                                  AttentionRepository attentionRepository) {
         this.appointmentRepository = appointmentRepository;
+        this.attentionRepository = attentionRepository;
     }
 
     /**
@@ -49,7 +57,7 @@ public class AttentionPolicyService {
      */
     public void finalizeAttention(Attention attention) {
         // Validación 1: Verificar que no haya turnos futuros agendados
-        boolean hasScheduledAppointments = hasScheduledAppointments(attention.getId());
+        boolean hasScheduledAppointments = hasScheduledFutureAppointments(attention.getId());
 
         if (hasScheduledAppointments) {
             throw new InvalidBusinessRuleException(
@@ -77,12 +85,78 @@ public class AttentionPolicyService {
     }
 
     /**
+     * Evalúa y, si corresponde, ejecuta el cierre lógico de una Atención por
+     * abandono temprano (funnel tracking).
+     *
+     * Regla de negocio:
+     * Tras cancelar un turno o marcarlo NO_SHOW, si la Atención padre se
+     * queda SIN turnos SCHEDULED futuros y SIN turnos COMPLETED, significa
+     * que el caso nunca produjo trabajo clínico efectivo y no hay próximos
+     * turnos que recuperarlo. En ese escenario la Atención se cierra como
+     * CANCELLED automáticamente.
+     *
+     * Decisiones de diseño:
+     * - Si la atención ya está en COMPLETED o CANCELLED, la operación es un
+     *   no-op silencioso. Esto es deliberado: el llamador (cancel del paciente,
+     *   cancel del practicante, no-show) ya hizo lo suyo y no debe fallar
+     *   porque una transición intermedia haya cerrado el caso antes.
+     * - El cambio de estado se persiste con un UPDATE focalizado para no
+     *   re-materializar el agregado completo.
+     *
+     * @param attentionId ID del caso clínico que acaba de perder un turno
+     */
+    public void closeAttentionIfAbandoned(Long attentionId) {
+        if (attentionId == null) {
+            return;
+        }
+
+        Optional<Attention> attentionOpt = attentionRepository.findById(attentionId);
+        if (attentionOpt.isEmpty()) {
+            return;
+        }
+        Attention attention = attentionOpt.get();
+
+        // Solo aplica el cierre por abandono mientras la Atención esté abierta.
+        if (attention.getStatus() != AttentionStatus.IN_PROGRESS) {
+            return;
+        }
+
+        // Si todavía existe trabajo clínico efectivo (al menos un COMPLETED)
+        // no se considera abandono: el caso debe permanecer abierto para
+        // poder finalizarse o seguir recibiendo turnos.
+        boolean hasAnyCompleted = appointmentRepository.existsByAttentionIdAndStatus(
+                attentionId,
+                AppointmentStatus.COMPLETED
+        );
+        if (hasAnyCompleted) {
+            return;
+        }
+
+        // Si quedan turnos futuros agendados, el caso sigue vivo.
+        // Se compara contra "ahora" para que un SCHEDULED ya pasado pero no
+        // marcado no impida cerrar lo que objetivamente está abandonado.
+        boolean hasFutureScheduled = appointmentRepository
+                .existsByAttentionIdAndStatusAndAppointmentTimeGreaterThanEqual(
+                        attentionId,
+                        AppointmentStatus.SCHEDULED,
+                        LocalDateTime.now()
+                );
+        if (hasFutureScheduled) {
+            return;
+        }
+
+        // Sin trabajo realizado ni próximos turnos: la Atención está abandonada.
+        // Persistimos el cierre con UPDATE atómico para no arrastrar el agregado completo.
+        attentionRepository.updateStatus(attentionId, AttentionStatus.CANCELLED);
+    }
+
+    /**
      * Verifica si una atención tiene turnos agendados (SCHEDULED) en el futuro.
      *
      * @param attentionId ID del caso clínico
      * @return true si existen turnos futuros con estado SCHEDULED, false en caso contrario
      */
-    private boolean hasScheduledAppointments(Long attentionId) {
+    private boolean hasScheduledFutureAppointments(Long attentionId) {
         // Buscar turnos con estado SCHEDULED asociados a esta atención
         // que tengan fecha/hora mayor o igual a ahora
         LocalDateTime now = LocalDateTime.now();

@@ -10,8 +10,6 @@ import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AttentionEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.jpa_repository.JpaAttentionRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.AttentionPersistenceMapper;
-import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.PractitionerPersistenceMapper;
-import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.TreatmentPersistenceMapper;
 
 import java.util.HashMap;
 import java.util.List;
@@ -153,6 +151,12 @@ public class AttentionPersistenceAdapter implements AttentionRepository {
     @Override
     public Map<Long, Long> countCancelledByPractitionerGroupByTreatment(Practitioner practitioner) {
         return executeCountQuery(practitioner, AttentionStatus.CANCELLED);
+    }
+
+    @Override
+    public boolean updateStatus(Long attentionId, AttentionStatus newStatus) {
+        int rowsAffected = jpaAttentionRepository.updateStatus(attentionId, newStatus);
+        return rowsAffected > 0;
     }
 
     private Map<Long, Long> executeCountQuery(Practitioner practitioner, AttentionStatus status) {

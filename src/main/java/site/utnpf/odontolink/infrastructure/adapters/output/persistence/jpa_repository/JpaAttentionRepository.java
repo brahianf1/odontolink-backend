@@ -1,13 +1,13 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence.jpa_repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import site.utnpf.odontolink.domain.model.AttentionStatus;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AttentionEntity;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 public interface JpaAttentionRepository extends JpaRepository<AttentionEntity, Long> {
@@ -67,4 +67,12 @@ public interface JpaAttentionRepository extends JpaRepository<AttentionEntity, L
             @Param("practitionerId") Long practitionerId,
             @Param("status") AttentionStatus status
     );
+
+    /**
+     * UPDATE atómico del estado de una Atención. Se usa en el cierre lógico
+     * por abandono para evitar materializar todo el agregado.
+     */
+    @Modifying
+    @Query("UPDATE AttentionEntity a SET a.status = :status WHERE a.id = :id")
+    int updateStatus(@Param("id") Long id, @Param("status") AttentionStatus status);
 }

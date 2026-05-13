@@ -2,10 +2,13 @@ package site.utnpf.odontolink.application.service;
 
 import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.application.port.in.IAppointmentUseCase;
+import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
+import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
 import site.utnpf.odontolink.domain.model.*;
 import site.utnpf.odontolink.domain.repository.*;
 import site.utnpf.odontolink.domain.service.AppointmentBookingService;
+import site.utnpf.odontolink.domain.service.AttentionPolicyService;
 import site.utnpf.odontolink.domain.service.AvailabilityGenerationService;
 
 import java.time.LocalDate;
@@ -16,16 +19,19 @@ import java.util.List;
  * Servicio de aplicación para la gestión de turnos (appointments).
  * Implementa el puerto de entrada IAppointmentUseCase siguiendo la Arquitectura Hexagonal.
  *
- * Este servicio es el orquestador transaccional del CU-008: Reservar Turno.
- * Su responsabilidad principal es coordinar:
- * 1. La carga de entidades de dominio desde los repositorios
- * 2. La delegación de lógica de negocio al servicio de dominio (AppointmentBookingService)
- * 3. La persistencia transaccional de los cambios
+ * Este servicio es el orquestador transaccional del modelo "intent-driven":
+ * <ul>
+ *   <li>Reserva con creación / agrupación de Atención (CU-008).</li>
+ *   <li>Gestión de asistencia (completar / no-show).</li>
+ *   <li>Cancelaciones diferenciadas (paciente / practicante).</li>
+ *   <li>Funnel tracking: cierre automático de la Atención por abandono.</li>
+ * </ul>
  *
  * Flujo de ejecución típico:
- * Controller -> AppointmentService (aquí) -> AppointmentBookingService (dominio) -> Repositories
+ * Controller -> AppointmentService (aquí) -> AppointmentBookingService / AttentionPolicyService (dominio) -> Repositories
  *
- * @Transactional asegura que toda la operación (crear Attention + Appointment) sea atómica.
+ * @Transactional asegura que toda la operación (estado del turno + posible cierre de la Atención)
+ * sea atómica.
  *
  * @author OdontoLink Team
  */
@@ -38,6 +44,7 @@ public class AppointmentService implements IAppointmentUseCase {
     private final OfferedTreatmentRepository offeredTreatmentRepository;
     private final AppointmentBookingService appointmentBookingService;
     private final AvailabilityGenerationService availabilityGenerationService;
+    private final AttentionPolicyService attentionPolicyService;
 
     public AppointmentService(
             PatientRepository patientRepository,
@@ -45,249 +52,241 @@ public class AppointmentService implements IAppointmentUseCase {
             AttentionRepository attentionRepository,
             OfferedTreatmentRepository offeredTreatmentRepository,
             AppointmentBookingService appointmentBookingService,
-            AvailabilityGenerationService availabilityGenerationService) {
+            AvailabilityGenerationService availabilityGenerationService,
+            AttentionPolicyService attentionPolicyService) {
         this.patientRepository = patientRepository;
         this.appointmentRepository = appointmentRepository;
         this.attentionRepository = attentionRepository;
         this.offeredTreatmentRepository = offeredTreatmentRepository;
         this.appointmentBookingService = appointmentBookingService;
         this.availabilityGenerationService = availabilityGenerationService;
+        this.attentionPolicyService = attentionPolicyService;
     }
 
     /**
-     * Implementa el caso de uso principal CU-008: "Reservar Turno".
+     * Implementa el CU-008: "Reservar Turno".
      *
      * Orquestación:
-     * 1. Carga el Patient desde el repositorio
-     * 2. Delega al AppointmentBookingService (servicio de dominio) para crear la Attention y el Appointment
-     * 3. Persiste la Attention (y su Appointment hijo gracias a CascadeType.ALL) de forma transaccional
-     *
-     * @param patientId          ID del paciente autenticado
-     * @param offeredTreatmentId ID de la oferta de tratamiento seleccionada
-     * @param appointmentTime    Fecha y hora del turno solicitado
-     * @return La Attention creada/actualizada con el nuevo Appointment
-     * @throws ResourceNotFoundException si el paciente no existe
+     * 1. Carga el Patient desde el repositorio.
+     * 2. Delega al AppointmentBookingService (servicio de dominio) para
+     *    aplicar oferta válida, disponibilidad, conflictos, agrupación y
+     *    regla anti-acaparamiento dinámica.
+     * 3. Persiste la Attention (y su Appointment hijo gracias a
+     *    CascadeType.ALL) de forma transaccional.
      */
     @Override
-    public Attention scheduleFirstAppointment(Long patientId, Long offeredTreatmentId, LocalDateTime appointmentTime) {
+    public Attention bookAppointment(Long patientId, Long offeredTreatmentId, LocalDateTime appointmentTime) {
 
-        // Cargar el Patient desde el repositorio
         Patient patient = patientRepository.findById(patientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Patient", "id", patientId.toString()));
 
-        // Delegar al servicio de dominio para aplicar todas las reglas de negocio
-        // El AppointmentBookingService se encarga de:
-        // - Validar la oferta
-        // - Validar disponibilidad horaria
-        // - Validar conflictos
-        // - Crear/actualizar la Attention con su Appointment
-        Attention attention = appointmentBookingService.bookFirstAppointment(
+        Attention attention = appointmentBookingService.bookAppointment(
                 patient,
                 offeredTreatmentId,
                 appointmentTime
         );
 
-        // Persistir la Attention (y su Appointment hijo gracias a CascadeType.ALL)
-        // Esta es la operación transaccional que garantiza atomicidad
         return attentionRepository.save(attention);
     }
 
     /**
      * Obtiene los turnos agendados (SCHEDULED) de un paciente.
      * Usado para mostrar "Mis Turnos" en el panel del paciente.
-     *
-     * @param patientId ID del paciente
-     * @return Lista de turnos con estado SCHEDULED
      */
     @Override
     @Transactional(readOnly = true)
     public List<Appointment> getUpcomingAppointmentsForPatient(Long patientId) {
-        // Verificar que el paciente existe
-        if (!patientRepository.findById(patientId).isPresent()) {
+        if (patientRepository.findById(patientId).isEmpty()) {
             throw new ResourceNotFoundException("Patient", "id", patientId.toString());
         }
-
-        // Obtener turnos agendados (excluye cancelados, completados, etc.)
         return appointmentRepository.findByPatientIdAndStatus(patientId, AppointmentStatus.SCHEDULED);
     }
 
     /**
      * Obtiene los turnos agendados (SCHEDULED) de un practicante.
      * Usado para mostrar "Mis Turnos" en el panel del practicante.
-     *
-     * @param practitionerId ID del practicante
-     * @return Lista de turnos con estado SCHEDULED
      */
     @Override
     @Transactional(readOnly = true)
     public List<Appointment> getUpcomingAppointmentsForPractitioner(Long practitionerId) {
-        // Obtener turnos agendados del practicante
         return appointmentRepository.findByPractitionerIdAndStatus(practitionerId, AppointmentStatus.SCHEDULED);
     }
 
-    /**
-     * Obtiene el catálogo público de tratamientos ofrecidos.
-     * Permite al paciente ver el catálogo antes de reservar un turno.
-     *
-     * Puede filtrar opcionalmente por un tipo de tratamiento específico.
-     *
-     * @param treatmentId ID del tratamiento para filtrar (opcional, puede ser null)
-     * @return Lista de tratamientos ofrecidos disponibles
-     */
     @Override
     @Transactional(readOnly = true)
     public List<OfferedTreatment> getAvailableOfferedTreatments(Long treatmentId) {
         if (treatmentId != null) {
-            // Filtrar por tipo de tratamiento específico
             return offeredTreatmentRepository.findByTreatmentId(treatmentId);
         }
-
-        // Retornar todos los tratamientos ofrecidos
         return offeredTreatmentRepository.findAll();
     }
 
-    /**
-     * Obtiene los slots de tiempo disponibles para un tratamiento ofrecido en una fecha específica.
-     * Implementa el cálculo de inventario dinámico delegando al servicio de dominio.
-     *
-     * Orquestación:
-     * 1. Carga el OfferedTreatment desde el repositorio
-     * 2. Delega al AvailabilityGenerationService para calcular los slots disponibles
-     * 3. Retorna la lista de slots (timestamps)
-     *
-     * @param offeredTreatmentId ID de la oferta de tratamiento
-     * @param requestedDate Fecha para la cual se consultan los horarios
-     * @return Lista de LocalDateTime con los slots disponibles
-     * @throws ResourceNotFoundException si el OfferedTreatment no existe
-     */
     @Override
     @Transactional(readOnly = true)
     public List<LocalDateTime> getAvailableSlots(Long offeredTreatmentId, LocalDate requestedDate) {
-        // Cargar el OfferedTreatment desde el repositorio
         OfferedTreatment offeredTreatment = offeredTreatmentRepository.findById(offeredTreatmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "OfferedTreatment",
                         "id",
                         offeredTreatmentId.toString()
                 ));
-
-        // Delegar al servicio de dominio para calcular el inventario dinámico
         return availabilityGenerationService.generateAvailableSlots(offeredTreatment, requestedDate);
     }
 
-    /**
-     * Implementa el caso de uso CU 4.1: "Gestionar Asistencia al Turno" - Marcar como completado.
-     *
-     * Orquestación:
-     * 1. Busca el Appointment desde el repositorio
-     * 2. Valida que el practicante sea el dueño de la atención asociada
-     * 3. Valida que el turno esté en estado SCHEDULED (regla de negocio)
-     * 4. Actualiza el estado directamente en la base de datos (sin re-mapear entidad completa)
-     *
-     * @param appointmentId ID del turno a marcar como completado
-     * @param practitionerUser Usuario practicante autenticado
-     * @return El Appointment actualizado con estado COMPLETED
-     * @throws ResourceNotFoundException si el turno no existe
-     * @throws site.utnpf.odontolink.domain.exception.UnauthorizedOperationException si el practicante no es el dueño
-     * @throws IllegalStateException si el turno no está en estado SCHEDULED
-     */
     @Override
     public Appointment markAppointmentAsCompleted(Long appointmentId, User practitionerUser) {
-        // Cargar el Appointment desde el repositorio con su Attention y Practitioner
         Appointment appointment = appointmentRepository.findByIdWithAttention(appointmentId)
-                .orElseThrow(() -> new site.utnpf.odontolink.domain.exception.ResourceNotFoundException(
+                .orElseThrow(() -> new ResourceNotFoundException(
                         "Appointment",
                         "id",
                         appointmentId.toString()
                 ));
 
-        // Validar pertenencia: Solo el practicante dueño de la atención puede marcar asistencia
         validatePractitionerOwnership(appointment, practitionerUser);
 
-        // Validar que el turno esté en estado SCHEDULED (regla de negocio)
         if (appointment.getStatus() != AppointmentStatus.SCHEDULED) {
-            throw new IllegalStateException("Solo se puede completar un turno 'Agendado'.");
+            throw new InvalidBusinessRuleException("Solo se puede completar un turno 'Agendado'.");
         }
 
-        // Actualizar el estado directamente en la base de datos
-        // Esto es más eficiente y evita problemas con referencias bidireccionales
         boolean updated = appointmentRepository.updateStatus(appointmentId, AppointmentStatus.COMPLETED);
-
         if (!updated) {
-            throw new IllegalStateException("No se pudo actualizar el estado del turno.");
+            throw new InvalidBusinessRuleException("No se pudo actualizar el estado del turno.");
         }
 
-        // Actualizar el estado en el objeto de dominio para retornarlo correctamente
         appointment.setStatus(AppointmentStatus.COMPLETED);
+        // COMPLETED no dispara el funnel: al haber trabajo clínico realizado
+        // la Atención debe permanecer abierta para futuras evoluciones o el
+        // cierre manual del practicante.
         return appointment;
     }
 
-    /**
-     * Implementa el caso de uso CU 4.1: "Gestionar Asistencia al Turno" - Marcar como ausente.
-     *
-     * Orquestación:
-     * 1. Busca el Appointment desde el repositorio
-     * 2. Valida que el practicante sea el dueño de la atención asociada
-     * 3. Valida que el turno esté en estado SCHEDULED (regla de negocio)
-     * 4. Actualiza el estado directamente en la base de datos (sin re-mapear entidad completa)
-     *
-     * @param appointmentId ID del turno a marcar como ausente
-     * @param practitionerUser Usuario practicante autenticado
-     * @return El Appointment actualizado con estado NO_SHOW
-     * @throws ResourceNotFoundException si el turno no existe
-     * @throws site.utnpf.odontolink.domain.exception.UnauthorizedOperationException si el practicante no es el dueño
-     * @throws IllegalStateException si el turno no está en estado SCHEDULED
-     */
     @Override
     public Appointment markAppointmentAsNoShow(Long appointmentId, User practitionerUser) {
-        // Cargar el Appointment desde el repositorio con su Attention y Practitioner
         Appointment appointment = appointmentRepository.findByIdWithAttention(appointmentId)
-                .orElseThrow(() -> new site.utnpf.odontolink.domain.exception.ResourceNotFoundException(
+                .orElseThrow(() -> new ResourceNotFoundException(
                         "Appointment",
                         "id",
                         appointmentId.toString()
                 ));
 
-        // Validar pertenencia: Solo el practicante dueño de la atención puede marcar asistencia
         validatePractitionerOwnership(appointment, practitionerUser);
 
-        // Validar que el turno esté en estado SCHEDULED (regla de negocio)
         if (appointment.getStatus() != AppointmentStatus.SCHEDULED) {
-            throw new IllegalStateException("Solo se puede marcar como 'Ausente' un turno 'Agendado'.");
+            throw new InvalidBusinessRuleException("Solo se puede marcar como 'Ausente' un turno 'Agendado'.");
         }
 
-        // Actualizar el estado directamente en la base de datos
-        // Esto es más eficiente y evita problemas con referencias bidireccionales
         boolean updated = appointmentRepository.updateStatus(appointmentId, AppointmentStatus.NO_SHOW);
-
         if (!updated) {
-            throw new IllegalStateException("No se pudo actualizar el estado del turno.");
+            throw new InvalidBusinessRuleException("No se pudo actualizar el estado del turno.");
         }
 
-        // Actualizar el estado en el objeto de dominio para retornarlo correctamente
         appointment.setStatus(AppointmentStatus.NO_SHOW);
+
+        // Funnel tracking: si el caso queda sin trabajo clínico ni próximos
+        // turnos, se cierra como CANCELLED automáticamente.
+        Long attentionId = appointment.getAttention() != null ? appointment.getAttention().getId() : null;
+        attentionPolicyService.closeAttentionIfAbandoned(attentionId);
+
+        return appointment;
+    }
+
+    @Override
+    public Appointment cancelAppointmentByPatient(Long appointmentId, String reason, User patientUser) {
+        Appointment appointment = appointmentRepository.findByIdWithAttention(appointmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Appointment",
+                        "id",
+                        appointmentId.toString()
+                ));
+
+        validatePatientOwnership(appointment, patientUser);
+
+        // Delegar al POJO la validación de estado y la normalización del motivo.
+        // El POJO acepta motivo nulo/vacío para el paciente.
+        appointment.cancelByPatient(reason);
+
+        boolean updated = appointmentRepository.updateStatusAndCancellationReason(
+                appointmentId,
+                AppointmentStatus.CANCELLED,
+                appointment.getCancellationReason()
+        );
+        if (!updated) {
+            throw new InvalidBusinessRuleException("No se pudo actualizar el estado del turno.");
+        }
+
+        Long attentionId = appointment.getAttention() != null ? appointment.getAttention().getId() : null;
+        attentionPolicyService.closeAttentionIfAbandoned(attentionId);
+
+        return appointment;
+    }
+
+    @Override
+    public Appointment cancelAppointmentByPractitioner(Long appointmentId, String reason, User practitionerUser) {
+        Appointment appointment = appointmentRepository.findByIdWithAttention(appointmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Appointment",
+                        "id",
+                        appointmentId.toString()
+                ));
+
+        validatePractitionerOwnership(appointment, practitionerUser);
+
+        // El POJO valida que el motivo no esté en blanco y arroja
+        // InvalidBusinessRuleException si lo está.
+        appointment.cancelByPractitioner(reason);
+
+        boolean updated = appointmentRepository.updateStatusAndCancellationReason(
+                appointmentId,
+                AppointmentStatus.CANCELLED,
+                appointment.getCancellationReason()
+        );
+        if (!updated) {
+            throw new InvalidBusinessRuleException("No se pudo actualizar el estado del turno.");
+        }
+
+        Long attentionId = appointment.getAttention() != null ? appointment.getAttention().getId() : null;
+        attentionPolicyService.closeAttentionIfAbandoned(attentionId);
+
         return appointment;
     }
 
     /**
      * Valida que el practicante autenticado sea el dueño de la atención asociada al turno.
-     *
-     * @param appointment Turno a validar
-     * @param practitionerUser Usuario practicante autenticado
-     * @throws site.utnpf.odontolink.domain.exception.UnauthorizedOperationException si el practicante no es el dueño
      */
     private void validatePractitionerOwnership(Appointment appointment, User practitionerUser) {
         Attention attention = appointment.getAttention();
 
         if (attention == null || attention.getPractitioner() == null) {
-            throw new IllegalStateException("El turno no tiene una atención asociada válida.");
+            throw new InvalidBusinessRuleException("El turno no tiene una atención asociada válida.");
         }
 
-        // Comparar el User del Practitioner con el User autenticado
         User practitionerOwner = attention.getPractitioner().getUser();
         if (practitionerOwner == null || !practitionerOwner.getId().equals(practitionerUser.getId())) {
-            throw new site.utnpf.odontolink.domain.exception.UnauthorizedOperationException(
-                    "Solo el practicante responsable de la atención puede marcar la asistencia del turno."
+            throw new UnauthorizedOperationException(
+                    "Solo el practicante responsable de la atención puede operar sobre este turno."
+            );
+        }
+    }
+
+    /**
+     * Valida que el paciente autenticado sea el dueño de la atención asociada al turno.
+     *
+     * Defensa en profundidad: aunque el endpoint del paciente exige rol
+     * PATIENT vía @PreAuthorize, esta verificación garantiza que un
+     * paciente con sesión válida no pueda cancelar el turno de otro
+     * paciente forzando un ID en la URL.
+     */
+    private void validatePatientOwnership(Appointment appointment, User patientUser) {
+        Attention attention = appointment.getAttention();
+
+        if (attention == null || attention.getPatient() == null) {
+            throw new InvalidBusinessRuleException("El turno no tiene una atención asociada válida.");
+        }
+
+        User patientOwner = attention.getPatient().getUser();
+        if (patientOwner == null || !patientOwner.getId().equals(patientUser.getId())) {
+            throw new UnauthorizedOperationException(
+                    "Solo el paciente titular de la atención puede operar sobre este turno."
             );
         }
     }

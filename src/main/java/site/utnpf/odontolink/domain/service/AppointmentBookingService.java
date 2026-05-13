@@ -7,19 +7,30 @@ import site.utnpf.odontolink.domain.repository.AppointmentRepository;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.AvailabilitySlotRepository;
 import site.utnpf.odontolink.domain.repository.ChatSessionRepository;
+import site.utnpf.odontolink.domain.repository.InstitutionalSettingsRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 
 import java.time.LocalDateTime;
 
 /**
  * Servicio de Dominio que implementa el "Rulebook" para la reserva de turnos.
- * Ejecuta las reglas de negocio críticas para el CU-008: "Reservar Turno".
+ * Ejecuta las reglas de negocio críticas del modelo "intent-driven":
  *
- * Responsabilidades (El "Rulebook"):
- * 1. Validar la Oferta: Verificar que el OfferedTreatment existe
- * 2. Validar Disponibilidad: Verificar que el horario solicitado cae dentro de un AvailabilitySlot válido
- * 3. Validar Conflictos: Verificar que ni el Paciente ni el Practicante tengan otro turno a la misma hora
- * 4. Crear el Dominio: Crear la Attention (caso clínico) y el Appointment (turno) inicialmente
+ * <ol>
+ *   <li><b>Validar la Oferta:</b> verifica que el OfferedTreatment existe.</li>
+ *   <li><b>Validar Disponibilidad:</b> el horario debe caer dentro de un
+ *       AvailabilitySlot publicado.</li>
+ *   <li><b>Validar Conflictos:</b> ni el paciente ni el practicante deben
+ *       tener un turno solapado en el tiempo.</li>
+ *   <li><b>Agrupar en la Atención existente:</b> si ya hay un caso clínico
+ *       IN_PROGRESS para el trío paciente/practicante/tratamiento, el nuevo
+ *       turno se agrega ahí; si no, se crea una Atención nueva.</li>
+ *   <li><b>Regla anti-acaparamiento dinámica:</b> respeta el límite de
+ *       turnos SCHEDULED concurrentes que define
+ *       {@link InstitutionalSettings#getMaxConcurrentAppointmentsPerAttention()}.
+ *       El valor se lee en cada reserva para que el administrador pueda
+ *       ajustarlo sin redeploy y los efectos sean inmediatos.</li>
+ * </ol>
  *
  * Este servicio opera exclusivamente con POJOs de dominio, sin conocimiento de infraestructura.
  *
@@ -32,46 +43,51 @@ public class AppointmentBookingService {
     private final AppointmentRepository appointmentRepository;
     private final AttentionRepository attentionRepository;
     private final ChatSessionRepository chatSessionRepository;
+    private final InstitutionalSettingsRepository institutionalSettingsRepository;
 
     public AppointmentBookingService(
             OfferedTreatmentRepository offeredTreatmentRepository,
             AvailabilitySlotRepository availabilitySlotRepository,
             AppointmentRepository appointmentRepository,
             AttentionRepository attentionRepository,
-            ChatSessionRepository chatSessionRepository) {
+            ChatSessionRepository chatSessionRepository,
+            InstitutionalSettingsRepository institutionalSettingsRepository) {
         this.offeredTreatmentRepository = offeredTreatmentRepository;
         this.availabilitySlotRepository = availabilitySlotRepository;
         this.appointmentRepository = appointmentRepository;
         this.attentionRepository = attentionRepository;
         this.chatSessionRepository = chatSessionRepository;
+        this.institutionalSettingsRepository = institutionalSettingsRepository;
     }
 
     /**
-     * Reserva el primer turno para un paciente, creando atómicamente el "Caso Clínico" (Attention)
-     * y la primera "Cita" (Appointment).
+     * Reserva un turno aplicando todas las reglas del "Rulebook".
      *
-     * Este es el método principal que implementa toda la lógica del "Rulebook":
-     * - Valida la oferta
-     * - Valida la disponibilidad del horario
-     * - Valida que no haya conflictos
-     * - Crea la Attention y su primer Appointment
+     * Maneja tanto la <b>primera</b> reserva (crea atómicamente Atención +
+     * Appointment) como las <b>subsecuentes</b> (agrupa el turno dentro de
+     * la Atención IN_PROGRESS existente). El consumidor no necesita saber
+     * en qué caso se encuentra: la decisión vive aquí.
      *
      * Flujo de ejecución:
-     * 1. Cargar y validar el OfferedTreatment
-     * 2. Validar que el appointmentTime esté dentro de un AvailabilitySlot válido
-     * 3. Validar que no existan conflictos de horario (Paciente y Practicante)
-     * 4. Verificar si ya existe una Attention abierta para este paciente-practicante-tratamiento
-     * 5. Si existe, agregar el turno a esa Attention; si no, crear una nueva Attention
-     * 6. Devolver la Attention con el nuevo Appointment
+     * <ol>
+     *   <li>Cargar y validar el OfferedTreatment.</li>
+     *   <li>Validar que el appointmentTime esté dentro de un AvailabilitySlot válido.</li>
+     *   <li>Validar que no existan conflictos de horario (Paciente y Practicante).</li>
+     *   <li>Buscar (o crear) la Atención IN_PROGRESS para el trío.</li>
+     *   <li>Aplicar la regla anti-acaparamiento usando el límite dinámico
+     *       de InstitutionalSettings sobre la Atención resultante.</li>
+     *   <li>Materializar el nuevo Appointment dentro de la Atención.</li>
+     *   <li>Crear ChatSession si todavía no existe (RF27).</li>
+     * </ol>
      *
      * @param patient            El paciente que solicita el turno
      * @param offeredTreatmentId El ID de la oferta de tratamiento seleccionada
      * @param appointmentTime    La fecha y hora exactas del turno solicitado
-     * @return La Attention creada o actualizada, con el nuevo Appointment en su lista
+     * @return La Atención (existente o nueva) con el Appointment recién agregado
      * @throws ResourceNotFoundException    Si el OfferedTreatment no existe
      * @throws InvalidBusinessRuleException Si alguna regla de negocio falla
      */
-    public Attention bookFirstAppointment(
+    public Attention bookAppointment(
             Patient patient,
             Long offeredTreatmentId,
             LocalDateTime appointmentTime) {
@@ -95,12 +111,16 @@ public class AppointmentBookingService {
                 offeredTreatment.getTreatment()
         );
 
+        // Regla anti-acaparamiento (Regla de Negocio 3 - límite dinámico)
+        enforceConcurrentAppointmentLimit(attention);
+
         // Usar el método de dominio rico de Attention para crear el Appointment
-        Appointment newAppointment = attention.scheduleAppointment(
-                appointmentTime,
-                "Primer turno - Inicio de tratamiento",
-                durationInMinutes
-        );
+        // Si la Atención ya existía, el motivo se diferencia para no inducir
+        // a confusión al lector clínico (esto NO es el "primer turno").
+        String motive = (attention.getId() == null)
+                ? "Primer turno - Inicio de tratamiento"
+                : "Turno adicional del caso";
+        attention.scheduleAppointment(appointmentTime, motive, durationInMinutes);
 
         // Crear ChatSession automáticamente si no existe (RF27)
         // Esto establece el canal de comunicación entre paciente y practicante
@@ -109,6 +129,44 @@ public class AppointmentBookingService {
         // Devolver la Attention (con el Appointment en su lista)
         // El servicio de aplicación se encargará de la persistencia transaccional
         return attention;
+    }
+
+    /**
+     * Aplica la regla anti-acaparamiento dinámica.
+     *
+     * Lee el límite vigente de los InstitutionalSettings —no está
+     * hardcodeado— y lo compara con la cantidad de turnos SCHEDULED ya
+     * vivos en la Atención. Si el nuevo turno haría que se exceda el
+     * límite, se aborta la reserva.
+     *
+     * Casos límite contemplados:
+     * <ul>
+     *   <li><b>Atención nueva</b> (id null): no hay SCHEDULED previos, el
+     *       conteo es 0 y +1 cabe siempre que el límite sea ≥ 1 (lo cual
+     *       el dominio de Settings ya garantiza).</li>
+     *   <li><b>Atención existente</b>: se cuentan los SCHEDULED actuales
+     *       y se le suma el que estamos por crear.</li>
+     * </ul>
+     */
+    private void enforceConcurrentAppointmentLimit(Attention attention) {
+        int limit = institutionalSettingsRepository.findSingleton()
+                .map(InstitutionalSettings::getMaxConcurrentAppointmentsPerAttention)
+                .orElse(InstitutionalSettings.DEFAULT_MAX_CONCURRENT_APPOINTMENTS);
+
+        long currentScheduled = (attention.getId() == null)
+                ? 0L
+                : appointmentRepository.countByAttentionIdAndStatus(
+                        attention.getId(),
+                        AppointmentStatus.SCHEDULED
+                );
+
+        if (currentScheduled + 1 > limit) {
+            throw new InvalidBusinessRuleException(
+                    "No puede reservar otro turno para este caso clínico mientras tenga " +
+                    limit + " turno(s) agendado(s) pendiente(s). " +
+                    "Espere a que se complete o cancele para reservar uno nuevo."
+            );
+        }
     }
 
     /**

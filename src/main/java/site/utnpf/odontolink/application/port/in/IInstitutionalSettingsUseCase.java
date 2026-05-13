@@ -22,12 +22,13 @@ public interface IInstitutionalSettingsUseCase {
      * Actualiza el agregado con la fotografía completa de campos. Se
      * exige una actualización total (no parcial) para forzar al cliente
      * a tomar siempre decisiones explícitas sobre cada parámetro
-     * institucional.
+     * institucional, incluido el límite anti-acaparamiento.
      */
     InstitutionalSettings updateSettings(String institutionName,
                                          String openingHours,
                                          String usagePolicies,
                                          String contactEmail,
                                          String contactPhone,
-                                         String contactAddress);
+                                         String contactAddress,
+                                         int maxConcurrentAppointmentsPerAttention);
 }
