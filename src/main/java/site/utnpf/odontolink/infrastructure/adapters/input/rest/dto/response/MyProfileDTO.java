@@ -1,85 +1,65 @@
-package site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity;
+package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 
-import jakarta.persistence.*;
-import site.utnpf.odontolink.domain.model.Role;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 import java.time.LocalDate;
 
 /**
- * Entidad JPA para la tabla 'users'.
- * Representa la persistencia de un User del dominio.
+ * DTO de respuesta para el autoservicio de perfil (RF06).
+ *
+ * Expone la vista que el usuario autenticado tiene de sí mismo. Se separa
+ * del {@link AdminUserDTO} porque la audiencia es distinta: aquí el usuario
+ * ve su propio rol como dato informativo y, a futuro, podríamos sumar
+ * preferencias personales que el admin no necesita. Mantenerlos
+ * desacoplados evita que evoluciones de un caso de uso filtren al otro.
+ *
+ * La contraseña no aparece — ni siquiera como campo serializado a null —
+ * para reducir la superficie de fugas accidentales.
  */
-@Entity
-@Table(name = "users")
-public class UserEntity {
+@Schema(description = "Vista de perfil del usuario autenticado (autoservicio - RF06)")
+public class MyProfileDTO {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Schema(description = "Identificador del usuario", example = "15")
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 100)
+    @Schema(description = "Email", example = "carlos.rodriguez@gmail.com")
     private String email;
 
-    @Column(nullable = false)
-    private String password;
+    @Schema(description = "Rol", example = "ROLE_PATIENT")
+    private String role;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
-    private Role role;
-
-    @Column(nullable = false)
+    @Schema(description = "Indica si la cuenta está activa", example = "true")
     private boolean isActive;
 
-    @Column(nullable = false, length = 100)
+    @Schema(description = "Nombre", example = "Carlos")
     private String firstName;
 
-    @Column(nullable = false, length = 100)
+    @Schema(description = "Apellido", example = "Rodríguez")
     private String lastName;
 
-    @Column(nullable = false, unique = true, length = 20)
+    @Schema(description = "DNI (sólo lectura desde este endpoint)", example = "35789456")
     private String dni;
 
-    @Column(length = 20)
+    @Schema(description = "Teléfono", example = "3815234567")
     private String phone;
 
-    @Column
+    @Schema(description = "Fecha de nacimiento", example = "1995-06-15")
     private LocalDate birthDate;
 
-    /**
-     * Dirección postal del usuario (RF06). Es opcional y se modela como
-     * string libre porque hoy no la usamos para georreferenciación: 255
-     * caracteres son suficientes para una dirección humanamente legible.
-     */
-    @Column(length = 255)
+    @Schema(description = "Dirección postal", example = "Av. Independencia 1234")
     private String address;
 
-    /**
-     * URL pública (o pre-firmada) de la foto de perfil (RF06). En este PR no
-     * gestionamos el archivo binario; la columna almacena exclusivamente la
-     * URL ya resuelta por el frontend o por un futuro adapter de uploads.
-     */
-    @Column(name = "profile_picture_url", length = 512)
+    @Schema(description = "URL de la foto de perfil",
+            example = "https://cdn.odontolink/u/15/avatar.png")
     private String profilePictureUrl;
 
-    @Column(nullable = false, updatable = false)
+    @Schema(description = "Fecha de creación de la cuenta", example = "2025-08-12T19:34:21Z")
     private Instant createdAt;
 
-    @PrePersist
-    protected void onCreate() {
-        if (createdAt == null) {
-            createdAt = Instant.now();
-        }
-        if (!isActive) {
-            isActive = true;
-        }
+    public MyProfileDTO() {
     }
 
-    // Constructores
-    public UserEntity() {
-    }
-
-    // Getters y Setters
     public Long getId() {
         return id;
     }
@@ -96,19 +76,11 @@ public class UserEntity {
         this.email = email;
     }
 
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public Role getRole() {
+    public String getRole() {
         return role;
     }
 
-    public void setRole(Role role) {
+    public void setRole(String role) {
         this.role = role;
     }
 

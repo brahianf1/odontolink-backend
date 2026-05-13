@@ -22,6 +22,21 @@ public class User {
     private String phone;
     private LocalDate birthDate;
 
+    /**
+     * Dirección postal. Modelada como string libre porque en este momento no
+     * la usamos para geolocalización ni para validaciones estructuradas; un
+     * VARCHAR es suficiente para el caso de uso de autoservicio del RF06.
+     */
+    private String address;
+
+    /**
+     * URL pública (o firmada) que apunta a la foto de perfil del usuario.
+     * Modelamos sólo la URL porque en este PR no hay infraestructura de
+     * almacenamiento de binarios (S3/MinIO): el frontend o un futuro adapter
+     * se encargarán de subir el archivo y entregarnos la URL ya resuelta.
+     */
+    private String profilePictureUrl;
+
     private Instant createdAt;
 
     // Constructores
@@ -96,6 +111,50 @@ public class User {
         //    throw new SecurityException("Contraseña actual incorrecta");
         // }
         this.password = newPasswordHash;
+    }
+
+    /**
+     * Actualiza los datos modificables por el propio usuario autenticado
+     * desde el flujo de autoservicio (RF06).
+     *
+     * Se separa deliberadamente de {@link #updateProfile} (RF05) porque la
+     * autoservicio tiene reglas distintas a la administrativa:
+     * <ul>
+     *   <li>El usuario SÍ puede modificar su propio email — el chequeo de
+     *       unicidad se delega al servicio de aplicación que tiene acceso al
+     *       puerto del repositorio.</li>
+     *   <li>El DNI sigue inmutable: es identificador funcional y de
+     *       trazabilidad clínica, no debe poder reescribirse desde una API
+     *       de perfil.</li>
+     *   <li>Se admiten dos campos nuevos del RF06: {@code address} y
+     *       {@code profilePictureUrl}.</li>
+     * </ul>
+     * Aceptar {@code null} para campos opcionales (teléfono, fecha de
+     * nacimiento, dirección, foto) implica limpieza explícita: el adaptador
+     * REST decide qué enviar y qué omitir.
+     */
+    public void updateSelfProfile(String email,
+                                  String firstName,
+                                  String lastName,
+                                  String phone,
+                                  LocalDate birthDate,
+                                  String address,
+                                  String profilePictureUrl) {
+        if (email != null) {
+            this.email = email;
+        }
+        if (firstName != null) {
+            this.firstName = firstName;
+        }
+        if (lastName != null) {
+            this.lastName = lastName;
+        }
+        // Los campos opcionales se sobreescriben siempre con el valor recibido
+        // (incluido null) para permitir "limpiar" el dato desde la UI.
+        this.phone = phone;
+        this.birthDate = birthDate;
+        this.address = address;
+        this.profilePictureUrl = profilePictureUrl;
     }
 
     // Getters y Setters
@@ -177,6 +236,22 @@ public class User {
 
     public void setBirthDate(LocalDate birthDate) {
         this.birthDate = birthDate;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public String getProfilePictureUrl() {
+        return profilePictureUrl;
+    }
+
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
     }
 
     public Instant getCreatedAt() {
