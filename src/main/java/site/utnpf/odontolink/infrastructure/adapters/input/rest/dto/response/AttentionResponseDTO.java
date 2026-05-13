@@ -1,5 +1,6 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import site.utnpf.odontolink.domain.model.AttentionStatus;
 
 import java.time.LocalDate;
@@ -11,25 +12,48 @@ import java.util.List;
  *
  * Contiene la información completa de la atención y sus turnos asociados.
  */
+@Schema(description = "Caso clínico (atención) completo: estado, paciente, practicante, tratamiento y " +
+        "lista de turnos asociados. Es el objeto base del expediente clínico que consume el frontend.")
 public class AttentionResponseDTO {
 
+    @Schema(description = "Identificador único del caso clínico.", example = "23")
     private Long id;
+
+    @Schema(description = "Estado del caso. `IN_PROGRESS` permite registrar evoluciones y agendar/cancelar " +
+            "turnos; `COMPLETED` es el cierre exitoso por el practicante y habilita el flujo de feedback; " +
+            "`CANCELLED` es el cierre lógico por abandono temprano (sin trabajo clínico realizado).",
+            example = "IN_PROGRESS",
+            allowableValues = {"IN_PROGRESS", "COMPLETED", "CANCELLED"})
     private AttentionStatus status;
+
+    @Schema(description = "Fecha de inicio del caso (creación). Formato ISO-8601 sin zona horaria.",
+            example = "2025-11-10")
     private LocalDate startDate;
 
     // Información del paciente
+    @Schema(description = "ID del paciente del caso.", example = "15")
     private Long patientId;
+
+    @Schema(description = "Nombre completo del paciente del caso.", example = "Carlos Rodriguez")
     private String patientName;
 
     // Información del practicante
+    @Schema(description = "ID del practicante responsable del caso.", example = "8")
     private Long practitionerId;
+
+    @Schema(description = "Nombre completo del practicante responsable del caso.", example = "Ana Martinez")
     private String practitionerName;
 
     // Información del tratamiento
+    @Schema(description = "ID del tratamiento del catálogo maestro asociado al caso.", example = "3")
     private Long treatmentId;
+
+    @Schema(description = "Nombre del tratamiento asociado al caso.", example = "Limpieza Dental")
     private String treatmentName;
 
     // Lista de turnos asociados a esta atención
+    @Schema(description = "Lista de turnos (appointments) que componen el caso clínico, en cualquier estado " +
+            "(SCHEDULED, COMPLETED, NO_SHOW, CANCELLED).")
     private List<AppointmentResponseDTO> appointments;
 
     // Constructores
