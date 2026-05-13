@@ -1,5 +1,6 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.DayOfWeek;
@@ -14,14 +15,25 @@ import java.time.LocalTime;
  *
  * @author OdontoLink Team
  */
+@Schema(description = "Franja horaria de disponibilidad semanal del practicante para un tratamiento.")
 public class AvailabilitySlotDTO {
 
+    @Schema(description = "Día de la semana de la franja, en inglés (enum `java.time.DayOfWeek`).",
+            example = "MONDAY",
+            allowableValues = {"MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"},
+            required = true)
     @NotNull(message = "El día de la semana es obligatorio")
     private DayOfWeek dayOfWeek;
 
+    @Schema(description = "Hora de inicio de la franja, en formato `HH:mm:ss`.",
+            example = "08:00:00",
+            required = true)
     @NotNull(message = "La hora de inicio es obligatoria")
     private LocalTime startTime;
 
+    @Schema(description = "Hora de fin de la franja, en formato `HH:mm:ss`. Debe ser posterior a `startTime`.",
+            example = "12:00:00",
+            required = true)
     @NotNull(message = "La hora de fin es obligatoria")
     private LocalTime endTime;
 

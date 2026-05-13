@@ -1,6 +1,8 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -23,6 +25,7 @@ import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.AddO
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.CancelAppointmentByPractitionerRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.UpdateOfferedTreatmentRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AppointmentResponseDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ErrorResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.OfferedTreatmentDeletionResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.OfferedTreatmentResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.AppointmentRestMapper;
@@ -43,17 +46,21 @@ import java.util.stream.Collectors;
  * - POST   /api/practitioner/offered-treatments          - Agregar tratamiento (CU-005)
  * - GET    /api/practitioner/offered-treatments          - Obtener mi catálogo
  * - PUT    /api/practitioner/offered-treatments/{id}     - Modificar tratamiento (CU-006)
- * - DELETE /api/practitioner/offered-treatments/{id}     - Eliminar tratamiento (CU-007)
+ * - DELETE /api/practitioner/offered-treatments/{id}     - Eliminar tratamiento (CU-007 / RF16)
  *
  * Endpoints de Turnos:
- * - GET    /api/practitioner/appointments/upcoming       - Ver mis turnos agendados
+ * - GET    /api/practitioner/appointments/upcoming                   - Listar turnos agendados
+ * - POST   /api/practitioner/appointments/{id}/complete              - Marcar como completado (RF09)
+ * - POST   /api/practitioner/appointments/{id}/no-show               - Marcar como ausente   (RF09)
+ * - POST   /api/practitioner/appointments/{id}/cancel                - Cancelar turno         (RF14)
  *
  * @author OdontoLink Team
  */
 @RestController
 @RequestMapping("/api/practitioner")
 @PreAuthorize("hasRole('PRACTITIONER')")
-@Tag(name = "Practicantes", description = "Operaciones para practicantes: gestionar catálogo de tratamientos ofrecidos y consultar turnos asignados")
+@Tag(name = "Practicantes", description = "Operaciones disponibles para usuarios con rol PRACTITIONER: " +
+        "administrar el catálogo personal de tratamientos ofrecidos y gestionar la agenda de turnos asignados.")
 @SecurityRequirement(name = "Bearer Authentication")
 public class PractitionerController {
 
@@ -69,18 +76,26 @@ public class PractitionerController {
         this.authenticationFacade = authenticationFacade;
     }
 
+    // ---------------------------------------------------------------------
+    //  CATÁLOGO PERSONAL DEL PRACTICANTE (offered-treatments)
+    // ---------------------------------------------------------------------
+
     @Operation(
-            summary = "Agregar tratamiento al catálogo",
-            description = "Agrega un tratamiento al catálogo personal del practicante"
+            summary = "Agregar un tratamiento al catálogo personal (CU-005)",
+            description = "Publica un tratamiento del catálogo maestro dentro del catálogo personal del " +
+                    "practicante autenticado, con sus horarios de disponibilidad, duración, vigencia y " +
+                    "cupo académico máximo. El practicante se infiere del JWT; el frontend no debe " +
+                    "enviar `practitionerId`."
     )
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "201",
-                    description = "Tratamiento agregado exitosamente",
+                    description = "Tratamiento agregado exitosamente al catálogo personal.",
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = OfferedTreatmentResponseDTO.class),
                             examples = @ExampleObject(
+                                    name = "Tratamiento creado",
                                     value = """
                                             {
                                               "id": 1,
@@ -104,16 +119,16 @@ public class PractitionerController {
                                                   "dayOfWeek": "FRIDAY",
                                                   "startTime": "08:00:00",
                                                   "endTime": "12:00:00"
-                                                },
-                                                {
-                                                  "dayOfWeek": "MONDAY",
-                                                  "startTime": "08:00:00",
-                                                  "endTime": "12:00:00"
                                                 }
                                               ],
                                               "offerStartDate": "2025-01-15",
                                               "offerEndDate": "2025-06-30",
-                                              "maxCompletedAttentions": 10
+                                              "maxCompletedAttentions": 10,
+                                              "currentCompletedAttentions": 0,
+                                              "currentActiveAttentions": 0,
+                                              "currentCancelledAttentions": 0,
+                                              "availabilityBlocked": false,
+                                              "active": true
                                             }
                                             """
                             )
@@ -121,16 +136,44 @@ public class PractitionerController {
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "Datos inválidos o tratamiento ya existe en el catálogo",
-                    content = @Content(mediaType = "application/json")
+                    description = "Bean Validation falló (campos requeridos faltantes, " +
+                            "duración no positiva, lista de horarios vacía, etc.).",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Token JWT ausente o inválido.",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "El usuario autenticado no posee el rol PRACTITIONER.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "El tratamiento maestro referenciado por `treatmentId` no existe.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "422",
+                    description = "Violación de regla de negocio: el tratamiento ya existe en el catálogo " +
+                            "personal, los rangos de fecha son inválidos o los horarios son inconsistentes.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
             )
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Datos del tratamiento a agregar",
+            description = "Datos del tratamiento a publicar en el catálogo personal.",
             required = true,
             content = @Content(
                     mediaType = "application/json",
+                    schema = @Schema(implementation = AddOfferedTreatmentRequestDTO.class),
                     examples = @ExampleObject(
+                            name = "Alta de oferta",
                             value = """
                                     {
                                       "treatmentId": 1,
@@ -146,11 +189,6 @@ public class PractitionerController {
                                           "dayOfWeek": "WEDNESDAY",
                                           "startTime": "14:00:00",
                                           "endTime": "18:00:00"
-                                        },
-                                        {
-                                          "dayOfWeek": "FRIDAY",
-                                          "startTime": "08:00:00",
-                                          "endTime": "12:00:00"
                                         }
                                       ],
                                       "offerStartDate": "2025-01-15",
@@ -185,16 +223,44 @@ public class PractitionerController {
 
     /**
      * Obtiene todos los tratamientos que ofrece el practicante autenticado,
-     * enriquecidos con el progreso actual de atenciones completadas.
-     * Corresponde al "Mi Catálogo Personal".
+     * enriquecidos con el progreso actual de atenciones completadas, activas
+     * y canceladas. Corresponde al "Mi Catálogo Personal".
      *
-     * Este endpoint implementa una consulta optimizada que evita el problema N+1:
-     * - Realiza una consulta para obtener las ofertas del practicante
-     * - Realiza una única consulta con GROUP BY para obtener el progreso de todas las ofertas
-     * - Combina ambos resultados en memoria para construir los DTOs enriquecidos
+     * Implementa una consulta optimizada que evita el problema N+1:
+     * - Una consulta para obtener las ofertas del practicante.
+     * - Una consulta agregada con GROUP BY para el progreso de todas las ofertas.
+     * - Combinación en memoria para construir los DTOs enriquecidos.
      *
      * GET /api/practitioner/offered-treatments
      */
+    @Operation(
+            summary = "Obtener el catálogo personal del practicante",
+            description = "Devuelve todas las ofertas de tratamientos publicadas por el practicante " +
+                    "autenticado (incluyendo las desactivadas por Baja Lógica), enriquecidas con " +
+                    "el progreso académico: atenciones completadas, activas y canceladas. " +
+                    "Se calcula la bandera `availabilityBlocked` cuando `completed + active >= maxCompletedAttentions`."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Catálogo personal del practicante, posiblemente vacío.",
+                    content = @Content(
+                            mediaType = "application/json",
+                            array = @ArraySchema(schema = @Schema(implementation = OfferedTreatmentResponseDTO.class))
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Token JWT ausente o inválido.",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "El usuario autenticado no posee el rol PRACTITIONER.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            )
+    })
     @GetMapping("/offered-treatments")
     public ResponseEntity<List<OfferedTreatmentResponseDTO>> getMyOfferedTreatments() {
 
@@ -224,8 +290,82 @@ public class PractitionerController {
      *
      * PUT /api/practitioner/offered-treatments/{id}
      */
+    @Operation(
+            summary = "Modificar una oferta del catálogo personal (CU-006)",
+            description = "Actualiza requisitos, duración, horarios, vigencia y cupo máximo de una oferta " +
+                    "perteneciente al practicante autenticado. La oferta debe existir y pertenecer al " +
+                    "practicante autenticado (defensa de ownership en el caso de uso)."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Oferta actualizada correctamente.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = OfferedTreatmentResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Bean Validation falló (lista de horarios vacía, fechas faltantes, " +
+                            "cupo no positivo, etc.).",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Token JWT ausente o inválido.",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "La oferta no pertenece al practicante autenticado (ownership) " +
+                            "o el usuario no posee el rol PRACTITIONER.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Oferta no encontrada para el `id` indicado.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "422",
+                    description = "Violación de regla de negocio: rangos de fecha inválidos, horarios " +
+                            "inconsistentes o cupo máximo menor a las atenciones ya completadas.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            )
+    })
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Datos a actualizar en la oferta.",
+            required = true,
+            content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = UpdateOfferedTreatmentRequestDTO.class),
+                    examples = @ExampleObject(
+                            name = "Actualización de oferta",
+                            value = """
+                                    {
+                                      "requirements": "Traer cepillo dental propio y radiografía panorámica.",
+                                      "durationInMinutes": 45,
+                                      "availabilitySlots": [
+                                        {
+                                          "dayOfWeek": "TUESDAY",
+                                          "startTime": "09:00:00",
+                                          "endTime": "13:00:00"
+                                        }
+                                      ],
+                                      "offerStartDate": "2025-02-01",
+                                      "offerEndDate": "2025-07-31",
+                                      "maxCompletedAttentions": 12
+                                    }
+                                    """
+                    )
+            )
+    )
     @PutMapping("/offered-treatments/{id}")
     public ResponseEntity<OfferedTreatmentResponseDTO> updateOfferedTreatment(
+            @Parameter(description = "ID de la oferta a modificar.", example = "1", required = true)
             @PathVariable Long id,
             @Valid @RequestBody UpdateOfferedTreatmentRequestDTO request) {
 
@@ -268,25 +408,72 @@ public class PractitionerController {
      * DELETE /api/practitioner/offered-treatments/{id}
      */
     @Operation(
-            summary = "Eliminar/desactivar tratamiento del catálogo (RF16)",
-            description = "Si la oferta tiene turnos agendados a futuro o atenciones asociadas, " +
-                    "se aplica Baja Lógica (soft delete) preservando integridad. " +
-                    "Si no hay rastro, se elimina físicamente. El body de la respuesta indica el outcome."
+            summary = "Eliminar o desactivar una oferta del catálogo personal (CU-007 / RF16)",
+            description = "Aplica una estrategia híbrida de eliminación según el rastro de la oferta:\n\n" +
+                    "- **HARD DELETE**: si la oferta nunca tuvo turnos ni atenciones, se borra físicamente.\n" +
+                    "- **SOFT DELETE (Baja Lógica)**: si existen turnos SCHEDULED a futuro, atenciones IN_PROGRESS " +
+                    "o cualquier atención histórica, la oferta se marca como `active=false` para preservar " +
+                    "la integridad referencial de las citas y atenciones ya otorgadas. La oferta deja de " +
+                    "aparecer en el catálogo público pero el histórico se mantiene navegable.\n\n" +
+                    "**Importante para el frontend**: en ambos casos la respuesta es `200 OK` (no `204 No Content`). " +
+                    "El campo `outcome` del cuerpo (`HARD_DELETED` | `SOFT_DELETED`) indica cuál fue la decisión " +
+                    "para que la UI muestre el feedback adecuado al practicante."
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200",
-                    description = "Resultado de la operación (SOFT_DELETED | HARD_DELETED)",
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Resultado de la operación. `outcome` indica si la oferta fue eliminada " +
+                            "físicamente (HARD_DELETED) o desactivada lógicamente (SOFT_DELETED).",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = OfferedTreatmentDeletionResponseDTO.class),
+                            examples = {
+                                    @ExampleObject(
+                                            name = "Baja Lógica (RF16)",
+                                            summary = "La oferta tenía turnos o atenciones asociadas",
+                                            value = """
+                                                    {
+                                                      "outcome": "SOFT_DELETED",
+                                                      "message": "La oferta se desactivó: existen turnos agendados a futuro. Se conserva la integridad referencial de las citas ya otorgadas. Ya no aparecerá en el catálogo público."
+                                                    }
+                                                    """
+                                    ),
+                                    @ExampleObject(
+                                            name = "Baja Física",
+                                            summary = "La oferta nunca fue utilizada",
+                                            value = """
+                                                    {
+                                                      "outcome": "HARD_DELETED",
+                                                      "message": "La oferta se eliminó físicamente: no tenía turnos ni atenciones asociadas."
+                                                    }
+                                                    """
+                                    )
+                            }
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Token JWT ausente o inválido.",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "La oferta no pertenece al practicante autenticado (ownership) " +
+                            "o el usuario no posee el rol PRACTITIONER.",
                     content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = OfferedTreatmentDeletionResponseDTO.class))),
-            @ApiResponse(responseCode = "403",
-                    description = "La oferta no pertenece al practicante autenticado",
-                    content = @Content(mediaType = "application/json")),
-            @ApiResponse(responseCode = "404",
-                    description = "Oferta no encontrada",
-                    content = @Content(mediaType = "application/json"))
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Oferta no encontrada para el `id` indicado.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            )
     })
     @DeleteMapping("/offered-treatments/{id}")
-    public ResponseEntity<OfferedTreatmentDeletionResponseDTO> removeFromCatalog(@PathVariable Long id) {
+    public ResponseEntity<OfferedTreatmentDeletionResponseDTO> removeFromCatalog(
+            @Parameter(description = "ID de la oferta a eliminar/desactivar.", example = "1", required = true)
+            @PathVariable Long id) {
 
         Long practitionerId = authenticationFacade.getAuthenticatedPractitionerId();
         OfferedTreatmentDeletionResult result = offeredTreatmentUseCase.removeFromCatalog(practitionerId, id);
@@ -294,23 +481,69 @@ public class PractitionerController {
         return ResponseEntity.ok(OfferedTreatmentDeletionResponseDTO.from(result));
     }
 
+    // ---------------------------------------------------------------------
+    //  GESTIÓN DE TURNOS DEL PRACTICANTE (appointments)
+    // ---------------------------------------------------------------------
+
     /**
      * Obtiene todos los turnos agendados (SCHEDULED) del practicante autenticado.
      * Endpoint de lectura "Mis Turnos".
-     *
-     * El practicante puede ver:
-     * - Fecha y hora de cada turno
-     * - Estado del turno
-     * - Paciente asociado
-     * - Tratamiento asociado
-     *
-     * Este endpoint permite al practicante gestionar su agenda y ver qué pacientes
-     * tiene agendados para cada fecha.
      *
      * GET /api/practitioner/appointments/upcoming
      *
      * @return Lista de turnos agendados del practicante
      */
+    @Operation(
+            summary = "Listar los próximos turnos del practicante",
+            description = "Devuelve los turnos en estado `SCHEDULED` del practicante autenticado, " +
+                    "ordenados cronológicamente. Cada elemento incluye fecha/hora, duración, " +
+                    "tratamiento, paciente, atención asociada y motivo del turno. Útil para " +
+                    "la vista 'Mi Agenda' y para decidir desde la UI sobre qué turno se " +
+                    "habilitarán las acciones de completar, marcar ausente o cancelar."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Listado de turnos próximos, posiblemente vacío.",
+                    content = @Content(
+                            mediaType = "application/json",
+                            array = @ArraySchema(schema = @Schema(implementation = AppointmentResponseDTO.class)),
+                            examples = @ExampleObject(
+                                    name = "Agenda del practicante",
+                                    value = """
+                                            [
+                                              {
+                                                "id": 45,
+                                                "appointmentTime": "2025-11-15T10:00:00",
+                                                "motive": "Control de rutina semestral.",
+                                                "status": "SCHEDULED",
+                                                "durationInMinutes": 45,
+                                                "cancellationReason": null,
+                                                "treatmentId": 3,
+                                                "treatmentName": "Limpieza Dental",
+                                                "patientId": 15,
+                                                "patientName": "Carlos Rodriguez",
+                                                "practitionerId": 8,
+                                                "practitionerName": "Ana Martinez",
+                                                "attentionId": 23
+                                              }
+                                            ]
+                                            """
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Token JWT ausente o inválido.",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "El usuario autenticado no posee el rol PRACTITIONER.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            )
+    })
     @GetMapping("/appointments/upcoming")
     public ResponseEntity<List<AppointmentResponseDTO>> getMyUpcomingAppointments() {
 
@@ -326,29 +559,36 @@ public class PractitionerController {
     }
 
     @Operation(
-            summary = "Marcar turno como completado",
-            description = "Registra la asistencia del paciente al turno"
+            summary = "Marcar un turno como completado (RF09)",
+            description = "Registra la asistencia del paciente al turno. Sólo aplica sobre turnos en " +
+                    "estado `SCHEDULED`; cualquier otro estado devuelve 422. El practicante autenticado " +
+                    "debe ser el responsable de la atención asociada (verificación de ownership en el " +
+                    "caso de uso), de lo contrario responde 403. Marcar como completado NO dispara el " +
+                    "cierre automático de la atención, porque ya hubo trabajo clínico realizado."
     )
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "200",
-                    description = "Turno marcado como completado",
+                    description = "Turno marcado como completado correctamente.",
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = AppointmentResponseDTO.class),
                             examples = @ExampleObject(
+                                    name = "Turno completado",
                                     value = """
                                             {
                                               "id": 45,
                                               "appointmentTime": "2025-11-15T10:00:00",
+                                              "motive": "Control de rutina semestral.",
                                               "status": "COMPLETED",
                                               "durationInMinutes": 45,
+                                              "cancellationReason": null,
                                               "treatmentId": 3,
                                               "treatmentName": "Limpieza Dental",
                                               "patientId": 15,
-                                              "patientName": "Carlos Rodríguez",
+                                              "patientName": "Carlos Rodriguez",
                                               "practitionerId": 8,
-                                              "practitionerName": "Ana Martínez",
+                                              "practitionerName": "Ana Martinez",
                                               "attentionId": 23
                                             }
                                             """
@@ -356,13 +596,34 @@ public class PractitionerController {
                     )
             ),
             @ApiResponse(
+                    responseCode = "401",
+                    description = "Token JWT ausente o inválido.",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "El practicante autenticado no es responsable de la atención del turno, " +
+                            "o el usuario no posee el rol PRACTITIONER.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
                     responseCode = "404",
-                    description = "Turno no encontrado",
-                    content = @Content(mediaType = "application/json")
+                    description = "Turno no encontrado para el `appointmentId` indicado.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "422",
+                    description = "El turno no está en estado `SCHEDULED` (ya fue completado, cancelado, " +
+                            "marcado como ausente, o el turno no tiene una atención válida asociada).",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
             )
     })
     @PostMapping("/appointments/{appointmentId}/complete")
     public ResponseEntity<AppointmentResponseDTO> markAppointmentAsCompleted(
+            @Parameter(description = "ID del turno a marcar como completado.", example = "45", required = true)
             @PathVariable Long appointmentId) {
 
         site.utnpf.odontolink.domain.model.User practitionerUser = authenticationFacade.getAuthenticatedUser();
@@ -376,18 +637,82 @@ public class PractitionerController {
 
     /**
      * Marca un turno como "ausente" (el paciente no asistió).
-     * Implementa RF9 - CU 4.1: Gestionar Asistencia al Turno.
+     * Implementa RF09 - CU 4.1: Gestionar Asistencia al Turno.
      *
-     * Este endpoint permite al practicante registrar que el paciente no asistió a su cita.
-     * El turno debe estar en estado SCHEDULED para poder ser marcado como ausente.
+     * Tras la transición a NO_SHOW se evalúa la regla de funnel tracking:
+     * si la Atención padre se queda sin trabajo clínico ni próximos turnos,
+     * se cierra automáticamente como CANCELLED.
      *
      * POST /api/practitioner/appointments/{id}/no-show
      *
      * @param appointmentId ID del turno a marcar como ausente
      * @return El Appointment actualizado con estado NO_SHOW
      */
+    @Operation(
+            summary = "Marcar un turno como 'ausente' (RF09)",
+            description = "Registra que el paciente no asistió al turno. Sólo aplica sobre turnos en estado " +
+                    "`SCHEDULED`. El practicante autenticado debe ser el responsable de la atención. " +
+                    "Tras la transición a `NO_SHOW`, si la atención padre queda sin trabajo clínico ni " +
+                    "próximos turnos, el dominio la cierra automáticamente como `CANCELLED` (funnel tracking)."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Turno marcado como ausente correctamente.",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = AppointmentResponseDTO.class),
+                            examples = @ExampleObject(
+                                    name = "Turno con ausencia",
+                                    value = """
+                                            {
+                                              "id": 45,
+                                              "appointmentTime": "2025-11-15T10:00:00",
+                                              "motive": "Control de rutina semestral.",
+                                              "status": "NO_SHOW",
+                                              "durationInMinutes": 45,
+                                              "cancellationReason": null,
+                                              "treatmentId": 3,
+                                              "treatmentName": "Limpieza Dental",
+                                              "patientId": 15,
+                                              "patientName": "Carlos Rodriguez",
+                                              "practitionerId": 8,
+                                              "practitionerName": "Ana Martinez",
+                                              "attentionId": 23
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Token JWT ausente o inválido.",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "El practicante autenticado no es responsable de la atención del turno, " +
+                            "o el usuario no posee el rol PRACTITIONER.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Turno no encontrado para el `appointmentId` indicado.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "422",
+                    description = "El turno no está en estado `SCHEDULED` (ya fue completado, cancelado " +
+                            "o marcado como ausente previamente).",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            )
+    })
     @PostMapping("/appointments/{appointmentId}/no-show")
     public ResponseEntity<AppointmentResponseDTO> markAppointmentAsNoShow(
+            @Parameter(description = "ID del turno a marcar como ausente.", example = "45", required = true)
             @PathVariable Long appointmentId) {
 
         site.utnpf.odontolink.domain.model.User practitionerUser = authenticationFacade.getAuthenticatedUser();
@@ -400,32 +725,115 @@ public class PractitionerController {
     }
 
     @Operation(
-            summary = "Cancelar turno (practicante)",
-            description = "Cancela un turno SCHEDULED por iniciativa del practicante. " +
-                    "El motivo es obligatorio porque la cancelación afecta la agenda del paciente " +
-                    "y el cupo académico del estudiante. Si la Atención queda sin trabajo clínico " +
-                    "ni próximos turnos, se cierra automáticamente."
+            summary = "Cancelar un turno (practicante, RF14)",
+            description = "Cancela un turno en estado `SCHEDULED` por iniciativa del practicante.\n\n" +
+                    "**Motivo obligatorio (RF14)**: a diferencia de la cancelación por paciente, el " +
+                    "practicante DEBE enviar el campo `reason`. La cancelación afecta la agenda del " +
+                    "paciente y consume cupo académico del estudiante, por lo que se exige justificación " +
+                    "para trazabilidad académica y para mostrarla al paciente. Si el `reason` está " +
+                    "ausente o vacío, la respuesta es **400 Bad Request** indicando el campo faltante.\n\n" +
+                    "**Ownership**: el practicante autenticado debe ser el responsable de la atención " +
+                    "asociada; en caso contrario responde **403 Forbidden**.\n\n" +
+                    "**Funnel tracking**: tras cancelar, si la atención padre queda sin trabajo clínico " +
+                    "ni próximos turnos, el dominio la cierra automáticamente como `CANCELLED`."
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200",
-                    description = "Turno cancelado",
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Turno cancelado correctamente. La respuesta incluye `cancellationReason`.",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = AppointmentResponseDTO.class),
+                            examples = @ExampleObject(
+                                    name = "Turno cancelado por practicante",
+                                    value = """
+                                            {
+                                              "id": 45,
+                                              "appointmentTime": "2025-11-15T10:00:00",
+                                              "motive": "Control de rutina semestral.",
+                                              "status": "CANCELLED",
+                                              "durationInMinutes": 45,
+                                              "cancellationReason": "Inasistencia justificada del practicante por examen final.",
+                                              "treatmentId": 3,
+                                              "treatmentName": "Limpieza Dental",
+                                              "patientId": 15,
+                                              "patientName": "Carlos Rodriguez",
+                                              "practitionerId": 8,
+                                              "practitionerName": "Ana Martinez",
+                                              "attentionId": 23
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "El campo `reason` está ausente o vacío. Bean Validation lo exige " +
+                            "(`@NotBlank`) porque es obligatorio para cancelaciones por practicante (RF14).",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class),
+                            examples = @ExampleObject(
+                                    name = "Motivo faltante",
+                                    value = """
+                                            {
+                                              "timestamp": "2025-11-15T09:30:00",
+                                              "status": 400,
+                                              "error": "Validation Error",
+                                              "message": "Los datos proporcionados no son válidos",
+                                              "path": "/api/practitioner/appointments/45/cancel",
+                                              "details": [
+                                                "reason: El motivo de cancelación es obligatorio cuando la cancela el practicante"
+                                              ]
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Token JWT ausente o inválido.",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "El practicante autenticado no es responsable de la atención del turno, " +
+                            "o el usuario no posee el rol PRACTITIONER.",
                     content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = AppointmentResponseDTO.class))),
-            @ApiResponse(responseCode = "400",
-                    description = "Falta el motivo obligatorio",
-                    content = @Content(mediaType = "application/json")),
-            @ApiResponse(responseCode = "403",
-                    description = "El practicante no es responsable del turno",
-                    content = @Content(mediaType = "application/json")),
-            @ApiResponse(responseCode = "404",
-                    description = "Turno no encontrado",
-                    content = @Content(mediaType = "application/json")),
-            @ApiResponse(responseCode = "422",
-                    description = "El turno no está en estado SCHEDULED",
-                    content = @Content(mediaType = "application/json"))
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Turno no encontrado para el `appointmentId` indicado.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "422",
+                    description = "El turno no está en estado `SCHEDULED` y por lo tanto no puede cancelarse.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))
+            )
     })
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Motivo de la cancelación (obligatorio). Máximo 1000 caracteres.",
+            required = true,
+            content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = CancelAppointmentByPractitionerRequestDTO.class),
+                    examples = @ExampleObject(
+                            name = "Cancelación con motivo",
+                            value = """
+                                    {
+                                      "reason": "Inasistencia justificada del practicante por examen final."
+                                    }
+                                    """
+                    )
+            )
+    )
     @PostMapping("/appointments/{appointmentId}/cancel")
     public ResponseEntity<AppointmentResponseDTO> cancelAppointment(
+            @Parameter(description = "ID del turno a cancelar.", example = "45", required = true)
             @PathVariable Long appointmentId,
             @Valid @RequestBody CancelAppointmentByPractitionerRequestDTO request) {
 
