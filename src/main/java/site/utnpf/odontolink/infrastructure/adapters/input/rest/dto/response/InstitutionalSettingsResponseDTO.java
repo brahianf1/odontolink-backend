@@ -32,6 +32,10 @@ public class InstitutionalSettingsResponseDTO {
     @Schema(description = "Dirección física", example = "Av. Benjamín Aráoz 800, San Miguel de Tucumán")
     private String contactAddress;
 
+    @Schema(description = "Cantidad máxima de turnos SCHEDULED concurrentes por Atención (protección de agenda)",
+            example = "1")
+    private int maxConcurrentAppointmentsPerAttention;
+
     @Schema(description = "Fecha de última modificación", example = "2026-05-12T17:42:11Z")
     private Instant updatedAt;
 
@@ -84,6 +88,14 @@ public class InstitutionalSettingsResponseDTO {
 
     public void setContactAddress(String contactAddress) {
         this.contactAddress = contactAddress;
+    }
+
+    public int getMaxConcurrentAppointmentsPerAttention() {
+        return maxConcurrentAppointmentsPerAttention;
+    }
+
+    public void setMaxConcurrentAppointmentsPerAttention(int maxConcurrentAppointmentsPerAttention) {
+        this.maxConcurrentAppointmentsPerAttention = maxConcurrentAppointmentsPerAttention;
     }
 
     public Instant getUpdatedAt() {

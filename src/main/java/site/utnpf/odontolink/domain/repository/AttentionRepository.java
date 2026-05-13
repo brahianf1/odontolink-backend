@@ -129,4 +129,20 @@ public interface AttentionRepository {
      * @return Un Map donde la clave es el ID del Treatment y el valor es el conteo de atenciones canceladas
      */
     Map<Long, Long> countCancelledByPractitionerGroupByTreatment(Practitioner practitioner);
+
+    /**
+     * Actualiza únicamente el estado de una Atención sin tocar el resto de la entidad
+     * ni las colecciones hijas.
+     *
+     * Esta operación es la que ejecuta el cierre lógico por abandono temprano:
+     * llevar la atención a CANCELLED cuando el último turno se cancela o resulta
+     * NO_SHOW. Hacerlo como UPDATE focalizado evita el problema de remapear
+     * recursivamente Appointments y ProgressNotes y mantiene la transacción
+     * lo más liviana posible.
+     *
+     * @param attentionId ID del caso clínico
+     * @param newStatus Nuevo estado
+     * @return true si la fila existía y se actualizó
+     */
+    boolean updateStatus(Long attentionId, AttentionStatus newStatus);
 }

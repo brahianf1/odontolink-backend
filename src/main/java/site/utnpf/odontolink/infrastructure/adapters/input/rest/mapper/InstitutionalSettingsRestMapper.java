@@ -24,6 +24,7 @@ public final class InstitutionalSettingsRestMapper {
         dto.setContactEmail(settings.getContactEmail());
         dto.setContactPhone(settings.getContactPhone());
         dto.setContactAddress(settings.getContactAddress());
+        dto.setMaxConcurrentAppointmentsPerAttention(settings.getMaxConcurrentAppointmentsPerAttention());
         dto.setUpdatedAt(settings.getUpdatedAt());
         return dto;
     }

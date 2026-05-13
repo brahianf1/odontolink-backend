@@ -22,6 +22,14 @@ public final class InstitutionalSettingsPersistenceMapper {
         if (entity == null) {
             return null;
         }
+        // Compatibilidad hacia atrás: si la fila persistida es anterior al
+        // agregado del campo (valor 0 en DB porque ningún path lo escribió),
+        // proyectamos el default del dominio para no romper la invariante
+        // "≥ 1" del agregado en runtime.
+        int maxConcurrent = entity.getMaxConcurrentAppointmentsPerAttention();
+        if (maxConcurrent < 1) {
+            maxConcurrent = InstitutionalSettings.DEFAULT_MAX_CONCURRENT_APPOINTMENTS;
+        }
         return new InstitutionalSettings(
                 entity.getId(),
                 entity.getInstitutionName(),
@@ -30,6 +38,7 @@ public final class InstitutionalSettingsPersistenceMapper {
                 entity.getContactEmail(),
                 entity.getContactPhone(),
                 entity.getContactAddress(),
+                maxConcurrent,
                 entity.getUpdatedAt()
         );
     }
@@ -46,6 +55,7 @@ public final class InstitutionalSettingsPersistenceMapper {
         entity.setContactEmail(domain.getContactEmail());
         entity.setContactPhone(domain.getContactPhone());
         entity.setContactAddress(domain.getContactAddress());
+        entity.setMaxConcurrentAppointmentsPerAttention(domain.getMaxConcurrentAppointmentsPerAttention());
         entity.setUpdatedAt(domain.getUpdatedAt());
         return entity;
     }

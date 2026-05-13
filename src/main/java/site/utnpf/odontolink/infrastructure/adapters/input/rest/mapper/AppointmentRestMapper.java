@@ -46,6 +46,7 @@ public class AppointmentRestMapper {
         response.setMotive(domain.getMotive());
         response.setStatus(domain.getStatus());
         response.setDurationInMinutes(domain.getDurationInMinutes());
+        response.setCancellationReason(domain.getCancellationReason());
 
         // Extraer información de la Attention relacionada
         if (domain.getAttention() != null) {

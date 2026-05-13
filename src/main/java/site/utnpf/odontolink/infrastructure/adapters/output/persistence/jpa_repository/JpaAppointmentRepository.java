@@ -183,19 +183,49 @@ public interface JpaAppointmentRepository extends JpaRepository<AppointmentEntit
     );
 
     /**
+     * Cuenta cuántos turnos de una atención están en un estado dado.
+     * Soporta la regla anti-acaparamiento (SCHEDULED) y la lógica de
+     * cierre por abandono (COMPLETED) en una única consulta agregada.
+     */
+    @Query("SELECT COUNT(a) FROM AppointmentEntity a " +
+           "WHERE a.attention.id = :attentionId " +
+           "AND a.status = :status")
+    long countByAttentionIdAndStatus(
+            @Param("attentionId") Long attentionId,
+            @Param("status") AppointmentStatus status
+    );
+
+    /**
+     * Variante {@code exists} de {@link #countByAttentionIdAndStatus} para
+     * ramas donde sólo se necesita saber si hay al menos un registro,
+     * evitando contar todas las filas innecesariamente.
+     */
+    @Query("SELECT CASE WHEN COUNT(a) > 0 THEN true ELSE false END " +
+           "FROM AppointmentEntity a " +
+           "WHERE a.attention.id = :attentionId " +
+           "AND a.status = :status")
+    boolean existsByAttentionIdAndStatus(
+            @Param("attentionId") Long attentionId,
+            @Param("status") AppointmentStatus status
+    );
+
+    /**
      * Busca un turno por ID cargando su Attention y Practitioner asociado.
      * Este método es necesario para operaciones que requieren validar
      * la propiedad del turno (ej: marcar como completado/no-show).
      *
      * Carga eager:
      * - Attention
-     * - Practitioner con su User
+     * - Patient con su User (para validaciones del lado del paciente)
+     * - Practitioner con su User (para validaciones del lado del practicante)
      *
      * @param id ID del turno
      * @return Optional conteniendo el turno con sus relaciones cargadas
      */
     @Query("SELECT a FROM AppointmentEntity a " +
            "JOIN FETCH a.attention att " +
+           "JOIN FETCH att.patient pa " +
+           "JOIN FETCH pa.user " +
            "JOIN FETCH att.practitioner pr " +
            "JOIN FETCH pr.user " +
            "WHERE a.id = :id")
@@ -216,4 +246,20 @@ public interface JpaAppointmentRepository extends JpaRepository<AppointmentEntit
     @Modifying
     @Query("UPDATE AppointmentEntity a SET a.status = :status WHERE a.id = :id")
     int updateStatus(@Param("id") Long id, @Param("status") AppointmentStatus status);
+
+    /**
+     * Actualiza el estado y el motivo de cancelación en una única operación.
+     * Se persiste como UPDATE directo para mantener la atomicidad y evitar
+     * el problema de referencias bidireccionales nulas que aparece al
+     * re-mapear la entidad completa.
+     */
+    @Modifying
+    @Query("UPDATE AppointmentEntity a " +
+           "SET a.status = :status, a.cancellationReason = :reason " +
+           "WHERE a.id = :id")
+    int updateStatusAndCancellationReason(
+            @Param("id") Long id,
+            @Param("status") AppointmentStatus status,
+            @Param("reason") String reason
+    );
 }

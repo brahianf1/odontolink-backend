@@ -169,6 +169,31 @@ public interface AppointmentRepository {
     );
 
     /**
+     * Cuenta cuántos turnos de una atención están actualmente en un estado dado.
+     *
+     * Es la consulta que sustenta dos reglas de negocio críticas:
+     * <ul>
+     *   <li>Regla anti-acaparamiento: cuántos SCHEDULED tiene un paciente
+     *       dentro de la misma Atención antes de permitir agregar uno más.</li>
+     *   <li>Funnel tracking: cuántos COMPLETED tiene la Atención al momento
+     *       de cancelar / no-show un turno, para decidir si la Atención
+     *       entera debe cerrarse por abandono.</li>
+     * </ul>
+     *
+     * @param attentionId ID del caso clínico
+     * @param status Estado a contar
+     * @return Cantidad de turnos en el estado indicado para la atención
+     */
+    long countByAttentionIdAndStatus(Long attentionId, AppointmentStatus status);
+
+    /**
+     * Verifica si existen turnos en un determinado estado para una Atención,
+     * sin discriminar por fecha. Variante "exists" rápida cuando solo nos
+     * interesa la presencia (no la cantidad) de turnos en un estado dado.
+     */
+    boolean existsByAttentionIdAndStatus(Long attentionId, AppointmentStatus status);
+
+    /**
      * Actualiza únicamente el estado de un turno sin cargar ni modificar otras relaciones.
      * Este método es más eficiente y seguro que el método save() tradicional para operaciones
      * que solo requieren cambiar el estado, ya que:
@@ -185,4 +210,21 @@ public interface AppointmentRepository {
      * @return true si se actualizó correctamente (el turno existía), false si no existe
      */
     boolean updateStatus(Long appointmentId, AppointmentStatus newStatus);
+
+    /**
+     * Actualiza el estado del turno y, simultáneamente, el motivo de cancelación.
+     *
+     * Se ofrece como operación atómica para que no quede ventana donde el
+     * turno esté ya CANCELLED pero sin motivo persistido (o viceversa).
+     * Mantiene la consistencia exigida por el modelo "intent-driven":
+     * un turno cancelado siempre tiene un motivo si la cancelación lo requirió.
+     *
+     * @param appointmentId ID del turno
+     * @param newStatus Nuevo estado (típicamente CANCELLED)
+     * @param cancellationReason Motivo (puede ser null si el flujo lo permite)
+     * @return true si la fila existía y se actualizó
+     */
+    boolean updateStatusAndCancellationReason(Long appointmentId,
+                                              AppointmentStatus newStatus,
+                                              String cancellationReason);
 }

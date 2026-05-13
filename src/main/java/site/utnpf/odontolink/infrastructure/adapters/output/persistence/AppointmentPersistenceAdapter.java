@@ -193,6 +193,16 @@ public class AppointmentPersistenceAdapter implements AppointmentRepository {
         );
     }
 
+    @Override
+    public long countByAttentionIdAndStatus(Long attentionId, AppointmentStatus status) {
+        return jpaAppointmentRepository.countByAttentionIdAndStatus(attentionId, status);
+    }
+
+    @Override
+    public boolean existsByAttentionIdAndStatus(Long attentionId, AppointmentStatus status) {
+        return jpaAppointmentRepository.existsByAttentionIdAndStatus(attentionId, status);
+    }
+
     /**
      * Actualiza únicamente el estado de un turno.
      * Este método es más eficiente que save() para operaciones que solo modifican el estado,
@@ -205,6 +215,18 @@ public class AppointmentPersistenceAdapter implements AppointmentRepository {
     @Override
     public boolean updateStatus(Long appointmentId, AppointmentStatus newStatus) {
         int rowsAffected = jpaAppointmentRepository.updateStatus(appointmentId, newStatus);
+        return rowsAffected > 0;
+    }
+
+    @Override
+    public boolean updateStatusAndCancellationReason(Long appointmentId,
+                                                     AppointmentStatus newStatus,
+                                                     String cancellationReason) {
+        int rowsAffected = jpaAppointmentRepository.updateStatusAndCancellationReason(
+                appointmentId,
+                newStatus,
+                cancellationReason
+        );
         return rowsAffected > 0;
     }
 }

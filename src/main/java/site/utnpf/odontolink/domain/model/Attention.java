@@ -66,6 +66,30 @@ public class Attention {
     }
 
     /**
+     * Cierre lógico de la Atención por abandono temprano (funnel tracking).
+     *
+     * Se invoca cuando, tras cancelar o no asistir al último turno, la
+     * Atención queda sin trabajo clínico realizado ni próximo: no hay turnos
+     * COMPLETED ni SCHEDULED futuros. La pre-condición la valida el
+     * {@code AttentionPolicyService}; el POJO se limita al cambio de estado
+     * para preservar la invariante "solo una IN_PROGRESS puede cerrarse".
+     *
+     * El estado resultante es {@link AttentionStatus#CANCELLED} y no
+     * {@link AttentionStatus#COMPLETED} porque no hubo atención clínica
+     * efectiva: el caso se interrumpió antes de empezar.
+     */
+    public void closeByAbandonment() {
+        if (this.status != AttentionStatus.IN_PROGRESS) {
+            // Si ya está cerrada (COMPLETED o CANCELLED), no tocamos nada:
+            // la operación de cierre por abandono es idempotente en silencio
+            // porque puede dispararse desde varios caminos (cancel del paciente,
+            // cancel del practicante, no-show del practicante).
+            return;
+        }
+        this.status = AttentionStatus.CANCELLED;
+    }
+
+    /**
      * Añade una nota de progreso (evolución) a este caso clínico.
      * Este método implementa la lógica del RF11 - CU 4.2: Registrar Evolución.
      *

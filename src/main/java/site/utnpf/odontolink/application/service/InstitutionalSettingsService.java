@@ -44,7 +44,8 @@ public class InstitutionalSettingsService implements IInstitutionalSettingsUseCa
                                                 String usagePolicies,
                                                 String contactEmail,
                                                 String contactPhone,
-                                                String contactAddress) {
+                                                String contactAddress,
+                                                int maxConcurrentAppointmentsPerAttention) {
         // Reutilizamos getSettings() para resolver el caso de "primera carga
         // del administrador": si todavía no hay fila, se crea con defaults y
         // luego se aplica la modificación. El resultado neto es una sola
@@ -56,7 +57,8 @@ public class InstitutionalSettingsService implements IInstitutionalSettingsUseCa
                 usagePolicies,
                 contactEmail,
                 contactPhone,
-                contactAddress
+                contactAddress,
+                maxConcurrentAppointmentsPerAttention
         );
         return repository.save(settings);
     }

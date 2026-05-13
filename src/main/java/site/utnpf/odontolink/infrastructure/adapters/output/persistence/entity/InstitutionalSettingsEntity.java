@@ -46,6 +46,22 @@ public class InstitutionalSettingsEntity {
     @Column(name = "contact_address", length = 250)
     private String contactAddress;
 
+    /**
+     * Cuántos turnos SCHEDULED simultáneos puede tener un paciente dentro
+     * de una misma Atención. Persistir el límite junto al resto de los
+     * parámetros institucionales permite que el administrador lo ajuste
+     * con el mismo flujo (PUT singleton) que el resto de la configuración.
+     *
+     * Se declara con {@code nullable = false} y un valor por defecto a
+     * nivel de columna para que los entornos donde la tabla ya exista
+     * puedan migrar sin requerir un script de backfill explícito: las
+     * filas previas heredan automáticamente el límite por defecto.
+     */
+    @Column(name = "max_concurrent_appointments_per_attention",
+            nullable = false,
+            columnDefinition = "INT NOT NULL DEFAULT 1")
+    private int maxConcurrentAppointmentsPerAttention;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -106,6 +122,14 @@ public class InstitutionalSettingsEntity {
 
     public void setContactAddress(String contactAddress) {
         this.contactAddress = contactAddress;
+    }
+
+    public int getMaxConcurrentAppointmentsPerAttention() {
+        return maxConcurrentAppointmentsPerAttention;
+    }
+
+    public void setMaxConcurrentAppointmentsPerAttention(int maxConcurrentAppointmentsPerAttention) {
+        this.maxConcurrentAppointmentsPerAttention = maxConcurrentAppointmentsPerAttention;
     }
 
     public Instant getUpdatedAt() {

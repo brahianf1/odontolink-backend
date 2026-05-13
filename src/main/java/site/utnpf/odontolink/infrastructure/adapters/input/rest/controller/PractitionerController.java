@@ -19,6 +19,7 @@ import site.utnpf.odontolink.domain.model.Appointment;
 import site.utnpf.odontolink.domain.model.AvailabilitySlot;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.AddOfferedTreatmentRequestDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.CancelAppointmentByPractitionerRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.UpdateOfferedTreatmentRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AppointmentResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.OfferedTreatmentResponseDTO;
@@ -362,5 +363,46 @@ public class PractitionerController {
         AppointmentResponseDTO response = AppointmentRestMapper.toResponse(appointment);
 
         return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Cancelar turno (practicante)",
+            description = "Cancela un turno SCHEDULED por iniciativa del practicante. " +
+                    "El motivo es obligatorio porque la cancelación afecta la agenda del paciente " +
+                    "y el cupo académico del estudiante. Si la Atención queda sin trabajo clínico " +
+                    "ni próximos turnos, se cierra automáticamente."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200",
+                    description = "Turno cancelado",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = AppointmentResponseDTO.class))),
+            @ApiResponse(responseCode = "400",
+                    description = "Falta el motivo obligatorio",
+                    content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "403",
+                    description = "El practicante no es responsable del turno",
+                    content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "404",
+                    description = "Turno no encontrado",
+                    content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "422",
+                    description = "El turno no está en estado SCHEDULED",
+                    content = @Content(mediaType = "application/json"))
+    })
+    @PostMapping("/appointments/{appointmentId}/cancel")
+    public ResponseEntity<AppointmentResponseDTO> cancelAppointment(
+            @PathVariable Long appointmentId,
+            @Valid @RequestBody CancelAppointmentByPractitionerRequestDTO request) {
+
+        site.utnpf.odontolink.domain.model.User practitionerUser = authenticationFacade.getAuthenticatedUser();
+
+        Appointment cancelled = appointmentUseCase.cancelAppointmentByPractitioner(
+                appointmentId,
+                request.getReason(),
+                practitionerUser
+        );
+
+        return ResponseEntity.ok(AppointmentRestMapper.toResponse(cancelled));
     }
 }

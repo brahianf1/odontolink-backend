@@ -200,13 +200,15 @@ public class BeanConfiguration {
             AvailabilitySlotRepository availabilitySlotRepository,
             AppointmentRepository appointmentRepository,
             AttentionRepository attentionRepository,
-            ChatSessionRepository chatSessionRepository) {
+            ChatSessionRepository chatSessionRepository,
+            InstitutionalSettingsRepository institutionalSettingsRepository) {
         return new AppointmentBookingService(
                 offeredTreatmentRepository,
                 availabilitySlotRepository,
                 appointmentRepository,
                 attentionRepository,
-                chatSessionRepository
+                chatSessionRepository,
+                institutionalSettingsRepository
         );
     }
 
@@ -279,14 +281,16 @@ public class BeanConfiguration {
             AttentionRepository attentionRepository,
             OfferedTreatmentRepository offeredTreatmentRepository,
             AppointmentBookingService appointmentBookingService,
-            AvailabilityGenerationService availabilityGenerationService) {
+            AvailabilityGenerationService availabilityGenerationService,
+            AttentionPolicyService attentionPolicyService) {
         return new AppointmentService(
                 patientRepository,
                 appointmentRepository,
                 attentionRepository,
                 offeredTreatmentRepository,
                 appointmentBookingService,
-                availabilityGenerationService
+                availabilityGenerationService,
+                attentionPolicyService
         );
     }
 
@@ -301,8 +305,9 @@ public class BeanConfiguration {
      * Implementa RF10, RF19 - CU 4.4: Finalizar Caso Clínico.
      */
     @Bean
-    public AttentionPolicyService attentionPolicyService(AppointmentRepository appointmentRepository) {
-        return new AttentionPolicyService(appointmentRepository);
+    public AttentionPolicyService attentionPolicyService(AppointmentRepository appointmentRepository,
+                                                         AttentionRepository attentionRepository) {
+        return new AttentionPolicyService(appointmentRepository, attentionRepository);
     }
 
     /**

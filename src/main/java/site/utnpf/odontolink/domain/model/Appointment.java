@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.domain.model;
 
+import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
+
 import java.time.LocalDateTime;
 
 /**
@@ -31,6 +33,19 @@ public class Appointment {
      */
     private int durationInMinutes;
 
+    /**
+     * Motivo registrado al cancelar el turno.
+     *
+     * Reglas (consistentes con los métodos de cancelación):
+     * - Cuando cancela el practicante, este campo es OBLIGATORIO (auditoría académica).
+     * - Cuando cancela el paciente, puede ser nulo o vacío (información de cortesía).
+     *
+     * Se persiste como TEXT porque puede contener texto largo, y se conserva como
+     * registro inmutable una vez fijado: el motivo refleja el contexto del momento
+     * y editarlo posteriormente desvirtuaría el histórico.
+     */
+    private String cancellationReason;
+
     // Constructor sin argumentos (requerido por mappers de persistencia)
     public Appointment() {
     }
@@ -46,11 +61,50 @@ public class Appointment {
 
     // Comportamientos del Dominio Rico
 
-    public void cancel() {
-        if (this.status == AppointmentStatus.COMPLETED) {
-            throw new IllegalStateException("No se puede cancelar un turno ya completado.");
-        }
+    /**
+     * Cancela el turno por iniciativa del PACIENTE.
+     *
+     * Política de negocio (RF cancelaciones):
+     * - El motivo es OPCIONAL: el paciente no tiene la obligación académica
+     *   de justificarse para cancelar. Cualquier texto recibido se persiste
+     *   tal cual para nutrir el funnel de seguimiento y, eventualmente,
+     *   alimentar estadísticas de deserción.
+     * - Solo es válido cancelar un turno en estado SCHEDULED. Cancelar un
+     *   COMPLETED, CANCELLED o NO_SHOW es un error de uso del dominio.
+     *
+     * @param reason Motivo opcional informado por el paciente
+     * @throws InvalidBusinessRuleException si el turno no está en estado SCHEDULED
+     */
+    public void cancelByPatient(String reason) {
+        ensureCancellable();
         this.status = AppointmentStatus.CANCELLED;
+        // Normalizamos cadenas vacías a null para no contaminar la BD con
+        // strings sin información útil.
+        this.cancellationReason = isBlank(reason) ? null : reason.trim();
+    }
+
+    /**
+     * Cancela el turno por iniciativa del PRACTICANTE.
+     *
+     * Política de negocio (RF cancelaciones):
+     * - El motivo es OBLIGATORIO: la cancelación desde el practicante
+     *   impacta al paciente y al cupo del estudiante, por lo que se exige
+     *   justificación para auditoría académica y para mostrarla al paciente.
+     * - Solo es válido cancelar un turno en estado SCHEDULED.
+     *
+     * @param reason Motivo obligatorio informado por el practicante
+     * @throws InvalidBusinessRuleException si el motivo está vacío
+     *         o el turno no está en estado SCHEDULED
+     */
+    public void cancelByPractitioner(String reason) {
+        if (isBlank(reason)) {
+            throw new InvalidBusinessRuleException(
+                    "El motivo de cancelación es obligatorio cuando la cancela el practicante."
+            );
+        }
+        ensureCancellable();
+        this.status = AppointmentStatus.CANCELLED;
+        this.cancellationReason = reason.trim();
     }
 
     /**
@@ -84,6 +138,18 @@ public class Appointment {
             throw new IllegalStateException("Solo se puede marcar como 'Ausente' un turno 'Agendado'.");
         }
         this.status = AppointmentStatus.NO_SHOW;
+    }
+
+    private void ensureCancellable() {
+        if (this.status != AppointmentStatus.SCHEDULED) {
+            throw new InvalidBusinessRuleException(
+                    "Solo se puede cancelar un turno en estado SCHEDULED."
+            );
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     // Getters y Setters
@@ -134,5 +200,13 @@ public class Appointment {
 
     public void setDurationInMinutes(int durationInMinutes) {
         this.durationInMinutes = durationInMinutes;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
     }
 }

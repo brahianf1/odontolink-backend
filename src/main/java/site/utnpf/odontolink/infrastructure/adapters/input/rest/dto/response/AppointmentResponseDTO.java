@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
  * - Información del tratamiento
  * - Información básica del paciente (para el practicante)
  * - Información básica del practicante (para el paciente)
+ * - Motivo de cancelación, cuando aplique
  */
 public class AppointmentResponseDTO {
 
@@ -21,6 +22,13 @@ public class AppointmentResponseDTO {
     private String motive;
     private AppointmentStatus status;
     private int durationInMinutes;
+
+    /**
+     * Motivo de cancelación.
+     * Solo se materializa cuando el turno está CANCELLED y, en el caso del
+     * paciente, puede ser null si no informó motivo.
+     */
+    private String cancellationReason;
 
     // Información del tratamiento
     private Long treatmentId;
@@ -136,5 +144,13 @@ public class AppointmentResponseDTO {
 
     public void setDurationInMinutes(int durationInMinutes) {
         this.durationInMinutes = durationInMinutes;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
     }
 }
