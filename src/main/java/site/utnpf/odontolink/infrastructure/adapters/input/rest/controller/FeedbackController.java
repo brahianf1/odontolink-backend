@@ -25,13 +25,19 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Controlador REST para las operaciones de Feedback.
+ * Controlador REST para las operaciones MICRO-contexto de Feedback.
  * Adaptador de entrada (Input Adapter) en Arquitectura Hexagonal.
  *
  * Endpoints implementados:
- * - POST   /api/feedback                               - Crear feedback (CU-009, CU-016: RF21, RF22, RF23)
- * - GET    /api/feedback/attention/{attentionId}        - Ver feedback de una atención (CU-010: RF24)
- * - GET    /api/supervisor/feedback/practitioner/{practitionerId} - Ver feedback de un practicante (CU-010: RF25, RF40)
+ * - POST   /api/feedback                              - Crear feedback (CU-009, CU-016: RF21, RF22, RF23)
+ * - GET    /api/feedback/attention/{attentionId}      - Ver feedback de una atención (CU-010: RF24)
+ *
+ * El MACRO-contexto del docente (Panel de Supervisión de Feedback RF25) vive en
+ * {@code SupervisorFeedbackDashboardController}: el viejo endpoint
+ * {@code GET /api/supervisor/feedback/practitioner/{practitionerId}} fue
+ * absorbido por {@code GET /api/supervisors/feedbacks/dashboard}, que ofrece
+ * filtros combinables, paginación y agregados, además del mismo cerco
+ * docente-alumno.
  *
  * Todos los endpoints están protegidos con @PreAuthorize según el rol requerido.
  *
@@ -155,43 +161,6 @@ public class FeedbackController {
         // Delegar al caso de uso (servicio de aplicación)
         // El servicio validará los permisos de acceso
         List<Feedback> feedbacks = feedbackUseCase.getFeedbackForAttention(attentionId, requestingUser);
-
-        // Convertir a DTOs de respuesta
-        List<FeedbackResponseDTO> response = feedbacks.stream()
-                .map(FeedbackRestMapper::toResponse)
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(response);
-    }
-
-    /**
-     * Obtiene todos los feedbacks de las atenciones de un practicante específico.
-     * Implementa CU-010 (RF25, RF40) - Panel de supervisión para docentes.
-     *
-     * Este endpoint permite a un supervisor (docente) revisar todo el feedback
-     * recibido y emitido por sus practicantes a cargo con fines formativos.
-     *
-     * GET /api/supervisor/feedback/practitioner/{practitionerId}
-     *
-     * Seguridad: Solo SUPERVISOR puede acceder
-     *
-     * Validación de pertenencia:
-     * - Solo supervisores que gestionen al practicante pueden acceder
-     *
-     * @param practitionerId ID del practicante
-     * @return Lista de feedbacks de todas las atenciones del practicante
-     */
-    @GetMapping("/supervisor/feedback/practitioner/{practitionerId}")
-    @PreAuthorize("hasRole('SUPERVISOR')")
-    public ResponseEntity<List<FeedbackResponseDTO>> getFeedbackForPractitioner(
-            @PathVariable Long practitionerId) {
-
-        // Obtener el usuario autenticado (supervisor)
-        User supervisorUser = authenticationFacade.getAuthenticatedUser();
-
-        // Delegar al caso de uso (servicio de aplicación)
-        // El servicio validará que el supervisor gestione al practicante
-        List<Feedback> feedbacks = feedbackUseCase.getFeedbackForPractitioner(practitionerId, supervisorUser);
 
         // Convertir a DTOs de respuesta
         List<FeedbackResponseDTO> response = feedbacks.stream()

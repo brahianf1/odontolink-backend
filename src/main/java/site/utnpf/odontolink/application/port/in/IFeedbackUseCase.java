@@ -6,13 +6,19 @@ import site.utnpf.odontolink.domain.model.User;
 import java.util.List;
 
 /**
- * Puerto de entrada (Input Port) para casos de uso de Feedback.
- * Define las operaciones de negocio disponibles para el sistema de feedback bidireccional.
+ * Puerto de entrada (Input Port) para casos de uso de Feedback en el
+ * MICRO-CONTEXTO (atención puntual).
  *
  * Casos de uso implementados:
  * - CU-009: Calificar Paciente (RF21)
  * - CU-016: Calificar Practicante (RF22)
- * - CU-010: Visualizar Feedback (RF24, RF25, RF40)
+ * - CU-010: Visualizar Feedback de una atención (RF24)
+ *
+ * Separación intencional: el MACRO-contexto del docente (Panel de
+ * Supervisión / RF25 - análisis agregado de soft skills del alumnado) vive
+ * en {@link ISupervisorFeedbackDashboardUseCase}. La motivación está
+ * documentada allí: son dos "sombreros" del docente con flujos y reglas
+ * distintos aunque compartan la entidad Feedback en BD.
  *
  * Siguiendo Arquitectura Hexagonal, este puerto es implementado por el servicio
  * de aplicación (FeedbackService) y utilizado por los adaptadores de entrada (controladores).
@@ -51,22 +57,6 @@ public interface IFeedbackUseCase {
      * @return Lista de feedbacks de la atención
      */
     List<Feedback> getFeedbackForAttention(Long attentionId, User requestingUser);
-
-    /**
-     * Obtiene todos los feedbacks de las atenciones de un practicante específico.
-     * Implementa CU-010 (RF25, RF40) - Panel de supervisión para docentes.
-     *
-     * Este método permite a un supervisor (docente) revisar todo el feedback
-     * recibido y emitido por sus practicantes a cargo.
-     *
-     * Validación de pertenencia:
-     * - Solo supervisores que gestionen al practicante pueden acceder
-     *
-     * @param practitionerId ID del practicante
-     * @param supervisorUser Usuario supervisor que solicita el feedback
-     * @return Lista de feedbacks de todas las atenciones del practicante
-     */
-    List<Feedback> getFeedbackForPractitioner(Long practitionerId, User supervisorUser);
 
     /**
      * Obtiene un feedback específico por su ID.
