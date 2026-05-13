@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.time.Instant;
 
 /**
@@ -10,18 +12,37 @@ import java.time.Instant;
  *
  * @author OdontoLink Team
  */
+@Schema(description = "Nota de evolución registrada en el expediente clínico. Inmutable una vez creada; " +
+        "incluye autor, rol y timestamp del servidor.")
 public class ProgressNoteResponseDTO {
 
+    @Schema(description = "Identificador único de la nota de evolución.", example = "101")
     private Long id;
+
+    @Schema(description = "Texto de la evolución clínica.",
+            example = "Se realiza profilaxis completa. Paciente tolera bien el procedimiento. Se indica " +
+                    "control en 6 meses y refuerzo de técnica de cepillado.")
     private String note;
+
+    @Schema(description = "Marca de tiempo (UTC, ISO-8601 con zona) en la que se registró la evolución.",
+            example = "2025-11-15T13:45:00Z")
     private Instant createdAt;
 
     // Información del autor
+    @Schema(description = "ID del usuario autor de la nota.", example = "8")
     private Long authorId;
+
+    @Schema(description = "Nombre completo del autor de la nota.", example = "Ana Martinez")
     private String authorName;
-    private String authorRole; // PRACTITIONER, SUPERVISOR, etc.
+
+    @Schema(description = "Rol del autor de la nota (mayormente `ROLE_PRACTITIONER`; los supervisores " +
+            "pueden aparecer si registraron observaciones desde su propio módulo).",
+            example = "ROLE_PRACTITIONER",
+            allowableValues = {"ROLE_PRACTITIONER", "ROLE_SUPERVISOR", "ROLE_ADMIN"})
+    private String authorRole;
 
     // ID de la atención (caso) a la que pertenece
+    @Schema(description = "ID del caso clínico (Attention) al que pertenece la nota.", example = "23")
     private Long attentionId;
 
     // Constructores
