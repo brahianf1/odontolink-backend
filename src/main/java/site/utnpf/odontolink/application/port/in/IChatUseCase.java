@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.application.port.in;
 
+import site.utnpf.odontolink.application.port.in.dto.ChatSessionView;
+import site.utnpf.odontolink.application.port.in.dto.PagedMessages;
 import site.utnpf.odontolink.domain.model.ChatMessage;
 import site.utnpf.odontolink.domain.model.ChatSession;
 import site.utnpf.odontolink.domain.model.User;
@@ -9,70 +11,51 @@ import java.util.List;
 
 /**
  * Puerto de entrada (Input Port) para los casos de uso de Chat.
- * Define el contrato para las operaciones del sistema de chat interno.
  *
- * Implementa los siguientes casos de uso:
- * - CU 6.1: Obtener Lista de Sesiones de Chat (El "Inbox")
- * - CU 6.2: Enviar un Mensaje (RF26)
- * - CU 6.3: Obtener Mensajes (El Endpoint de "Polling")
+ * Cubre:
+ * - RF26 / CU 6.2: Enviar mensajes
+ * - RF27 / CU 6.1: Listar sesiones (inbox)
+ * - CU 6.3: Polling y paginación
+ * - CU012: Read receipts y conteo de no-leídos
+ * - RF28: Bloqueo y desbloqueo auditable
  *
  * @author OdontoLink Team
  */
 public interface IChatUseCase {
 
     /**
-     * Obtiene todas las sesiones de chat del usuario autenticado.
-     * Implementa CU 6.1: Obtener Lista de Sesiones de Chat.
-     *
-     * El método determina automáticamente si el usuario es paciente o practicante
-     * y devuelve sus sesiones correspondientes.
-     *
-     * @param user El usuario autenticado (paciente o practicante)
-     * @return Lista de sesiones de chat del usuario
+     * Lista las sesiones del usuario enriquecidas con unreadCount y lastMessage para construir
+     * el inbox con badges y orden por actividad real (CU012 paso 9).
      */
-    List<ChatSession> getMyChatSessions(User user);
+    List<ChatSessionView> getMyChatSessions(User user);
 
-    /**
-     * Envía un nuevo mensaje a una sesión de chat existente.
-     * Implementa CU 6.2: Enviar un Mensaje (RF26).
-     *
-     * Orquestación:
-     * 1. Busca la ChatSession desde el repositorio
-     * 2. Valida que el usuario es participante legítimo (ChatPolicyService)
-     * 3. Crea el ChatMessage con el contenido
-     * 4. Persiste el mensaje de forma transaccional
-     * 5. Retorna el mensaje guardado
-     *
-     * @param chatSessionId El ID de la sesión de chat
-     * @param content El contenido textual del mensaje
-     * @param sender El usuario que envía el mensaje
-     * @return El mensaje creado con su ID asignado
-     * @throws site.utnpf.odontolink.domain.exception.ResourceNotFoundException si la sesión no existe
-     * @throws site.utnpf.odontolink.domain.exception.UnauthorizedOperationException si el usuario no pertenece a la sesión
-     */
     ChatMessage sendMessage(Long chatSessionId, String content, User sender);
 
     /**
-     * Obtiene los mensajes de una sesión de chat, con soporte para polling.
-     * Implementa CU 6.3: Obtener Mensajes (El Endpoint de "Polling").
-     *
-     * Este método soporta dos modos:
-     * - Primera carga (sinceTimestamp = null): Devuelve todo el historial
-     * - Polling (sinceTimestamp != null): Devuelve solo mensajes nuevos
-     *
-     * Orquestación:
-     * 1. Busca la ChatSession desde el repositorio
-     * 2. Valida que el usuario tiene acceso (ChatPolicyService)
-     * 3. Si sinceTimestamp es null: obtiene todo el historial
-     * 4. Si sinceTimestamp no es null: obtiene solo mensajes nuevos
-     * 5. Retorna la lista de mensajes ordenada cronológicamente
-     *
-     * @param chatSessionId El ID de la sesión de chat
-     * @param user El usuario que solicita los mensajes
-     * @param sinceTimestamp Timestamp opcional para polling (null = primera carga)
-     * @return Lista de mensajes ordenados por sentAt ascendente
-     * @throws site.utnpf.odontolink.domain.exception.ResourceNotFoundException si la sesión no existe
-     * @throws site.utnpf.odontolink.domain.exception.UnauthorizedOperationException si el usuario no tiene acceso
+     * Obtiene mensajes en modo polling (since != null) o el historial completo (since == null).
+     * Para historial paginado usar {@link #getMessagesPaged}.
      */
     List<ChatMessage> getMessages(Long chatSessionId, User user, Instant sinceTimestamp);
+
+    /**
+     * Devuelve una página DESC del historial. Usado para carga perezosa al hacer scroll-up.
+     */
+    PagedMessages getMessagesPaged(Long chatSessionId, User user, int page, int size);
+
+    /**
+     * Bloquea la sesión (RF28). Solo el practicante de la sesión puede ejecutarlo.
+     * @return La sesión actualizada con el rastro de bloqueo.
+     */
+    ChatSession blockChatSession(Long chatSessionId, User actor, String reason);
+
+    /**
+     * Desbloquea la sesión (RF28 reversible).
+     */
+    ChatSession unblockChatSession(Long chatSessionId, User actor);
+
+    /**
+     * Marca como leídos todos los mensajes pendientes de los que el usuario no es sender (CU012).
+     * @return cantidad de mensajes marcados; útil para que el frontend decida si refrescar.
+     */
+    int markMessagesAsRead(Long chatSessionId, User receiver);
 }

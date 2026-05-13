@@ -1,70 +1,81 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence.jpa_repository;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.ChatMessageEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.ChatSessionEntity;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Repositorio JPA para ChatMessageEntity.
- * Extiende JpaRepository de Spring Data JPA para operaciones CRUD automáticas.
  *
- * Implementa queries especializadas para el sistema de polling RESTful,
- * permitiendo consultar mensajes nuevos desde un timestamp específico.
+ * Soporta tres modos de consulta del CU012:
+ * 1. Historial completo / polling (existentes).
+ * 2. Historial paginado para no saturar memoria en chats largos.
+ * 3. Conteo de mensajes no-leídos del usuario autenticado (badges UX).
  *
  * @author OdontoLink Team
  */
 @Repository
 public interface JpaChatMessageRepository extends JpaRepository<ChatMessageEntity, Long> {
 
-    /**
-     * Encuentra todos los mensajes de una sesión ordenados cronológicamente.
-     * Se usa para la carga inicial del historial completo.
-     *
-     * @param chatSession La entidad de la sesión de chat
-     * @return Lista de mensajes ordenados por sentAt ascendente
-     */
     List<ChatMessageEntity> findByChatSessionOrderBySentAtAsc(ChatSessionEntity chatSession);
 
-    /**
-     * Encuentra mensajes nuevos desde un timestamp específico.
-     * Este método es crucial para el mecanismo de polling del frontend.
-     *
-     * @param chatSession La entidad de la sesión de chat
-     * @param sinceTimestamp Timestamp desde el cual buscar mensajes (exclusivo)
-     * @return Lista de mensajes enviados después del timestamp
-     */
     List<ChatMessageEntity> findByChatSessionAndSentAtAfterOrderBySentAtAsc(
             ChatSessionEntity chatSession,
             Instant sinceTimestamp
     );
 
-    /**
-     * Encuentra todos los mensajes de una sesión por su ID.
-     *
-     * @param chatSessionId El ID de la sesión de chat
-     * @return Lista de mensajes ordenados cronológicamente
-     */
     List<ChatMessageEntity> findByChatSessionIdOrderBySentAtAsc(Long chatSessionId);
 
-    /**
-     * Cuenta el número total de mensajes en una sesión.
-     *
-     * @param chatSession La entidad de la sesión de chat
-     * @return Número total de mensajes
-     */
     long countByChatSession(ChatSessionEntity chatSession);
 
-    /**
-     * Cuenta mensajes nuevos desde un timestamp específico.
-     * Útil para implementar badges de "mensajes no leídos".
-     *
-     * @param chatSession La entidad de la sesión de chat
-     * @param sinceTimestamp Timestamp desde el cual contar
-     * @return Número de mensajes nuevos
-     */
     long countByChatSessionAndSentAtAfter(ChatSessionEntity chatSession, Instant sinceTimestamp);
+
+    /**
+     * Página de mensajes ordenados por sentAt DESC. Diseñado para "carga inicial perezosa":
+     * el cliente pide la página 0 (los más recientes), y al hacer scroll-up pide páginas
+     * sucesivas. La página DESC es la convención estándar de WhatsApp/Telegram.
+     */
+    List<ChatMessageEntity> findByChatSessionOrderBySentAtDesc(ChatSessionEntity chatSession, Pageable pageable);
+
+    /**
+     * Cuenta los mensajes no-leídos de los que el receptor NO es el sender.
+     * Esta query es la base del badge "X no leídos" del inbox (CU012 paso 9).
+     */
+    @Query("SELECT COUNT(m) FROM ChatMessageEntity m " +
+           "WHERE m.chatSession = :session " +
+           "AND m.readAt IS NULL " +
+           "AND m.sender.id <> :receiverUserId")
+    long countUnreadByChatSessionAndReceiver(@Param("session") ChatSessionEntity session,
+                                             @Param("receiverUserId") Long receiverUserId);
+
+    /**
+     * Bulk-update que marca como leídos todos los mensajes no-leídos enviados por la contraparte.
+     * Lo hacemos en una sola sentencia UPDATE para evitar el patrón N+1 (un select-update por mensaje)
+     * cuando un usuario abre una conversación con cientos de mensajes pendientes.
+     *
+     * @return cantidad de filas actualizadas (útil para el frontend, p. ej. para decidir si refrescar).
+     */
+    @Modifying
+    @Query("UPDATE ChatMessageEntity m SET m.readAt = :readAt " +
+           "WHERE m.chatSession = :session " +
+           "AND m.readAt IS NULL " +
+           "AND m.sender.id <> :receiverUserId")
+    int markAllAsReadInSession(@Param("session") ChatSessionEntity session,
+                               @Param("receiverUserId") Long receiverUserId,
+                               @Param("readAt") Instant readAt);
+
+    /**
+     * Último mensaje de la sesión. Se usa para ordenar el inbox por actividad real
+     * (en lugar de por createdAt de la sesión, que solo refleja la primera atención).
+     */
+    Optional<ChatMessageEntity> findFirstByChatSessionOrderBySentAtDesc(ChatSessionEntity chatSession);
 }

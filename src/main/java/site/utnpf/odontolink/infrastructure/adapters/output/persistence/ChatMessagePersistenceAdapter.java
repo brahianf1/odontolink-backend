@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 import site.utnpf.odontolink.domain.model.ChatMessage;
 import site.utnpf.odontolink.domain.model.ChatSession;
@@ -15,12 +17,10 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * Adaptador de persistencia para ChatMessage (Hexagonal Architecture).
- * Implementa la interfaz del dominio ChatMessageRepository usando JPA.
- * Puerto de salida (Output Adapter).
+ * Adaptador de persistencia para ChatMessage (Hexagonal).
  *
- * Este adaptador maneja la persistencia de mensajes de chat y proporciona métodos
- * especializados para consultas con polling (obtener mensajes nuevos desde un timestamp).
+ * Implementa el puerto del dominio {@link ChatMessageRepository} y traduce las llamadas
+ * a operaciones JPA, incluyendo el bulk-update de read receipts y paginación.
  *
  * @author OdontoLink Team
  */
@@ -79,5 +79,35 @@ public class ChatMessagePersistenceAdapter implements ChatMessageRepository {
     public long countByChatSessionAndSentAtAfter(ChatSession session, Instant sinceTimestamp) {
         ChatSessionEntity sessionEntity = ChatSessionPersistenceMapper.toEntityShallow(session);
         return jpaChatMessageRepository.countByChatSessionAndSentAtAfter(sessionEntity, sinceTimestamp);
+    }
+
+    @Override
+    public List<ChatMessage> findByChatSessionPagedDesc(ChatSession session, int page, int size) {
+        ChatSessionEntity sessionEntity = ChatSessionPersistenceMapper.toEntityShallow(session);
+        // Sort DESC se redunda en el método del repo (findByChatSessionOrderBySentAtDesc) y aquí
+        // por claridad — Spring respeta el sort del Pageable cuando el method-name no lo define.
+        var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "sentAt"));
+        return jpaChatMessageRepository.findByChatSessionOrderBySentAtDesc(sessionEntity, pageable).stream()
+                .map(ChatMessagePersistenceMapper::toDomainShallow)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public long countUnreadByChatSessionAndReceiver(ChatSession session, Long receiverUserId) {
+        ChatSessionEntity sessionEntity = ChatSessionPersistenceMapper.toEntityShallow(session);
+        return jpaChatMessageRepository.countUnreadByChatSessionAndReceiver(sessionEntity, receiverUserId);
+    }
+
+    @Override
+    public int markAllAsReadInSession(ChatSession session, Long receiverUserId, Instant readAt) {
+        ChatSessionEntity sessionEntity = ChatSessionPersistenceMapper.toEntityShallow(session);
+        return jpaChatMessageRepository.markAllAsReadInSession(sessionEntity, receiverUserId, readAt);
+    }
+
+    @Override
+    public Optional<ChatMessage> findLastMessageInSession(ChatSession session) {
+        ChatSessionEntity sessionEntity = ChatSessionPersistenceMapper.toEntityShallow(session);
+        return jpaChatMessageRepository.findFirstByChatSessionOrderBySentAtDesc(sessionEntity)
+                .map(ChatMessagePersistenceMapper::toDomainShallow);
     }
 }

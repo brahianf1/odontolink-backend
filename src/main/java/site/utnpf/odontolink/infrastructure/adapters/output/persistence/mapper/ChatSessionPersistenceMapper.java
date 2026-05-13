@@ -6,44 +6,23 @@ import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.C
 import java.util.stream.Collectors;
 
 /**
- * Mapper para convertir entre ChatSession (dominio) y ChatSessionEntity (persistencia).
+ * Mapper entre ChatSession (dominio) y ChatSessionEntity (persistencia).
  *
- * Este mapper sigue el patrón de evitar ciclos infinitos al mapear relaciones bidireccionales.
- * Las versiones "shallow" excluyen las colecciones de mensajes para evitar recursión infinita.
+ * Las variantes "shallow" se usan para romper ciclos con ChatMessage en mappeos bidireccionales.
  *
  * @author OdontoLink Team
  */
 public class ChatSessionPersistenceMapper {
 
     private ChatSessionPersistenceMapper() {
-        // Utility class
     }
 
-    /**
-     * Convierte de entidad JPA a modelo de dominio (versión completa con mensajes).
-     *
-     * @param entity Entidad JPA ChatSessionEntity
-     * @return Modelo de dominio ChatSession
-     */
     public static ChatSession toDomain(ChatSessionEntity entity) {
         if (entity == null) {
             return null;
         }
+        ChatSession chatSession = mapBaseToDomain(entity);
 
-        ChatSession chatSession = new ChatSession();
-        chatSession.setId(entity.getId());
-        chatSession.setCreatedAt(entity.getCreatedAt());
-
-        // Mapear Patient y Practitioner
-        if (entity.getPatient() != null) {
-            chatSession.setPatient(PatientPersistenceMapper.toDomain(entity.getPatient()));
-        }
-
-        if (entity.getPractitioner() != null) {
-            chatSession.setPractitioner(PractitionerPersistenceMapper.toDomain(entity.getPractitioner()));
-        }
-
-        // Mapear mensajes (si existen)
         if (entity.getMessages() != null) {
             chatSession.setMessages(
                 entity.getMessages().stream()
@@ -51,65 +30,22 @@ public class ChatSessionPersistenceMapper {
                     .collect(Collectors.toList())
             );
         }
-
         return chatSession;
     }
 
-    /**
-     * Convierte de entidad JPA a modelo de dominio (versión shallow sin mensajes).
-     * Se usa cuando solo necesitamos la información básica de la sesión.
-     *
-     * @param entity Entidad JPA ChatSessionEntity
-     * @return Modelo de dominio ChatSession sin mensajes
-     */
     public static ChatSession toDomainShallow(ChatSessionEntity entity) {
         if (entity == null) {
             return null;
         }
-
-        ChatSession chatSession = new ChatSession();
-        chatSession.setId(entity.getId());
-        chatSession.setCreatedAt(entity.getCreatedAt());
-
-        // Mapear Patient y Practitioner
-        if (entity.getPatient() != null) {
-            chatSession.setPatient(PatientPersistenceMapper.toDomain(entity.getPatient()));
-        }
-
-        if (entity.getPractitioner() != null) {
-            chatSession.setPractitioner(PractitionerPersistenceMapper.toDomain(entity.getPractitioner()));
-        }
-
-        // No mapeamos mensajes en la versión shallow
-
-        return chatSession;
+        return mapBaseToDomain(entity);
     }
 
-    /**
-     * Convierte de modelo de dominio a entidad JPA (versión completa).
-     *
-     * @param chatSession Modelo de dominio ChatSession
-     * @return Entidad JPA ChatSessionEntity
-     */
     public static ChatSessionEntity toEntity(ChatSession chatSession) {
         if (chatSession == null) {
             return null;
         }
+        ChatSessionEntity entity = mapBaseToEntity(chatSession);
 
-        ChatSessionEntity entity = new ChatSessionEntity();
-        entity.setId(chatSession.getId());
-        entity.setCreatedAt(chatSession.getCreatedAt());
-
-        // Mapear Patient y Practitioner
-        if (chatSession.getPatient() != null) {
-            entity.setPatient(PatientPersistenceMapper.toEntity(chatSession.getPatient()));
-        }
-
-        if (chatSession.getPractitioner() != null) {
-            entity.setPractitioner(PractitionerPersistenceMapper.toEntity(chatSession.getPractitioner()));
-        }
-
-        // Mapear mensajes (si existen)
         if (chatSession.getMessages() != null) {
             entity.setMessages(
                 chatSession.getMessages().stream()
@@ -117,36 +53,61 @@ public class ChatSessionPersistenceMapper {
                     .collect(Collectors.toList())
             );
         }
-
         return entity;
     }
 
-    /**
-     * Convierte de modelo de dominio a entidad JPA (versión shallow sin mensajes).
-     *
-     * @param chatSession Modelo de dominio ChatSession
-     * @return Entidad JPA ChatSessionEntity sin mensajes
-     */
     public static ChatSessionEntity toEntityShallow(ChatSession chatSession) {
         if (chatSession == null) {
             return null;
         }
+        return mapBaseToEntity(chatSession);
+    }
 
+    // Helpers privados que centralizan el mapeo de campos base + bloqueo (RF28).
+
+    private static ChatSession mapBaseToDomain(ChatSessionEntity entity) {
+        ChatSession chatSession = new ChatSession();
+        chatSession.setId(entity.getId());
+        chatSession.setCreatedAt(entity.getCreatedAt());
+
+        if (entity.getPatient() != null) {
+            chatSession.setPatient(PatientPersistenceMapper.toDomain(entity.getPatient()));
+        }
+        if (entity.getPractitioner() != null) {
+            chatSession.setPractitioner(PractitionerPersistenceMapper.toDomain(entity.getPractitioner()));
+        }
+
+        // Mapeo de campos de bloqueo (RF28)
+        chatSession.setBlocked(entity.isBlocked());
+        chatSession.setBlockedAt(entity.getBlockedAt());
+        chatSession.setBlockedByRole(entity.getBlockedByRole());
+        chatSession.setBlockReason(entity.getBlockReason());
+        if (entity.getBlockedByUser() != null) {
+            chatSession.setBlockedByUser(UserPersistenceMapper.toDomain(entity.getBlockedByUser()));
+        }
+        return chatSession;
+    }
+
+    private static ChatSessionEntity mapBaseToEntity(ChatSession chatSession) {
         ChatSessionEntity entity = new ChatSessionEntity();
         entity.setId(chatSession.getId());
         entity.setCreatedAt(chatSession.getCreatedAt());
 
-        // Mapear Patient y Practitioner
         if (chatSession.getPatient() != null) {
             entity.setPatient(PatientPersistenceMapper.toEntity(chatSession.getPatient()));
         }
-
         if (chatSession.getPractitioner() != null) {
             entity.setPractitioner(PractitionerPersistenceMapper.toEntity(chatSession.getPractitioner()));
         }
 
-        // No mapeamos mensajes en la versión shallow
-
+        // Mapeo de campos de bloqueo (RF28)
+        entity.setBlocked(chatSession.isBlocked());
+        entity.setBlockedAt(chatSession.getBlockedAt());
+        entity.setBlockedByRole(chatSession.getBlockedByRole());
+        entity.setBlockReason(chatSession.getBlockReason());
+        if (chatSession.getBlockedByUser() != null) {
+            entity.setBlockedByUser(UserPersistenceMapper.toEntity(chatSession.getBlockedByUser()));
+        }
         return entity;
     }
 }
