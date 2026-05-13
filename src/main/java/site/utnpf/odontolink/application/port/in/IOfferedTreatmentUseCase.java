@@ -2,6 +2,7 @@ package site.utnpf.odontolink.application.port.in;
 
 import site.utnpf.odontolink.domain.model.AvailabilitySlot;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
+import site.utnpf.odontolink.domain.model.OfferedTreatmentDeletionResult;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -67,13 +68,27 @@ public interface IOfferedTreatmentUseCase {
                                             Integer maxCompletedAttentions);
 
     /**
-     * Elimina un tratamiento del catálogo personal del practicante.
+     * Elimina (o desactiva por integridad) un tratamiento del catálogo personal
+     * del practicante. Implementa la política de RF16:
+     *
+     * - Si la oferta tiene compromisos vivos (turnos SCHEDULED futuros o
+     *   Atenciones IN_PROGRESS) o atenciones históricas, se aplica BAJA LÓGICA
+     *   (active = false) para preservar la cadena referencial de turnos y
+     *   atenciones ya otorgados.
+     * - Si la oferta nunca fue usada, se elimina físicamente.
+     *
+     * Verificación de propiedad: el practicante autenticado DEBE ser el dueño
+     * de la oferta. La identidad se obtiene del JWT y se enfrenta contra
+     * {@code offer.practitioner.id}. Cualquier discrepancia dispara
+     * {@code UnauthorizedOperationException}.
+     *
      * Corresponde al CU-007 (Eliminar Tratamiento del Catálogo Personal).
      *
-     * @param practitionerId ID del practicante (para verificar permisos)
+     * @param practitionerId ID del practicante autenticado (del JWT)
      * @param offeredTreatmentId ID del tratamiento ofrecido a eliminar
+     * @return El outcome del Dominio (SOFT/HARD) con la razón asociada
      */
-    void removeFromCatalog(Long practitionerId, Long offeredTreatmentId);
+    OfferedTreatmentDeletionResult removeFromCatalog(Long practitionerId, Long offeredTreatmentId);
 
     /**
      * Obtiene todos los tratamientos que ofrece un practicante específico.
