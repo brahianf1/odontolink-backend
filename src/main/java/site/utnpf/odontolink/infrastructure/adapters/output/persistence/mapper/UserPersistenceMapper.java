@@ -28,6 +28,8 @@ public class UserPersistenceMapper {
         user.setDni(entity.getDni());
         user.setPhone(entity.getPhone());
         user.setBirthDate(entity.getBirthDate());
+        user.setAddress(entity.getAddress());
+        user.setProfilePictureUrl(entity.getProfilePictureUrl());
         user.setCreatedAt(entity.getCreatedAt());
 
         return user;
@@ -52,6 +54,8 @@ public class UserPersistenceMapper {
         entity.setDni(user.getDni());
         entity.setPhone(user.getPhone());
         entity.setBirthDate(user.getBirthDate());
+        entity.setAddress(user.getAddress());
+        entity.setProfilePictureUrl(user.getProfilePictureUrl());
         entity.setCreatedAt(user.getCreatedAt());
 
         return entity;

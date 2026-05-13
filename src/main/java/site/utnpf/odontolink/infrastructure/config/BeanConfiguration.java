@@ -16,6 +16,7 @@ import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
 import site.utnpf.odontolink.application.port.in.IPasswordResetUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.IPractitionerRegistrationUseCase;
+import site.utnpf.odontolink.application.port.in.IProfileUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorUseCase;
 import site.utnpf.odontolink.application.port.in.ITreatmentUseCase;
@@ -32,6 +33,7 @@ import site.utnpf.odontolink.application.service.OfferedTreatmentService;
 import site.utnpf.odontolink.application.service.PasswordResetService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
 import site.utnpf.odontolink.application.service.PractitionerRegistrationService;
+import site.utnpf.odontolink.application.service.ProfileService;
 import site.utnpf.odontolink.application.service.SupervisorRegistrationService;
 import site.utnpf.odontolink.application.service.SupervisorService;
 import site.utnpf.odontolink.application.service.TreatmentService;
@@ -490,6 +492,20 @@ public class BeanConfiguration {
                 practitionerRegistrationUseCase,
                 supervisorRegistrationUseCase
         );
+    }
+
+    /**
+     * Bean para el caso de uso de autoservicio del perfil del usuario (RF06).
+     *
+     * Se cablea contra el {@link UserRepository} para leer/persistir y contra
+     * el {@link PasswordEncoder} ya definido en {@code SecurityConfig} para
+     * verificar y reescribir el hash de la contraseña sin acoplarse a una
+     * implementación concreta de hashing.
+     */
+    @Bean
+    public IProfileUseCase profileUseCase(UserRepository userRepository,
+                                          PasswordEncoder passwordEncoder) {
+        return new ProfileService(userRepository, passwordEncoder);
     }
 
     /**
