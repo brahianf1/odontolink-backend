@@ -6,10 +6,10 @@ import java.time.Instant;
 
 /**
  * Entidad JPA para la tabla 'chat_messages'.
- * Representa un mensaje individual dentro de una sesión de chat en la base de datos.
  *
- * Esta entidad modela RF26 - CU 6.2, 6.3: Envío y consulta de mensajes de chat.
- * Los mensajes son inmutables una vez creados y se ordenan cronológicamente.
+ * Modela RF26 (envío y consulta) y CU012 (read receipts) mediante la columna read_at:
+ * - read_at NULL = mensaje aún no leído por el destinatario
+ * - read_at != NULL = timestamp en el que el destinatario abrió el chat por primera vez
  *
  * @author OdontoLink Team
  */
@@ -18,7 +18,9 @@ import java.time.Instant;
         indexes = {
             @Index(name = "idx_chat_message_session", columnList = "chat_session_id"),
             @Index(name = "idx_chat_message_sender", columnList = "sender_id"),
-            @Index(name = "idx_chat_message_sent_at", columnList = "sent_at")
+            @Index(name = "idx_chat_message_sent_at", columnList = "sent_at"),
+            // Índice compuesto para la query crítica de "no leídos" (countByChatSession + readAt IS NULL + sender != receiver).
+            @Index(name = "idx_chat_message_session_read", columnList = "chat_session_id, read_at")
         })
 public class ChatMessageEntity {
 
@@ -26,53 +28,38 @@ public class ChatMessageEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Relación ManyToOne con ChatSessionEntity.
-     * Un mensaje pertenece a una sesión de chat específica.
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chat_session_id", nullable = false)
     private ChatSessionEntity chatSession;
 
-    /**
-     * Relación ManyToOne con UserEntity.
-     * Representa el usuario (paciente o practicante) que envió el mensaje.
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "sender_id", nullable = false)
     private UserEntity sender;
 
-    /**
-     * Contenido textual del mensaje.
-     */
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
-    /**
-     * Timestamp de envío del mensaje.
-     * Se usa para ordenamiento cronológico y para el mecanismo de polling.
-     */
     @Column(nullable = false, updatable = false)
     private Instant sentAt;
 
     /**
-     * Constructor sin argumentos (requerido por JPA)
+     * Timestamp en el que el receptor leyó el mensaje. null = aún no leído.
+     * Nullable porque el mensaje nace "no leído" y se actualiza vía bulk-update cuando
+     * el receptor abre la conversación.
      */
+    @Column(name = "read_at", nullable = true)
+    private Instant readAt;
+
     public ChatMessageEntity() {
         this.sentAt = Instant.now();
     }
 
-    /**
-     * Callback de JPA ejecutado antes de persistir la entidad.
-     */
     @PrePersist
     protected void onCreate() {
         if (sentAt == null) {
             sentAt = Instant.now();
         }
     }
-
-    // Getters y Setters
 
     public Long getId() {
         return id;
@@ -112,5 +99,13 @@ public class ChatMessageEntity {
 
     public void setSentAt(Instant sentAt) {
         this.sentAt = sentAt;
+    }
+
+    public Instant getReadAt() {
+        return readAt;
+    }
+
+    public void setReadAt(Instant readAt) {
+        this.readAt = readAt;
     }
 }

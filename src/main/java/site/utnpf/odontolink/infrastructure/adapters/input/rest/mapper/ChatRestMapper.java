@@ -1,94 +1,136 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper;
 
+import site.utnpf.odontolink.application.port.in.dto.ChatSessionView;
+import site.utnpf.odontolink.application.port.in.dto.PagedMessages;
 import site.utnpf.odontolink.domain.model.ChatMessage;
 import site.utnpf.odontolink.domain.model.ChatSession;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ChatMessageResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ChatSessionResponseDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.PagedChatMessagesResponseDTO;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
- * Mapper para convertir entre modelos de dominio de Chat y DTOs REST.
- *
- * Este mapper transforma los modelos de dominio (ChatSession, ChatMessage)
- * a DTOs optimizados para la respuesta HTTP, incluyendo información denormalizada
- * para facilitar el consumo del frontend.
+ * Mapper entre modelos de dominio/aplicación y DTOs REST del chat.
  *
  * @author OdontoLink Team
  */
 public class ChatRestMapper {
 
+    /** Preview del último mensaje: cortamos a 120 caracteres para no inflar el payload del inbox. */
+    private static final int LAST_MESSAGE_PREVIEW_LENGTH = 120;
+
     private ChatRestMapper() {
-        // Utility class
+    }
+
+    public static ChatSessionResponseDTO toChatSessionResponseDTO(ChatSession chatSession) {
+        return toChatSessionResponseDTO(chatSession, 0L, null);
     }
 
     /**
-     * Convierte una ChatSession de dominio a un DTO de respuesta.
-     * Incluye nombres denormalizados de paciente y practicante para el frontend.
-     *
-     * @param chatSession La sesión de chat del dominio
-     * @return DTO de respuesta con información de la sesión
+     * Versión enriquecida: además de los datos básicos incluye unreadCount y preview del último mensaje.
      */
-    public static ChatSessionResponseDTO toChatSessionResponseDTO(ChatSession chatSession) {
+    public static ChatSessionResponseDTO toChatSessionResponseDTO(ChatSessionView view) {
+        if (view == null) {
+            return null;
+        }
+        return toChatSessionResponseDTO(view.getSession(), view.getUnreadCount(), view.getLastMessage());
+    }
+
+    private static ChatSessionResponseDTO toChatSessionResponseDTO(ChatSession chatSession,
+                                                                   long unreadCount,
+                                                                   ChatMessage lastMessage) {
         if (chatSession == null) {
             return null;
         }
-
         ChatSessionResponseDTO dto = new ChatSessionResponseDTO();
         dto.setId(chatSession.getId());
         dto.setCreatedAt(chatSession.getCreatedAt());
 
-        // Mapear información del paciente
         if (chatSession.getPatient() != null) {
             dto.setPatientId(chatSession.getPatient().getId());
             if (chatSession.getPatient().getUser() != null) {
-                String patientName = chatSession.getPatient().getUser().getFirstName() + " " +
-                                   chatSession.getPatient().getUser().getLastName();
-                dto.setPatientName(patientName);
+                dto.setPatientName(
+                        chatSession.getPatient().getUser().getFirstName() + " "
+                                + chatSession.getPatient().getUser().getLastName());
             }
         }
 
-        // Mapear información del practicante
         if (chatSession.getPractitioner() != null) {
             dto.setPractitionerId(chatSession.getPractitioner().getId());
             if (chatSession.getPractitioner().getUser() != null) {
-                String practitionerName = chatSession.getPractitioner().getUser().getFirstName() + " " +
-                                        chatSession.getPractitioner().getUser().getLastName();
-                dto.setPractitionerName(practitionerName);
+                dto.setPractitionerName(
+                        chatSession.getPractitioner().getUser().getFirstName() + " "
+                                + chatSession.getPractitioner().getUser().getLastName());
             }
+        }
+
+        // Metadatos del inbox (CU012)
+        dto.setUnreadCount(unreadCount);
+        if (lastMessage != null) {
+            dto.setLastMessageAt(lastMessage.getSentAt());
+            dto.setLastMessagePreview(truncate(lastMessage.getContent(), LAST_MESSAGE_PREVIEW_LENGTH));
+        }
+
+        // Estado de bloqueo (RF28)
+        dto.setBlocked(chatSession.isBlocked());
+        dto.setBlockedAt(chatSession.getBlockedAt());
+        dto.setBlockedByRole(chatSession.getBlockedByRole());
+        dto.setBlockReason(chatSession.getBlockReason());
+        if (chatSession.getBlockedByUser() != null) {
+            dto.setBlockedByUserId(chatSession.getBlockedByUser().getId());
         }
 
         return dto;
     }
 
-    /**
-     * Convierte un ChatMessage de dominio a un DTO de respuesta.
-     * Incluye el nombre del remitente denormalizado para el frontend.
-     *
-     * @param chatMessage El mensaje de chat del dominio
-     * @return DTO de respuesta con información del mensaje
-     */
     public static ChatMessageResponseDTO toChatMessageResponseDTO(ChatMessage chatMessage) {
         if (chatMessage == null) {
             return null;
         }
-
         ChatMessageResponseDTO dto = new ChatMessageResponseDTO();
         dto.setId(chatMessage.getId());
         dto.setContent(chatMessage.getContent());
         dto.setSentAt(chatMessage.getSentAt());
+        dto.setReadAt(chatMessage.getReadAt());
 
-        // Mapear información de la sesión de chat
         if (chatMessage.getChatSession() != null) {
             dto.setChatSessionId(chatMessage.getChatSession().getId());
         }
-
-        // Mapear información del remitente
         if (chatMessage.getSender() != null) {
             dto.setSenderId(chatMessage.getSender().getId());
-            String senderName = chatMessage.getSender().getFirstName() + " " +
-                              chatMessage.getSender().getLastName();
-            dto.setSenderName(senderName);
+            dto.setSenderName(
+                    chatMessage.getSender().getFirstName() + " "
+                            + chatMessage.getSender().getLastName());
         }
-
         return dto;
+    }
+
+    public static PagedChatMessagesResponseDTO toPagedChatMessagesResponseDTO(PagedMessages page) {
+        if (page == null) {
+            return null;
+        }
+        List<ChatMessageResponseDTO> messages = page.getMessages().stream()
+                .map(ChatRestMapper::toChatMessageResponseDTO)
+                .collect(Collectors.toList());
+        return new PagedChatMessagesResponseDTO(
+                messages,
+                page.getPage(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.isLast()
+        );
+    }
+
+    private static String truncate(String text, int max) {
+        if (text == null) {
+            return null;
+        }
+        if (text.length() <= max) {
+            return text;
+        }
+        return text.substring(0, max) + "…";
     }
 }
