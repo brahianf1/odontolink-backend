@@ -17,6 +17,7 @@ import site.utnpf.odontolink.application.port.in.IPasswordResetUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.IPractitionerRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.IProfileUseCase;
+import site.utnpf.odontolink.application.port.in.ISupervisorAttentionUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorUseCase;
 import site.utnpf.odontolink.application.port.in.ITreatmentUseCase;
@@ -34,6 +35,7 @@ import site.utnpf.odontolink.application.service.PasswordResetService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
 import site.utnpf.odontolink.application.service.PractitionerRegistrationService;
 import site.utnpf.odontolink.application.service.ProfileService;
+import site.utnpf.odontolink.application.service.SupervisorAttentionService;
 import site.utnpf.odontolink.application.service.SupervisorRegistrationService;
 import site.utnpf.odontolink.application.service.SupervisorService;
 import site.utnpf.odontolink.application.service.TreatmentService;
@@ -376,6 +378,37 @@ public class BeanConfiguration {
                 supervisorRepository,
                 practitionerRepository,
                 supervisorPolicyService
+        );
+    }
+
+    /**
+     * Bean para el caso de uso del Módulo Académico de Auditoría Clínica (RF39).
+     *
+     * Implementa la potestad del docente para:
+     *  - Listar y auditar atenciones de practicantes vinculados
+     *  - Cerrar (COMPLETED) por autoridad académica una atención
+     *
+     * Se cablea contra repositorios de Supervisor, Practitioner, Attention y ProgressNote
+     * y reutiliza los servicios de dominio existentes:
+     *  - {@link SupervisorPolicyService} para el cerco de vinculación docente-alumno.
+     *  - {@link AttentionPolicyService} para reaplicar las reglas clínicas de finalización
+     *    sin duplicar lógica.
+     */
+    @Bean
+    public ISupervisorAttentionUseCase supervisorAttentionUseCase(
+            SupervisorRepository supervisorRepository,
+            PractitionerRepository practitionerRepository,
+            AttentionRepository attentionRepository,
+            ProgressNoteRepository progressNoteRepository,
+            SupervisorPolicyService supervisorPolicyService,
+            AttentionPolicyService attentionPolicyService) {
+        return new SupervisorAttentionService(
+                supervisorRepository,
+                practitionerRepository,
+                attentionRepository,
+                progressNoteRepository,
+                supervisorPolicyService,
+                attentionPolicyService
         );
     }
 
