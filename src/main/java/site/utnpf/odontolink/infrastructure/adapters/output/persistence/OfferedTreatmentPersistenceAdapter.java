@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
 import site.utnpf.odontolink.domain.model.OfferedTreatmentSearchCriteria;
 import site.utnpf.odontolink.domain.model.PageQuery;
@@ -33,8 +34,16 @@ import java.util.stream.Collectors;
  * Adaptador de persistencia para OfferedTreatment (Hexagonal Architecture).
  * Implementa la interfaz del dominio OfferedTreatmentRepository usando JPA.
  * Puerto de salida (Output Adapter).
+ *
+ * El mapeo entidad-a-dominio recorre asociaciones LAZY pesadas (practitioner,
+ * treatment, availabilitySlots), por lo que el adapter declara
+ * {@code @Transactional(readOnly = true)} a nivel de clase para asegurar que
+ * la sesion siga abierta durante la conversion. Sin esto, deshabilitar OSIV
+ * dispara LazyInitializationException en cualquier endpoint que pase por aqui.
+ * Las escrituras se reanotan con {@code @Transactional} para no bloquear el flush.
  */
 @Component
+@Transactional(readOnly = true)
 public class OfferedTreatmentPersistenceAdapter implements OfferedTreatmentRepository {
 
     /**
@@ -59,6 +68,7 @@ public class OfferedTreatmentPersistenceAdapter implements OfferedTreatmentRepos
     }
 
     @Override
+    @Transactional
     public OfferedTreatment save(OfferedTreatment offeredTreatment) {
         OfferedTreatmentEntity entity = OfferedTreatmentPersistenceMapper.toEntity(offeredTreatment);
         OfferedTreatmentEntity savedEntity = jpaOfferedTreatmentRepository.save(entity);
@@ -105,6 +115,7 @@ public class OfferedTreatmentPersistenceAdapter implements OfferedTreatmentRepos
     }
 
     @Override
+    @Transactional
     public void deleteById(Long id) {
         jpaOfferedTreatmentRepository.deleteById(id);
     }

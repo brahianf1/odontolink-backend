@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.Supervisor;
 import site.utnpf.odontolink.domain.repository.SupervisorRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.SupervisorEntity;
@@ -13,8 +14,12 @@ import java.util.Optional;
  * Adaptador de persistencia para Supervisor (Hexagonal Architecture).
  * Implementa la interfaz del dominio SupervisorRepository usando JPA.
  * Puerto de salida (Output Adapter).
+ *
+ * Politica transaccional uniforme con el resto de adapters; ver
+ * {@link UserPersistenceAdapter} para el racional.
  */
 @Component
+@Transactional(readOnly = true)
 public class SupervisorPersistenceAdapter implements SupervisorRepository {
 
     private final JpaSupervisorRepository jpaSupervisorRepository;
@@ -24,6 +29,7 @@ public class SupervisorPersistenceAdapter implements SupervisorRepository {
     }
 
     @Override
+    @Transactional
     public Supervisor save(Supervisor supervisor) {
         SupervisorEntity entity = SupervisorPersistenceMapper.toEntity(supervisor);
         SupervisorEntity savedEntity = jpaSupervisorRepository.save(entity);

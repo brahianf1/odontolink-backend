@@ -12,6 +12,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.Feedback;
 import site.utnpf.odontolink.domain.model.FeedbackSearchCriteria;
@@ -41,9 +42,13 @@ import java.util.stream.Collectors;
  *  - {@link #averageRating} calcula el promedio en BD sobre el mismo
  *    universo de filtros para evitar traer todas las filas a memoria.
  *
+ * Politica transaccional uniforme con el resto de adapters; ver
+ * {@link UserPersistenceAdapter} para el racional.
+ *
  * @author OdontoLink Team
  */
 @Component
+@Transactional(readOnly = true)
 public class FeedbackPersistenceAdapter implements FeedbackRepository {
 
     /**
@@ -72,6 +77,7 @@ public class FeedbackPersistenceAdapter implements FeedbackRepository {
     }
 
     @Override
+    @Transactional
     public Feedback save(Feedback feedback) {
         var entity = FeedbackPersistenceMapper.toEntity(feedback);
         var savedEntity = jpaFeedbackRepository.save(entity);

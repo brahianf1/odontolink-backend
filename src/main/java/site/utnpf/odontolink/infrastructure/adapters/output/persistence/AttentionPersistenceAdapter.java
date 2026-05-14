@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.AttentionStatus;
 import site.utnpf.odontolink.domain.model.Patient;
@@ -24,8 +25,12 @@ import java.util.stream.Collectors;
  *
  * Este adaptador maneja la persistencia transaccional del agregado Attention
  * junto con sus Appointments hijos gracias a CascadeType.ALL.
+ *
+ * Politica transaccional uniforme con el resto de adapters; ver
+ * {@link UserPersistenceAdapter} para el racional.
  */
 @Component
+@Transactional(readOnly = true)
 public class AttentionPersistenceAdapter implements AttentionRepository {
 
     private final JpaAttentionRepository jpaAttentionRepository;
@@ -39,6 +44,7 @@ public class AttentionPersistenceAdapter implements AttentionRepository {
      * Gracias a CascadeType.ALL en AttentionEntity, los Appointments se guardan automáticamente.
      */
     @Override
+    @Transactional
     public Attention save(Attention attention) {
         AttentionEntity entity = AttentionPersistenceMapper.toEntity(attention);
         AttentionEntity savedEntity = jpaAttentionRepository.save(entity);
@@ -154,6 +160,7 @@ public class AttentionPersistenceAdapter implements AttentionRepository {
     }
 
     @Override
+    @Transactional
     public boolean updateStatus(Long attentionId, AttentionStatus newStatus) {
         int rowsAffected = jpaAttentionRepository.updateStatus(attentionId, newStatus);
         return rowsAffected > 0;

@@ -16,6 +16,14 @@ public class ErrorResponseDTO {
     private String path;
     private List<String> details;
 
+    /**
+     * Identificador unico del incidente. Se rellena solo en errores 5xx para
+     * que el cliente pueda citarlo al reportar el problema y soporte/operaciones
+     * lo correlacione contra el log donde quedo registrada la traza completa.
+     * No se expone en errores 4xx (esperados) para mantener la respuesta compacta.
+     */
+    private String traceId;
+
     public ErrorResponseDTO() {
         this.timestamp = LocalDateTime.now();
     }
@@ -26,6 +34,14 @@ public class ErrorResponseDTO {
         this.error = error;
         this.message = message;
         this.path = path;
+    }
+
+    public String getTraceId() {
+        return traceId;
+    }
+
+    public void setTraceId(String traceId) {
+        this.traceId = traceId;
     }
 
     // Getters y Setters

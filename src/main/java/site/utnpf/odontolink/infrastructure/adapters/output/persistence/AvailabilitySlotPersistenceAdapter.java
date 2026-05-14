@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.AvailabilitySlot;
 import site.utnpf.odontolink.domain.repository.AvailabilitySlotRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AvailabilitySlotEntity;
@@ -20,8 +21,12 @@ import java.util.stream.Collectors;
  *
  * Este adaptador valida que los horarios solicitados estén dentro de la
  * disponibilidad publicada por los practicantes.
+ *
+ * Politica transaccional uniforme con el resto de adapters; ver
+ * {@link UserPersistenceAdapter} para el racional.
  */
 @Component
+@Transactional(readOnly = true)
 public class AvailabilitySlotPersistenceAdapter implements AvailabilitySlotRepository {
 
     private final JpaAvailabilitySlotRepository jpaAvailabilitySlotRepository;
@@ -31,6 +36,7 @@ public class AvailabilitySlotPersistenceAdapter implements AvailabilitySlotRepos
     }
 
     @Override
+    @Transactional
     public AvailabilitySlot save(AvailabilitySlot availabilitySlot) {
         AvailabilitySlotEntity entity = AvailabilitySlotPersistenceMapper.toEntity(availabilitySlot);
         AvailabilitySlotEntity savedEntity = jpaAvailabilitySlotRepository.save(entity);

@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.Patient;
 import site.utnpf.odontolink.domain.repository.PatientRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.PatientEntity;
@@ -13,8 +14,13 @@ import java.util.Optional;
  * Adaptador de persistencia para Patient (Hexagonal Architecture).
  * Implementa la interfaz del dominio PatientRepository usando JPA.
  * Puerto de salida (Output Adapter).
+ *
+ * Ver nota sobre la politica transaccional en {@link UserPersistenceAdapter}:
+ * el mapper toca {@code PatientEntity#user} (LAZY) y necesita una sesion
+ * activa durante el mapeo.
  */
 @Component
+@Transactional(readOnly = true)
 public class PatientPersistenceAdapter implements PatientRepository {
 
     private final JpaPatientRepository jpaPatientRepository;
@@ -24,6 +30,7 @@ public class PatientPersistenceAdapter implements PatientRepository {
     }
 
     @Override
+    @Transactional
     public Patient save(Patient patient) {
         PatientEntity entity = PatientPersistenceMapper.toEntity(patient);
         PatientEntity savedEntity = jpaPatientRepository.save(entity);
