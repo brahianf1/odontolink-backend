@@ -18,19 +18,22 @@ public class AdminCreatePatientRequestDTO {
     @Schema(description = "Email del paciente", example = "carlos.rodriguez@gmail.com", required = true)
     @NotBlank(message = "El email es obligatorio")
     @Email(message = "El email debe ser válido")
+    @Size(max = 100, message = "El email no puede superar los 100 caracteres")
     private String email;
 
     @Schema(description = "Contraseña inicial (mínimo 6 caracteres)", example = "MiPass123!", required = true)
     @NotBlank(message = "La contraseña es obligatoria")
-    @Size(min = 6, message = "La contraseña debe tener al menos 6 caracteres")
+    @Size(min = 6, max = 100, message = "La contraseña debe tener entre 6 y 100 caracteres")
     private String password;
 
     @Schema(description = "Nombre", example = "Carlos", required = true)
     @NotBlank(message = "El nombre es obligatorio")
+    @Size(max = 100, message = "El nombre no puede superar los 100 caracteres")
     private String firstName;
 
     @Schema(description = "Apellido", example = "Rodríguez", required = true)
     @NotBlank(message = "El apellido es obligatorio")
+    @Size(max = 100, message = "El apellido no puede superar los 100 caracteres")
     private String lastName;
 
     @Schema(description = "DNI (7 u 8 dígitos)", example = "35789456", required = true)
@@ -39,6 +42,7 @@ public class AdminCreatePatientRequestDTO {
     private String dni;
 
     @Schema(description = "Teléfono de contacto", example = "3815234567")
+    @Size(max = 20, message = "El teléfono no puede superar los 20 caracteres")
     private String phone;
 
     @Schema(description = "Fecha de nacimiento", example = "1995-06-15")
@@ -46,9 +50,18 @@ public class AdminCreatePatientRequestDTO {
     private LocalDate birthDate;
 
     @Schema(description = "Obra social", example = "OSDE")
+    @Size(max = 100, message = "La obra social no puede superar los 100 caracteres")
     private String healthInsurance;
 
-    @Schema(description = "Grupo sanguíneo", example = "O+")
+    @Schema(
+            description = "Grupo sanguineo segun el sistema ABO/Rh. Valores aceptados: A+, A-, B+, B-, AB+, AB-, O+, O-",
+            example = "O+",
+            allowableValues = {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}
+    )
+    @Pattern(
+            regexp = "^(A|B|AB|O)[+-]$",
+            message = "El grupo sanguineo debe seguir el formato ABO/Rh (A+, A-, B+, B-, AB+, AB-, O+, O-)"
+    )
     private String bloodType;
 
     public AdminCreatePatientRequestDTO() {

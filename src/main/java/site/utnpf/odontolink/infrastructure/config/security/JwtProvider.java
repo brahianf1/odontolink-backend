@@ -1,13 +1,21 @@
 package site.utnpf.odontolink.infrastructure.config.security;
 
-import io.jsonwebtoken.*;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.UnsupportedJwtException;
 import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.SignatureException;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 /**
@@ -17,11 +25,26 @@ import java.util.Date;
 @Component
 public class JwtProvider {
 
+    private static final Logger log = LoggerFactory.getLogger(JwtProvider.class);
+
     @Value("${jwt.secret}")
     private String jwtSecret;
 
     @Value("${jwt.expiration}")
     private long jwtExpiration;
+
+    /**
+     * SecretKey calculada una sola vez al arranque. Reconstruirla por cada
+     * generacion/validacion de token implica re-derivar la clave HMAC en cada
+     * request, lo cual es perfectamente innecesario porque el secreto es
+     * inmutable durante el ciclo de vida de la aplicacion.
+     */
+    private SecretKey signingKey;
+
+    @PostConstruct
+    void init() {
+        this.signingKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+    }
 
     /**
      * Genera un token JWT a partir de la autenticación.
@@ -38,13 +61,11 @@ public class JwtProvider {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpiration);
 
-        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-
         return Jwts.builder()
                 .subject(email)
                 .issuedAt(now)
                 .expiration(expiryDate)
-                .signWith(key)
+                .signWith(signingKey)
                 .compact();
     }
 
@@ -52,10 +73,8 @@ public class JwtProvider {
      * Extrae el email (subject) del token JWT.
      */
     public String getEmailFromToken(String token) {
-        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-
         return Jwts.parser()
-                .verifyWith(key)
+                .verifyWith(signingKey)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload()
@@ -63,24 +82,31 @@ public class JwtProvider {
     }
 
     /**
-     * Valida el token JWT.
+     * Valida el token JWT. Devuelve true si la firma y el formato son validos
+     * y el token aun no ha expirado.
+     *
+     * Las fallas se registran a traves del logger SLF4J usando niveles que
+     * reflejan la naturaleza del evento de seguridad: DEBUG para escenarios
+     * frecuentes y benignos (token expirado), WARN para situaciones que
+     * pueden indicar un cliente roto o un intento de manipulacion.
      */
     public boolean validateToken(String token) {
         try {
-            SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
             Jwts.parser()
-                    .verifyWith(key)
+                    .verifyWith(signingKey)
                     .build()
                     .parseSignedClaims(token);
             return true;
-        } catch (MalformedJwtException ex) {
-            System.err.println("Token JWT malformado");
         } catch (ExpiredJwtException ex) {
-            System.err.println("Token JWT expirado");
+            log.debug("Token JWT expirado para subject={}", ex.getClaims().getSubject());
+        } catch (MalformedJwtException ex) {
+            log.warn("Token JWT malformado: {}", ex.getMessage());
+        } catch (SignatureException ex) {
+            log.warn("Firma JWT invalida: {}", ex.getMessage());
         } catch (UnsupportedJwtException ex) {
-            System.err.println("Token JWT no soportado");
+            log.warn("Token JWT no soportado: {}", ex.getMessage());
         } catch (IllegalArgumentException ex) {
-            System.err.println("JWT claims string está vacío");
+            log.warn("Cadena de claims JWT vacia o nula");
         }
         return false;
     }

@@ -3,6 +3,8 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Past;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 
@@ -20,13 +22,17 @@ public class UpdateUserProfileRequestDTO {
 
     @Schema(description = "Nombre", example = "Carlos", required = true)
     @NotBlank(message = "El nombre es obligatorio")
+    @Size(max = 100, message = "El nombre no puede superar los 100 caracteres")
     private String firstName;
 
     @Schema(description = "Apellido", example = "Rodríguez", required = true)
     @NotBlank(message = "El apellido es obligatorio")
+    @Size(max = 100, message = "El apellido no puede superar los 100 caracteres")
     private String lastName;
 
     @Schema(description = "Teléfono de contacto", example = "3815234567")
+    @Size(max = 20, message = "El teléfono no puede superar los 20 caracteres")
+    @Pattern(regexp = "^[0-9 +()-]*$", message = "El teléfono sólo puede contener dígitos, espacios y los símbolos + ( ) -")
     private String phone;
 
     @Schema(description = "Fecha de nacimiento", example = "1995-06-15")
