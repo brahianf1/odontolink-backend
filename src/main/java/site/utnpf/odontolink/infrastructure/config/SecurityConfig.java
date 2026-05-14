@@ -67,7 +67,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
-                .authenticationProvider(authenticationProvider())
+                .authenticationProvider(daoAuthenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
@@ -103,10 +103,22 @@ public class SecurityConfig {
         return source;
     }
 
-    @Bean
-    public DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(userDetailsService);
+    /**
+     * DaoAuthenticationProvider instanciado manualmente y NO expuesto como bean.
+     *
+     * Si lo expusieramos como @Bean, Spring Security detecta un AuthenticationProvider
+     * global y desactiva la auto-configuracion del UserDetailsService sobre el
+     * AuthenticationManager (warning HHH/InitializeUserDetailsManagerConfigurer).
+     * Manteniendo la instancia local: el AuthenticationManager global se cablea de
+     * forma transparente con el CustomUserDetailsService + PasswordEncoder presentes
+     * en el contexto, y esta cadena de filtros usa explicitamente el provider para
+     * el flujo de username/password (login).
+     *
+     * Se usa el constructor introducido en Spring Security 6.5 que recibe el
+     * UserDetailsService: el setter equivalente quedo deprecado.
+     */
+    private DaoAuthenticationProvider daoAuthenticationProvider() {
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder());
         return authProvider;
     }
