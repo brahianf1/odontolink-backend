@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.ProgressNote;
 import site.utnpf.odontolink.domain.repository.ProgressNoteRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.ProgressNoteEntity;
@@ -18,9 +19,13 @@ import java.util.stream.Collectors;
  *
  * Este adaptador soporta RF11 - CU 4.2: Registrar Evolución.
  *
+ * Politica transaccional uniforme con el resto de adapters; ver
+ * {@link UserPersistenceAdapter} para el racional.
+ *
  * @author OdontoLink Team
  */
 @Component
+@Transactional(readOnly = true)
 public class ProgressNotePersistenceAdapter implements ProgressNoteRepository {
 
     private final JpaProgressNoteRepository jpaProgressNoteRepository;
@@ -30,6 +35,7 @@ public class ProgressNotePersistenceAdapter implements ProgressNoteRepository {
     }
 
     @Override
+    @Transactional
     public ProgressNote save(ProgressNote progressNote) {
         ProgressNoteEntity entity = ProgressNotePersistenceMapper.toEntity(progressNote);
         ProgressNoteEntity savedEntity = jpaProgressNoteRepository.save(entity);

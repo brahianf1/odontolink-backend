@@ -3,6 +3,7 @@ package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.ChatMessage;
 import site.utnpf.odontolink.domain.model.ChatSession;
 import site.utnpf.odontolink.domain.repository.ChatMessageRepository;
@@ -22,9 +23,13 @@ import java.util.stream.Collectors;
  * Implementa el puerto del dominio {@link ChatMessageRepository} y traduce las llamadas
  * a operaciones JPA, incluyendo el bulk-update de read receipts y paginación.
  *
+ * Politica transaccional uniforme con el resto de adapters; ver
+ * {@link UserPersistenceAdapter} para el racional.
+ *
  * @author OdontoLink Team
  */
 @Component
+@Transactional(readOnly = true)
 public class ChatMessagePersistenceAdapter implements ChatMessageRepository {
 
     private final JpaChatMessageRepository jpaChatMessageRepository;
@@ -34,6 +39,7 @@ public class ChatMessagePersistenceAdapter implements ChatMessageRepository {
     }
 
     @Override
+    @Transactional
     public ChatMessage save(ChatMessage chatMessage) {
         var entity = ChatMessagePersistenceMapper.toEntity(chatMessage);
         var savedEntity = jpaChatMessageRepository.save(entity);
@@ -99,6 +105,7 @@ public class ChatMessagePersistenceAdapter implements ChatMessageRepository {
     }
 
     @Override
+    @Transactional
     public int markAllAsReadInSession(ChatSession session, Long receiverUserId, Instant readAt) {
         ChatSessionEntity sessionEntity = ChatSessionPersistenceMapper.toEntityShallow(session);
         return jpaChatMessageRepository.markAllAsReadInSession(sessionEntity, receiverUserId, readAt);

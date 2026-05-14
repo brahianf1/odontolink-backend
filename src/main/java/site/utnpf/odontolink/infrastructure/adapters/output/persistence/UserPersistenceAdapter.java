@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.Role;
 import site.utnpf.odontolink.domain.model.User;
 import site.utnpf.odontolink.domain.repository.UserRepository;
@@ -16,8 +17,14 @@ import java.util.stream.Collectors;
  * Adaptador de persistencia para User (Hexagonal Architecture).
  * Implementa la interfaz del dominio UserRepository usando JPA.
  * Puerto de salida (Output Adapter).
+ *
+ * Politica transaccional uniforme con el resto de adapters: lectura por defecto
+ * en {@code readOnly = true} para que el mapeo entidad-a-dominio ocurra dentro
+ * de la sesion abierta por la query, y {@code @Transactional} sin readOnly en
+ * los metodos de escritura.
  */
 @Component
+@Transactional(readOnly = true)
 public class UserPersistenceAdapter implements UserRepository {
 
     private final JpaUserRepository jpaUserRepository;
@@ -27,6 +34,7 @@ public class UserPersistenceAdapter implements UserRepository {
     }
 
     @Override
+    @Transactional
     public User save(User user) {
         UserEntity entity = UserPersistenceMapper.toEntity(user);
         UserEntity savedEntity = jpaUserRepository.save(entity);

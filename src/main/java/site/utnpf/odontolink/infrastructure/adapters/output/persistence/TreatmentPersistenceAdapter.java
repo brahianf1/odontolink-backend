@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.Treatment;
 import site.utnpf.odontolink.domain.repository.TreatmentRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.TreatmentEntity;
@@ -15,8 +16,12 @@ import java.util.stream.Collectors;
  * Adaptador de persistencia para Treatment (Hexagonal Architecture).
  * Implementa la interfaz del dominio TreatmentRepository usando JPA.
  * Puerto de salida (Output Adapter).
+ *
+ * Politica transaccional uniforme con el resto de adapters; ver
+ * {@link UserPersistenceAdapter} para el racional.
  */
 @Component
+@Transactional(readOnly = true)
 public class TreatmentPersistenceAdapter implements TreatmentRepository {
 
     private final JpaTreatmentRepository jpaTreatmentRepository;
@@ -26,6 +31,7 @@ public class TreatmentPersistenceAdapter implements TreatmentRepository {
     }
 
     @Override
+    @Transactional
     public Treatment save(Treatment treatment) {
         TreatmentEntity entity = TreatmentPersistenceMapper.toEntity(treatment);
         TreatmentEntity savedEntity = jpaTreatmentRepository.save(entity);
@@ -51,6 +57,7 @@ public class TreatmentPersistenceAdapter implements TreatmentRepository {
     }
 
     @Override
+    @Transactional
     public void deleteById(Long id) {
         jpaTreatmentRepository.deleteById(id);
     }

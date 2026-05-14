@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.Appointment;
 import site.utnpf.odontolink.domain.model.AppointmentStatus;
 import site.utnpf.odontolink.domain.model.Patient;
@@ -19,8 +20,14 @@ import java.util.stream.Collectors;
  * Adaptador de persistencia para Appointment (Hexagonal Architecture).
  * Implementa la interfaz del dominio AppointmentRepository usando JPA.
  * Puerto de salida (Output Adapter).
+ *
+ * Politica transaccional uniforme con el resto de adapters; ver
+ * {@link UserPersistenceAdapter} para el racional. Las queries que devuelven
+ * entidades pasan por mappers que transitan asociaciones LAZY (paciente,
+ * practicante, atencion), por lo que requieren sesion abierta durante el mapeo.
  */
 @Component
+@Transactional(readOnly = true)
 public class AppointmentPersistenceAdapter implements AppointmentRepository {
 
     private final JpaAppointmentRepository jpaAppointmentRepository;
@@ -30,6 +37,7 @@ public class AppointmentPersistenceAdapter implements AppointmentRepository {
     }
 
     @Override
+    @Transactional
     public Appointment save(Appointment appointment) {
         AppointmentEntity entity = AppointmentPersistenceMapper.toEntity(appointment);
         AppointmentEntity savedEntity = jpaAppointmentRepository.save(entity);
@@ -213,12 +221,14 @@ public class AppointmentPersistenceAdapter implements AppointmentRepository {
      * @return true si se actualizó correctamente, false si el turno no existe
      */
     @Override
+    @Transactional
     public boolean updateStatus(Long appointmentId, AppointmentStatus newStatus) {
         int rowsAffected = jpaAppointmentRepository.updateStatus(appointmentId, newStatus);
         return rowsAffected > 0;
     }
 
     @Override
+    @Transactional
     public boolean updateStatusAndCancellationReason(Long appointmentId,
                                                      AppointmentStatus newStatus,
                                                      String cancellationReason) {

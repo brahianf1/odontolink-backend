@@ -1,6 +1,8 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -18,6 +20,7 @@ import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ErrorResponseDTO;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +30,8 @@ import java.util.stream.Collectors;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
      * Maneja excepciones de validación de Bean Validation (@Valid).
@@ -190,12 +195,33 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Maneja cualquier excepción no capturada específicamente.
+     * Catch-all para cualquier excepcion que no haya sido manejada por un
+     * handler especifico. Hasta esta version el handler respondia 500 sin
+     * loguear nada, lo que significaba que cualquier bug latente (p.ej.
+     * LazyInitializationException tras desactivar OSIV) quedaba sepultado en
+     * silencio. Esa garantia se rompe explicitamente aqui:
+     *
+     *  - Se genera un {@code traceId} unico por incidente.
+     *  - Se loguea a nivel ERROR con la traza completa, el verbo HTTP y la
+     *    ruta solicitada para correlacionar de inmediato contra el cliente.
+     *  - El {@code traceId} viaja en la respuesta para que el frontend pueda
+     *    citarlo al reportar el problema, sin filtrar nunca el detalle del
+     *    error real (defensa contra disclosure de internals).
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponseDTO> handleGenericException(
             Exception ex,
             HttpServletRequest request) {
+
+        String traceId = UUID.randomUUID().toString();
+
+        log.error("[traceId={}] Excepcion no controlada en {} {} - {}: {}",
+                traceId,
+                request.getMethod(),
+                request.getRequestURI(),
+                ex.getClass().getName(),
+                ex.getMessage(),
+                ex);
 
         ErrorResponseDTO errorResponse = new ErrorResponseDTO(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
@@ -203,9 +229,7 @@ public class GlobalExceptionHandler {
                 "Ha ocurrido un error interno en el servidor",
                 request.getRequestURI()
         );
-
-        // En producción, no exponer detalles del error
-        // En desarrollo, se puede agregar: errorResponse.setDetails(List.of(ex.getMessage()));
+        errorResponse.setTraceId(traceId);
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
     }

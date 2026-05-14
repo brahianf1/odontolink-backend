@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.ChatSession;
 import site.utnpf.odontolink.domain.model.Patient;
 import site.utnpf.odontolink.domain.model.Practitioner;
@@ -24,9 +25,13 @@ import java.util.stream.Collectors;
  * Este adaptador maneja la persistencia de sesiones de chat y proporciona métodos
  * de consulta para los diferentes casos de uso del sistema de chat.
  *
+ * Politica transaccional uniforme con el resto de adapters; ver
+ * {@link UserPersistenceAdapter} para el racional.
+ *
  * @author OdontoLink Team
  */
 @Component
+@Transactional(readOnly = true)
 public class ChatSessionPersistenceAdapter implements ChatSessionRepository {
 
     private final JpaChatSessionRepository jpaChatSessionRepository;
@@ -36,6 +41,7 @@ public class ChatSessionPersistenceAdapter implements ChatSessionRepository {
     }
 
     @Override
+    @Transactional
     public ChatSession save(ChatSession chatSession) {
         var entity = ChatSessionPersistenceMapper.toEntity(chatSession);
         var savedEntity = jpaChatSessionRepository.save(entity);
