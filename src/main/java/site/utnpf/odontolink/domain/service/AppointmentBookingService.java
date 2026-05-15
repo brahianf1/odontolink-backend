@@ -10,6 +10,7 @@ import site.utnpf.odontolink.domain.repository.ChatSessionRepository;
 import site.utnpf.odontolink.domain.repository.InstitutionalSettingsRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -92,8 +93,8 @@ public class AppointmentBookingService {
             Long offeredTreatmentId,
             LocalDateTime appointmentTime) {
 
-        // Validar la Oferta (Regla de Negocio)
-        OfferedTreatment offeredTreatment = validateOfferedTreatment(offeredTreatmentId);
+        // Validar la Oferta: existencia + estado bookable + ventana temporal
+        OfferedTreatment offeredTreatment = validateOfferedTreatment(offeredTreatmentId, appointmentTime);
 
         // Obtener la duración del servicio para las validaciones
         int durationInMinutes = offeredTreatment.getDurationInMinutes();
@@ -110,6 +111,13 @@ public class AppointmentBookingService {
                 offeredTreatment.getPractitioner(),
                 offeredTreatment.getTreatment()
         );
+
+        // Validar cupo SÓLO si la reserva crea un nuevo caso clínico.
+        // Reusar una Attention IN_PROGRESS existente no consume cupo nuevo:
+        // el cupo se mide por casos abiertos+completados, no por turnos.
+        if (attention.getId() == null) {
+            enforceQuota(offeredTreatment);
+        }
 
         // Regla anti-acaparamiento (Regla de Negocio 3 - límite dinámico)
         enforceConcurrentAppointmentLimit(attention);
@@ -184,19 +192,77 @@ public class AppointmentBookingService {
     }
 
     /**
-     * Valida que la oferta de tratamiento existe y está disponible.
-     *
-     * @param offeredTreatmentId ID de la oferta
-     * @return El OfferedTreatment cargado
-     * @throws ResourceNotFoundException si no existe
+     * Valida la oferta sobre la que se intenta reservar:
+     * <ul>
+     *   <li>Existencia (404 si no se encuentra).</li>
+     *   <li>Estado bookable: sólo {@link OfferedTreatment#isActive()} acepta
+     *       nuevas reservas. PAUSED e INACTIVE quedan ocultas del catálogo
+     *       público pero podrían ser alcanzadas por un cliente que haya
+     *       cacheado el ID; se rechaza acá por defensa en profundidad.</li>
+     *   <li>Ventana temporal: el {@code appointmentTime} debe caer dentro
+     *       de {@code [offerStartDate, offerEndDate]}. Las fechas son la
+     *       promesa de vigencia que el practicante hace al publicar la
+     *       oferta; reservar fuera del rango la viola y deja turnos
+     *       fantasma.</li>
+     * </ul>
      */
-    private OfferedTreatment validateOfferedTreatment(Long offeredTreatmentId) {
-        return offeredTreatmentRepository.findById(offeredTreatmentId)
+    private OfferedTreatment validateOfferedTreatment(Long offeredTreatmentId, LocalDateTime appointmentTime) {
+        OfferedTreatment offer = offeredTreatmentRepository.findById(offeredTreatmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "OfferedTreatment",
                         "id",
                         offeredTreatmentId.toString()
                 ));
+
+        if (!offer.isActive()) {
+            throw new InvalidBusinessRuleException(
+                    "Esta oferta ya no está disponible para reservar."
+            );
+        }
+
+        LocalDate appointmentDate = appointmentTime.toLocalDate();
+        if (offer.getOfferStartDate() != null && appointmentDate.isBefore(offer.getOfferStartDate())) {
+            throw new InvalidBusinessRuleException(
+                    "El turno solicitado es anterior a la fecha de inicio de la oferta (" +
+                    offer.getOfferStartDate() + "). Seleccione una fecha desde esa fecha en adelante."
+            );
+        }
+        if (offer.getOfferEndDate() != null && appointmentDate.isAfter(offer.getOfferEndDate())) {
+            throw new InvalidBusinessRuleException(
+                    "El turno solicitado supera la fecha de fin de la oferta (" +
+                    offer.getOfferEndDate() + "). Seleccione una fecha anterior o igual a esa fecha."
+            );
+        }
+
+        return offer;
+    }
+
+    /**
+     * Aplica la regla del cupo académico ({@code maxCompletedAttentions}).
+     *
+     * Sólo se invoca cuando la reserva está por crear un nuevo {@link Attention}
+     * (ver llamador). El cupo se mide por casos clínicos: los IN_PROGRESS
+     * ocupan slot al igual que los COMPLETED. Cancelados no cuentan.
+     *
+     * @param offer Oferta validada (status=ACTIVE y dentro de la ventana)
+     * @throws InvalidBusinessRuleException si el cupo está exhaurido
+     */
+    private void enforceQuota(OfferedTreatment offer) {
+        Integer max = offer.getMaxCompletedAttentions();
+        if (max == null) {
+            // null = sin límite por contrato del POJO; nada que enforzar.
+            return;
+        }
+        int completed = attentionRepository.countByPractitionerAndTreatmentAndStatus(
+                offer.getPractitioner(), offer.getTreatment(), AttentionStatus.COMPLETED);
+        int inProgress = attentionRepository.countByPractitionerAndTreatmentAndStatus(
+                offer.getPractitioner(), offer.getTreatment(), AttentionStatus.IN_PROGRESS);
+        if (completed + inProgress >= max) {
+            throw new InvalidBusinessRuleException(
+                    "El cupo de esta oferta está completo (" + max + " casos). " +
+                    "El practicante no puede aceptar nuevas atenciones."
+            );
+        }
     }
 
     /**
