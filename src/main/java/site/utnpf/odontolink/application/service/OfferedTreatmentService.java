@@ -8,6 +8,7 @@ import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
 import site.utnpf.odontolink.domain.model.AvailabilitySlot;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
 import site.utnpf.odontolink.domain.model.OfferedTreatmentDeletionResult;
+import site.utnpf.odontolink.domain.model.OfferedTreatmentStatus;
 import site.utnpf.odontolink.domain.model.Practitioner;
 import site.utnpf.odontolink.domain.model.Treatment;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
@@ -151,6 +152,19 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
             throw new UnauthorizedOperationException("No tiene permisos para modificar este tratamiento.");
         }
 
+        // La edición sólo aplica sobre ofertas vigentes. Para una oferta PAUSED
+        // el flujo correcto es resume; para una INACTIVE, reactivate. Aceptar
+        // edits sobre estados no-bookables esconde el cambio de estado dentro de
+        // un PUT y rompe la simetría con los endpoints dedicados (RF16 + pausa).
+        if (existingOffer.getStatus() != OfferedTreatmentStatus.ACTIVE) {
+            throw new InvalidBusinessRuleException(
+                    "No se puede modificar una oferta en estado " + existingOffer.getStatus() + ". " +
+                    (existingOffer.getStatus() == OfferedTreatmentStatus.PAUSED
+                            ? "Reanúdela primero (POST /offered-treatments/{id}/resume) antes de editarla."
+                            : "Reactívela primero (POST /offered-treatments/{id}/reactivate) antes de editarla.")
+            );
+        }
+
         OfferedTreatment updatedOffer = domainService.updateOffer(
                 existingOffer,
                 requirements,
@@ -162,6 +176,44 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
         );
 
         return offeredTreatmentRepository.save(updatedOffer);
+    }
+
+    @Override
+    public OfferedTreatment reactivateOfferedTreatment(Long practitionerId, Long offeredTreatmentId) {
+        OfferedTreatment offer = loadOwnedOffer(practitionerId, offeredTreatmentId);
+        // El POJO valida la transición permitida (sólo desde INACTIVE) y arroja
+        // InvalidBusinessRuleException si la oferta está en otro estado.
+        offer.activate();
+        return offeredTreatmentRepository.save(offer);
+    }
+
+    @Override
+    public OfferedTreatment pauseOfferedTreatment(Long practitionerId, Long offeredTreatmentId) {
+        OfferedTreatment offer = loadOwnedOffer(practitionerId, offeredTreatmentId);
+        offer.pause();
+        return offeredTreatmentRepository.save(offer);
+    }
+
+    @Override
+    public OfferedTreatment resumeOfferedTreatment(Long practitionerId, Long offeredTreatmentId) {
+        OfferedTreatment offer = loadOwnedOffer(practitionerId, offeredTreatmentId);
+        offer.resume();
+        return offeredTreatmentRepository.save(offer);
+    }
+
+    /**
+     * Carga una oferta verificando que el practicante autenticado sea su dueño.
+     * Helper común a las transiciones de estado (reactivate/pause/resume).
+     */
+    private OfferedTreatment loadOwnedOffer(Long practitionerId, Long offeredTreatmentId) {
+        OfferedTreatment offer = offeredTreatmentRepository.findById(offeredTreatmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "OfferedTreatment", "id", offeredTreatmentId.toString()));
+        if (!offer.getPractitioner().getId().equals(practitionerId)) {
+            throw new UnauthorizedOperationException(
+                    "No tiene permisos para operar sobre este tratamiento.");
+        }
+        return offer;
     }
 
     /**

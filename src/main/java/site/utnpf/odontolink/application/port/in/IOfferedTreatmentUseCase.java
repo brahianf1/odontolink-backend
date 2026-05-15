@@ -68,6 +68,38 @@ public interface IOfferedTreatmentUseCase {
                                             Integer maxCompletedAttentions);
 
     /**
+     * Reactiva una oferta dada de baja lógicamente (INACTIVE → ACTIVE).
+     * El practicante autenticado debe ser dueño y la oferta debe estar en
+     * estado INACTIVE; cualquier otro estado responde 409.
+     *
+     * @param practitionerId ID del practicante autenticado
+     * @param offeredTreatmentId ID de la oferta a reactivar
+     * @return La oferta reactivada
+     */
+    OfferedTreatment reactivateOfferedTreatment(Long practitionerId, Long offeredTreatmentId);
+
+    /**
+     * Pausa voluntariamente una oferta vigente (ACTIVE → PAUSED).
+     * La oferta deja de aparecer en el catálogo público y deja de aceptar
+     * nuevas reservas, pero los turnos y atenciones ya existentes siguen
+     * su curso. La oferta debe estar ACTIVE; cualquier otro estado responde 409.
+     *
+     * @param practitionerId ID del practicante autenticado
+     * @param offeredTreatmentId ID de la oferta a pausar
+     * @return La oferta en estado PAUSED
+     */
+    OfferedTreatment pauseOfferedTreatment(Long practitionerId, Long offeredTreatmentId);
+
+    /**
+     * Reanuda una oferta pausada (PAUSED → ACTIVE).
+     *
+     * @param practitionerId ID del practicante autenticado
+     * @param offeredTreatmentId ID de la oferta a reanudar
+     * @return La oferta en estado ACTIVE
+     */
+    OfferedTreatment resumeOfferedTreatment(Long practitionerId, Long offeredTreatmentId);
+
+    /**
      * Elimina (o desactiva por integridad) un tratamiento del catálogo personal
      * del practicante. Implementa la política de RF16:
      *

@@ -43,10 +43,13 @@ import java.util.stream.Collectors;
  * Adaptador de entrada (Input Adapter) en Arquitectura Hexagonal.
  *
  * Endpoints de Catálogo:
- * - POST   /api/practitioner/offered-treatments          - Agregar tratamiento (CU-005)
- * - GET    /api/practitioner/offered-treatments          - Obtener mi catálogo
- * - PUT    /api/practitioner/offered-treatments/{id}     - Modificar tratamiento (CU-006)
- * - DELETE /api/practitioner/offered-treatments/{id}     - Eliminar tratamiento (CU-007 / RF16)
+ * - POST   /api/practitioner/offered-treatments              - Agregar tratamiento (CU-005)
+ * - GET    /api/practitioner/offered-treatments              - Obtener mi catálogo
+ * - PUT    /api/practitioner/offered-treatments/{id}         - Modificar tratamiento (CU-006)
+ * - DELETE /api/practitioner/offered-treatments/{id}         - Eliminar tratamiento (CU-007 / RF16)
+ * - POST   /api/practitioner/offered-treatments/{id}/pause     - Pausar voluntariamente
+ * - POST   /api/practitioner/offered-treatments/{id}/resume    - Reanudar tras pausa
+ * - POST   /api/practitioner/offered-treatments/{id}/reactivate - Reactivar tras baja lógica
  *
  * Endpoints de Turnos:
  * - GET    /api/practitioner/appointments/upcoming                   - Listar turnos agendados
@@ -479,6 +482,123 @@ public class PractitionerController {
         OfferedTreatmentDeletionResult result = offeredTreatmentUseCase.removeFromCatalog(practitionerId, id);
 
         return ResponseEntity.ok(OfferedTreatmentDeletionResponseDTO.from(result));
+    }
+
+    /**
+     * Reactiva una oferta dada de baja lógicamente (INACTIVE → ACTIVE).
+     *
+     * POST /api/practitioner/offered-treatments/{id}/reactivate
+     */
+    @Operation(
+            summary = "Reactivar una oferta dada de baja (INACTIVE → ACTIVE)",
+            description = "Devuelve al catálogo público una oferta previamente desactivada por RF16. " +
+                    "La oferta debe estar en estado INACTIVE; cualquier otro estado responde 422. " +
+                    "El practicante autenticado debe ser el dueño."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200",
+                    description = "Oferta reactivada. Devuelve la oferta en estado ACTIVE.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = OfferedTreatmentResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "Token JWT ausente o inválido.", content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "La oferta no pertenece al practicante autenticado.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "Oferta no encontrada.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "422",
+                    description = "La oferta no está en estado INACTIVE.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    @PostMapping("/offered-treatments/{id}/reactivate")
+    public ResponseEntity<OfferedTreatmentResponseDTO> reactivateOfferedTreatment(
+            @Parameter(description = "ID de la oferta a reactivar.", example = "1", required = true)
+            @PathVariable Long id) {
+
+        Long practitionerId = authenticationFacade.getAuthenticatedPractitionerId();
+        OfferedTreatment reactivated = offeredTreatmentUseCase.reactivateOfferedTreatment(practitionerId, id);
+        return ResponseEntity.ok(OfferedTreatmentRestMapper.toResponse(reactivated));
+    }
+
+    /**
+     * Pausa voluntariamente una oferta vigente (ACTIVE → PAUSED).
+     *
+     * POST /api/practitioner/offered-treatments/{id}/pause
+     */
+    @Operation(
+            summary = "Pausar voluntariamente una oferta vigente (ACTIVE → PAUSED)",
+            description = "Oculta la oferta del catálogo público y rechaza nuevas reservas, sin afectar " +
+                    "los turnos ni atenciones ya existentes. Útil para pausas cortas (vacaciones, " +
+                    "descansos académicos) sin recurrir a la baja lógica de RF16. " +
+                    "La oferta debe estar en estado ACTIVE; cualquier otro estado responde 422."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200",
+                    description = "Oferta pausada. Devuelve la oferta en estado PAUSED.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = OfferedTreatmentResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "Token JWT ausente o inválido.", content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "La oferta no pertenece al practicante autenticado.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "Oferta no encontrada.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "422",
+                    description = "La oferta no está en estado ACTIVE.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    @PostMapping("/offered-treatments/{id}/pause")
+    public ResponseEntity<OfferedTreatmentResponseDTO> pauseOfferedTreatment(
+            @Parameter(description = "ID de la oferta a pausar.", example = "1", required = true)
+            @PathVariable Long id) {
+
+        Long practitionerId = authenticationFacade.getAuthenticatedPractitionerId();
+        OfferedTreatment paused = offeredTreatmentUseCase.pauseOfferedTreatment(practitionerId, id);
+        return ResponseEntity.ok(OfferedTreatmentRestMapper.toResponse(paused));
+    }
+
+    /**
+     * Reanuda una oferta pausada (PAUSED → ACTIVE).
+     *
+     * POST /api/practitioner/offered-treatments/{id}/resume
+     */
+    @Operation(
+            summary = "Reanudar una oferta pausada (PAUSED → ACTIVE)",
+            description = "Devuelve al catálogo público una oferta previamente pausada. " +
+                    "La oferta debe estar en estado PAUSED; cualquier otro estado responde 422."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200",
+                    description = "Oferta reanudada. Devuelve la oferta en estado ACTIVE.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = OfferedTreatmentResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "Token JWT ausente o inválido.", content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "La oferta no pertenece al practicante autenticado.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "Oferta no encontrada.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "422",
+                    description = "La oferta no está en estado PAUSED.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    @PostMapping("/offered-treatments/{id}/resume")
+    public ResponseEntity<OfferedTreatmentResponseDTO> resumeOfferedTreatment(
+            @Parameter(description = "ID de la oferta a reanudar.", example = "1", required = true)
+            @PathVariable Long id) {
+
+        Long practitionerId = authenticationFacade.getAuthenticatedPractitionerId();
+        OfferedTreatment resumed = offeredTreatmentUseCase.resumeOfferedTreatment(practitionerId, id);
+        return ResponseEntity.ok(OfferedTreatmentRestMapper.toResponse(resumed));
     }
 
     // ---------------------------------------------------------------------
