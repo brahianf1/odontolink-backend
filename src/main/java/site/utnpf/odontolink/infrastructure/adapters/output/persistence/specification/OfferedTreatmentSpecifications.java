@@ -3,6 +3,8 @@ package site.utnpf.odontolink.infrastructure.adapters.output.persistence.specifi
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 import site.utnpf.odontolink.domain.model.OfferedTreatmentSearchCriteria;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AvailabilitySlotEntity;
@@ -55,16 +57,18 @@ public final class OfferedTreatmentSpecifications {
      * por restricción de FK, el LEFT JOIN evita que un dato corrupto haga
      * desaparecer ofertas del resultado durante una búsqueda; preferimos
      * tolerancia en el catálogo público.
+     *
+     * Por qué NO se usa {@code query.distinct(true)} aqui: las tres asociaciones
+     * involucradas ({@code treatment}, {@code practitioner}, {@code user}) son
+     * {@code @ManyToOne}/{@code @OneToOne}, asi que cada OfferedTreatment aparece
+     * exactamente una vez por estos joins. Activar DISTINCT no solo es innecesario
+     * sino que rompe el ORDER BY bajo MySQL {@code ONLY_FULL_GROUP_BY}: la columna
+     * de orden (p.ej. {@code t.name}) no aparece en el SELECT y MySQL rechaza la
+     * query con {@code SQLSTATE HY000 / Error 3065}.
      */
     public static Specification<OfferedTreatmentEntity> keywordIn(String keyword) {
         final String pattern = "%" + keyword.toLowerCase() + "%";
         return (root, query, cb) -> {
-            // distinct() evita duplicados cuando el join a slots se combine
-            // con éste en una misma búsqueda multi-filtro.
-            if (query != null) {
-                query.distinct(true);
-            }
-
             Join<OfferedTreatmentEntity, TreatmentEntity> treatmentJoin =
                     root.join("treatment", JoinType.LEFT);
             Join<OfferedTreatmentEntity, PractitionerEntity> practitionerJoin =
@@ -108,17 +112,37 @@ public final class OfferedTreatmentSpecifications {
      * Filtro por disponibilidad: la oferta debe publicar al menos un
      * AvailabilitySlot en el día solicitado.
      *
-     * El distinct() es indispensable: una oferta con tres slots en MONDAY
-     * aparecería tres veces sin él.
+     * Implementacion: subquery {@code EXISTS} en lugar de {@code INNER JOIN} +
+     * {@code DISTINCT}. La asociacion {@code availabilitySlots} es {@code @OneToMany},
+     * asi que un join inner producia una fila por cada slot que matcheara y forzaba
+     * a usar DISTINCT para deduplicar. Con DISTINCT activo, MySQL bajo
+     * {@code ONLY_FULL_GROUP_BY} (modo por defecto desde 5.7) rechaza cualquier
+     * {@code ORDER BY} sobre una columna que no este en el SELECT — por ejemplo,
+     * ordenar por {@code treatment.name} dispara {@code SQLSTATE HY000 / Error 3065}:
+     * "Expression #1 of ORDER BY clause is not in SELECT list ... incompatible with DISTINCT".
+     *
+     * EXISTS evita ese camino: filtra sin multiplicar filas, no requiere DISTINCT,
+     * y deja al planner abortar la subquery en cuanto encuentra el primer match
+     * (mejor performance que un join + group-by sobre tablas grandes). Como bonus,
+     * elimina el riesgo de duplicar el conteo de pagina cuando se combinan varios
+     * filtros que tocan colecciones {@code @OneToMany}.
      */
     public static Specification<OfferedTreatmentEntity> hasAvailabilityOn(java.time.DayOfWeek day) {
         return (root, query, cb) -> {
-            if (query != null) {
-                query.distinct(true);
+            // query == null no deberia ocurrir bajo Spring Data JPA, pero la API
+            // formal lo permite; en ese caso no se puede construir la subquery,
+            // asi que devolvemos un predicado tautologico (no aplicar filtro).
+            if (query == null) {
+                return cb.conjunction();
             }
-            Join<OfferedTreatmentEntity, AvailabilitySlotEntity> slotJoin =
-                    root.join("availabilitySlots", JoinType.INNER);
-            return cb.equal(slotJoin.get("dayOfWeek"), day);
+            Subquery<Integer> subquery = query.subquery(Integer.class);
+            Root<AvailabilitySlotEntity> slot = subquery.from(AvailabilitySlotEntity.class);
+            subquery.select(cb.literal(1));
+            subquery.where(
+                    cb.equal(slot.get("offeredTreatment"), root),
+                    cb.equal(slot.get("dayOfWeek"), day)
+            );
+            return cb.exists(subquery);
         };
     }
 
