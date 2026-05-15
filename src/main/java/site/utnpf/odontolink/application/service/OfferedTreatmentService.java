@@ -249,17 +249,35 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
             throw new UnauthorizedOperationException("No tiene permisos para eliminar este tratamiento.");
         }
 
+        boolean wasAlreadyInactive = existingOffer.getStatus() == OfferedTreatmentStatus.INACTIVE;
+
         OfferedTreatmentDeletionResult result = domainService.resolveDeletionStrategy(existingOffer);
+
+        if (result.isSoftDeleted() && wasAlreadyInactive) {
+            // No-op honesto: la oferta ya estaba dada de baja y el rastro
+            // impide hard-delete, así que el DELETE no produce cambio alguno.
+            // Reemplazamos el mensaje del dominio (que enfatiza el motivo
+            // técnico — "existen atenciones históricas...") por uno que refleja
+            // el estado del agregado para que el frontend pueda mostrar un
+            // toast no engañoso.
+            result = new OfferedTreatmentDeletionResult(
+                    OfferedTreatmentDeletionResult.Outcome.SOFT_DELETED,
+                    "La oferta ya estaba dada de baja en el catálogo. No se realizaron cambios."
+            );
+        }
 
         if (result.isSoftDeleted()) {
             // Baja Lógica: la oferta sigue existiendo en la BD pero deja de
             // aparecer en el catálogo público. La cadena Appointment → Attention
-            // queda intacta porque no se borra ninguna fila.
+            // queda intacta porque no se borra ninguna fila. La operación es
+            // idempotente sobre filas ya INACTIVE.
             existingOffer.deactivate();
             offeredTreatmentRepository.save(existingOffer);
         } else {
             // Baja Física: sólo aplica cuando no hay ningún rastro histórico
             // (no hay Appointments ni Attentions para el par practitioner+treatment).
+            // Puede dispararse incluso si la oferta ya estaba INACTIVE: una
+            // oferta INACTIVE-sin-rastro es elegible para borrado físico.
             offeredTreatmentRepository.deleteById(offeredTreatmentId);
         }
 
