@@ -107,6 +107,18 @@ public class UserDetailsService implements IUserDetailsUseCase {
                     "Esta operacion solo aplica a usuarios con rol SUPERVISOR.");
         }
 
+        // specialty es @NotBlank en el registro: mantenemos esa invariante al
+        // editar. Si el supervisor envia el campo presente pero con null o
+        // cadena vacia (intencion "limpiar"), rechazamos. Para no modificarlo,
+        // el FE debe omitir el campo del payload (semantica PATCH).
+        if (specialty != null && specialty.isPresent()) {
+            String raw = specialty.get();
+            if (raw == null || raw.trim().isEmpty()) {
+                throw new InvalidBusinessRuleException(
+                        "La especialidad no puede quedar vacia.");
+            }
+        }
+
         Supervisor supervisor = supervisorRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Supervisor", "userId", String.valueOf(userId)));

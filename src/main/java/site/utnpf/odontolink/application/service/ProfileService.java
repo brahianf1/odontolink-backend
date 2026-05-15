@@ -6,8 +6,8 @@ import io.github.bucket4j.Bucket;
 import site.utnpf.odontolink.application.port.in.IProfileUseCase;
 import site.utnpf.odontolink.application.port.in.UpdateProfileCommand;
 import site.utnpf.odontolink.application.port.out.ITokenProvider;
-import site.utnpf.odontolink.domain.exception.AuthenticationFailedException;
 import site.utnpf.odontolink.domain.exception.DuplicateResourceException;
+import site.utnpf.odontolink.domain.exception.IncorrectCurrentPasswordException;
 import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.exception.RateLimitExceededException;
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
@@ -125,10 +125,12 @@ public class ProfileService implements IProfileUseCase {
             // Consume un token solo al fallar: un usuario que cambia su
             // contrasenia correctamente no agota su cuota.
             failBucket.tryConsume(1);
-            // Mensaje deliberadamente genérico: no diferenciamos entre "no
-            // existe el usuario" y "la contraseña no coincide" para frustrar
-            // técnicas de enumeración o de side-channel.
-            throw new AuthenticationFailedException("La contraseña actual es incorrecta.");
+            // 422 (no 401) porque el usuario ESTA autenticado: su JWT fue
+            // aceptado por el filtro; lo que falla es la verificacion
+            // adicional de identidad sobre el payload. Devolver 401 aqui
+            // confundiria a interceptores del FE que disparan auto-logout
+            // ante 401.
+            throw new IncorrectCurrentPasswordException("La contraseña actual es incorrecta.");
         }
 
         // El bump invalida todos los JWT previos del usuario; el token nuevo

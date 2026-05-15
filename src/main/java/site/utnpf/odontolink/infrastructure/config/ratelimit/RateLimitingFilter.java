@@ -1,5 +1,6 @@
 package site.utnpf.odontolink.infrastructure.config.ratelimit;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
 import jakarta.servlet.FilterChain;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ErrorResponseDTO;
 
 import java.io.IOException;
 
@@ -48,9 +50,11 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             "{\"message\":\"Si el email se encuentra registrado, se enviarán las instrucciones para restablecer la contraseña.\"}";
 
     private final RateLimitRegistry registry;
+    private final ObjectMapper objectMapper;
 
-    public RateLimitingFilter(RateLimitRegistry registry) {
+    public RateLimitingFilter(RateLimitRegistry registry, ObjectMapper objectMapper) {
         this.registry = registry;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -89,8 +93,16 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             // Anti-enumeracion: respondemos como si todo hubiese salido bien.
             writeJson(response, HttpStatus.ACCEPTED, SILENCED_BODY);
         } else {
-            writeJson(response, HttpStatus.TOO_MANY_REQUESTS,
-                    "{\"status\":429,\"error\":\"Too Many Requests\",\"message\":\"Demasiados intentos. Vuelva a intentar más tarde.\"}");
+            // Mismo shape que GlobalExceptionHandler para que el FE pueda
+            // parsear errores con un unico parser uniforme. El filter no pasa
+            // por @ControllerAdvice, asi que construimos ErrorResponseDTO a mano.
+            ErrorResponseDTO errorBody = new ErrorResponseDTO(
+                    HttpStatus.TOO_MANY_REQUESTS.value(),
+                    "Too Many Requests",
+                    "Demasiados intentos. Vuelva a intentar más tarde.",
+                    path
+            );
+            writeJson(response, HttpStatus.TOO_MANY_REQUESTS, objectMapper.writeValueAsString(errorBody));
         }
     }
 

@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import site.utnpf.odontolink.application.port.out.StorageException;
 import site.utnpf.odontolink.domain.exception.AuthenticationFailedException;
 import site.utnpf.odontolink.domain.exception.DuplicateResourceException;
+import site.utnpf.odontolink.domain.exception.IncorrectCurrentPasswordException;
 import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.exception.InvalidPasswordResetTokenException;
 import site.utnpf.odontolink.domain.exception.RateLimitExceededException;
@@ -243,6 +244,28 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse);
+    }
+
+    /**
+     * Maneja {@link IncorrectCurrentPasswordException}: ocurre cuando el usuario
+     * autenticado provee una {@code currentPassword} incorrecta en el cambio de
+     * contrasenia. Devolvemos 422 (no 401) porque el token sigue siendo valido;
+     * lo que fallo es la verificacion de identidad adicional sobre el payload.
+     * El error code {@code "Incorrect Current Password"} permite al frontend
+     * distinguirlo del 401 generico (login fallido) y evitar disparar auto-logout.
+     */
+    @ExceptionHandler(IncorrectCurrentPasswordException.class)
+    public ResponseEntity<ErrorResponseDTO> handleIncorrectCurrentPasswordException(
+            IncorrectCurrentPasswordException ex,
+            HttpServletRequest request) {
+
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                "Incorrect Current Password",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(errorResponse);
     }
 
     /**
