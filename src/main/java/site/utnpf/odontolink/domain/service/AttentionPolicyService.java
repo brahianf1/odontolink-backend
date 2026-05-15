@@ -4,6 +4,7 @@ import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.AttentionStatus;
 import site.utnpf.odontolink.domain.model.AppointmentStatus;
+import site.utnpf.odontolink.domain.model.User;
 import site.utnpf.odontolink.domain.repository.AppointmentRepository;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
 
@@ -82,6 +83,41 @@ public class AttentionPolicyService {
         // Si todas las validaciones pasan, delegar al POJO para cambiar el estado
         // El POJO (Attention) se encarga de validar que el estado actual sea IN_PROGRESS
         attention.complete();
+    }
+
+    /**
+     * Cancela manualmente una Atención por decisión del practicante responsable.
+     *
+     * Esta operación cubre el escenario que ni {@link #finalizeAttention} ni
+     * {@link #closeAttentionIfAbandoned} alcanzan: un caso clínico con al menos
+     * un turno COMPLETED del que el paciente no vuelve a aparecer. Sin esta
+     * acción, la Atención quedaría {@link AttentionStatus#IN_PROGRESS}
+     * indefinidamente, congelando cupo y manteniendo el chat abierto.
+     *
+     * Precondiciones (validadas acá porque requieren acceso a repositorio):
+     * <ul>
+     *   <li>No deben existir turnos {@link AppointmentStatus#SCHEDULED} a futuro
+     *       para este caso. El practicante debe cancelarlos uno a uno antes
+     *       (UX: el frontend lo guía). Política deliberada: evitar el borrado
+     *       en cascada de turnos del paciente sin confirmación granular.</li>
+     * </ul>
+     *
+     * El POJO {@link Attention#cancelByPractitioner(String, User)} se encarga
+     * del cambio de estado y del registro de auditoría como ProgressNote.
+     *
+     * @param attention Caso clínico cargado en memoria
+     * @param motive Motivo de la cancelación (obligatorio)
+     * @param author Usuario practicante autenticado
+     * @throws InvalidBusinessRuleException si quedan turnos pendientes
+     */
+    public void cancelAttentionByPractitioner(Attention attention, String motive, User author) {
+        if (hasScheduledFutureAppointments(attention.getId())) {
+            throw new InvalidBusinessRuleException(
+                    "No se puede cancelar el caso clínico mientras existan turnos a futuro " +
+                    "agendados. Cancele primero los turnos pendientes y vuelva a intentar."
+            );
+        }
+        attention.cancelByPractitioner(motive, author);
     }
 
     /**

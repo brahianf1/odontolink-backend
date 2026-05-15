@@ -126,6 +126,28 @@ public class AttentionService implements IAttentionUseCase {
         return attentionRepository.save(attention);
     }
 
+    @Override
+    public Attention cancelAttentionByPractitioner(Long attentionId, String motive, User practitionerUser) {
+        Attention attention = attentionRepository.findById(attentionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attention", "id", attentionId.toString()));
+
+        // Ownership: el practicante autenticado debe ser el responsable del caso.
+        // No se permite cancelación cruzada entre practicantes.
+        Practitioner practitioner = attention.getPractitioner();
+        if (practitioner == null || practitioner.getUser() == null
+                || !practitioner.getUser().getId().equals(practitionerUser.getId())) {
+            throw new UnauthorizedOperationException(
+                    "Solo el practicante responsable del caso puede cancelarlo."
+            );
+        }
+
+        // El policy service valida turnos SCHEDULED futuros y delega al POJO
+        // el cambio de estado + auditoría como ProgressNote.
+        attentionPolicyService.cancelAttentionByPractitioner(attention, motive, practitionerUser);
+
+        return attentionRepository.save(attention);
+    }
+
     /**
      * Obtiene un caso clínico específico por su ID.
      *

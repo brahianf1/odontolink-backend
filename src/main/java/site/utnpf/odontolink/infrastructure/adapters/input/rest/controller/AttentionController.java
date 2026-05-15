@@ -18,6 +18,7 @@ import site.utnpf.odontolink.application.port.in.IAttentionUseCase;
 import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.ProgressNote;
 import site.utnpf.odontolink.domain.model.User;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.CancelAttentionByPractitionerRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.ProgressNoteRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AttentionResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ErrorResponseDTO;
@@ -36,6 +37,7 @@ import java.util.stream.Collectors;
  * Endpoints implementados (Fase 4 - Trazabilidad del Caso Clínico):
  * - POST   /api/attentions/{id}/progress-notes     - Registrar evolución (RF11 - CU 4.2)
  * - POST   /api/attentions/{id}/finalize            - Finalizar caso clínico (RF10, RF19 - CU 4.4)
+ * - POST   /api/attentions/{id}/cancel              - Cancelar manualmente el caso (practicante)
  * - GET    /api/attentions/{id}                     - Obtener detalle de un caso
  * - GET    /api/attentions/{id}/progress-notes      - Obtener evoluciones de un caso
  * - GET    /api/practitioner/attentions             - Listar casos del practicante autenticado
@@ -355,6 +357,66 @@ public class AttentionController {
         AttentionResponseDTO response = AttentionRestMapper.toResponse(attention);
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Cancela manualmente un caso clínico por decisión del practicante responsable.
+     * Cubre el escenario en que la finalización no aplica (no hubo cierre clínico)
+     * y el cierre por abandono tampoco (existe al menos un turno COMPLETED).
+     *
+     * POST /api/attentions/{id}/cancel
+     */
+    @Operation(
+            summary = "Cancelar manualmente un caso clínico (practicante)",
+            description = "Marca el caso como `CANCELLED` y deja una `ProgressNote` con el motivo. " +
+                    "Pensado para casos en los que el paciente abandona después de haber recibido " +
+                    "al menos un turno COMPLETED (los cierres por funnel no aplican porque hubo " +
+                    "trabajo clínico previo).\n\n" +
+                    "**Reglas de negocio (422 Unprocessable Entity):**\n" +
+                    "- El caso debe estar en `IN_PROGRESS`.\n" +
+                    "- El motivo no puede estar en blanco.\n" +
+                    "- No deben quedar turnos SCHEDULED a futuro: el practicante debe cancelarlos " +
+                    "uno por uno antes (UX deliberada para evitar el borrado en cascada de turnos " +
+                    "del paciente).\n\n" +
+                    "**Ownership (403):** sólo el practicante responsable del caso puede cancelarlo."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200",
+                    description = "Caso cancelado. Devuelve la atención en estado CANCELLED.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = AttentionResponseDTO.class))),
+            @ApiResponse(responseCode = "400",
+                    description = "Cuerpo inválido (motivo ausente, vacío o demasiado largo).",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "Token JWT ausente o inválido.", content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "El usuario autenticado no es el practicante responsable del caso.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404",
+                    description = "Caso clínico no encontrado.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "422",
+                    description = "Regla de negocio violada (estado no IN_PROGRESS, motivo en blanco, " +
+                            "o turnos pendientes).",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    @PostMapping("/attentions/{attentionId}/cancel")
+    @PreAuthorize("hasRole('PRACTITIONER')")
+    public ResponseEntity<AttentionResponseDTO> cancelAttentionByPractitioner(
+            @Parameter(description = "ID del caso clínico a cancelar.", example = "23", required = true)
+            @PathVariable Long attentionId,
+            @Valid @RequestBody CancelAttentionByPractitionerRequestDTO request) {
+
+        User practitionerUser = authenticationFacade.getAuthenticatedUser();
+
+        Attention attention = attentionUseCase.cancelAttentionByPractitioner(
+                attentionId, request.getReason(), practitionerUser);
+
+        return ResponseEntity.ok(AttentionRestMapper.toResponse(attention));
     }
 
     // ---------------------------------------------------------------------

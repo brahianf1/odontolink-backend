@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.domain.model;
 
+import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -63,6 +65,46 @@ public class Attention {
         }
         // (Aquí podría ir lógica más compleja, como verificar si hay turnos pendientes)
         this.status = AttentionStatus.COMPLETED;
+    }
+
+    /**
+     * Cancelación voluntaria del caso clínico por parte del practicante
+     * responsable. A diferencia de {@link #closeByAbandonment()} (cierre
+     * automático por funnel), esta acción es explícita: requiere motivo y
+     * deja constancia en el historial del caso como una {@link ProgressNote}.
+     *
+     * Pre-condiciones:
+     * <ul>
+     *   <li>El caso debe estar en {@link AttentionStatus#IN_PROGRESS}.</li>
+     *   <li>El motivo no puede ser nulo ni quedar en blanco.</li>
+     *   <li>El autor debe poder agregar progress notes (validado por
+     *       {@link #addProgressNote(String, User)}, que requiere ser el
+     *       practicante responsable o un supervisor).</li>
+     * </ul>
+     *
+     * La pre-condición "no quedan turnos SCHEDULED a futuro" se valida en
+     * {@code AttentionPolicyService} porque requiere acceso a repositorios.
+     *
+     * @param motive Motivo de la cancelación (obligatorio, no en blanco)
+     * @param author Practicante responsable que ejecuta la acción
+     * @throws InvalidBusinessRuleException si el caso no está IN_PROGRESS o falta motivo
+     */
+    public void cancelByPractitioner(String motive, User author) {
+        if (this.status != AttentionStatus.IN_PROGRESS) {
+            throw new InvalidBusinessRuleException(
+                    "Solo se puede cancelar un caso clínico en curso."
+            );
+        }
+        if (motive == null || motive.isBlank()) {
+            throw new InvalidBusinessRuleException(
+                    "El motivo de cancelación es obligatorio."
+            );
+        }
+        // Auditoría como ProgressNote: la cancelación queda como evento
+        // del expediente clínico, en orden cronológico. Debe ir ANTES del
+        // cambio de estado porque addProgressNote exige IN_PROGRESS.
+        addProgressNote("[Caso cancelado por el practicante] " + motive.strip(), author);
+        this.status = AttentionStatus.CANCELLED;
     }
 
     /**

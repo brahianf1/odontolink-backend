@@ -69,6 +69,28 @@ public interface IAttentionUseCase {
     Attention finalizeAttention(Long attentionId, User practitionerUser);
 
     /**
+     * Cancela manualmente un caso clínico (CANCELLED) por decisión del
+     * practicante responsable. Cubre el escenario que finalize/abandono
+     * no alcanzan: un caso con al menos un turno COMPLETED del que el
+     * paciente no vuelve a aparecer.
+     *
+     * Validaciones:
+     * - La atención debe existir.
+     * - El usuario debe ser el practicante responsable.
+     * - El caso debe estar IN_PROGRESS (delegado al POJO).
+     * - El motivo no puede estar vacío (delegado al POJO).
+     * - No deben quedar turnos SCHEDULED futuros (delegado al policy service).
+     *
+     * El motivo queda registrado como ProgressNote en el expediente clínico.
+     *
+     * @param attentionId ID del caso clínico
+     * @param motive Motivo de la cancelación (obligatorio)
+     * @param practitionerUser Practicante autenticado
+     * @return La Attention en estado CANCELLED
+     */
+    Attention cancelAttentionByPractitioner(Long attentionId, String motive, User practitionerUser);
+
+    /**
      * Obtiene un caso clínico específico por su ID.
      * Permite al practicante consultar los detalles de un caso.
      *
