@@ -184,9 +184,11 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
     @Override
     public OfferedTreatment reactivateOfferedTreatment(Long practitionerId, Long offeredTreatmentId) {
         OfferedTreatment offer = loadOwnedOffer(practitionerId, offeredTreatmentId);
-        // El POJO valida la transición permitida (sólo desde INACTIVE) y arroja
-        // InvalidBusinessRuleException si la oferta está en otro estado.
-        offer.activate();
+        // El domain service valida unicidad contra otras ofertas ACTIVE/PAUSED
+        // del mismo par practitioner+treatment, y delega al POJO la transición
+        // INACTIVE → ACTIVE. Cualquier violación se traduce en 422 por el
+        // GlobalExceptionHandler.
+        domainService.reactivateOffer(offer);
         return offeredTreatmentRepository.save(offer);
     }
 

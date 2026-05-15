@@ -174,6 +174,43 @@ public class OfferedTreatmentDomainService {
     }
 
     /**
+     * Valida y ejecuta la reactivación de una oferta dada de baja lógicamente.
+     *
+     * El POJO {@link OfferedTreatment#activate()} sólo valida la transición de
+     * estado (INACTIVE → ACTIVE). La unicidad NO puede validarla el POJO porque
+     * requiere consultar el repositorio, así que vive acá — espejando la
+     * arquitectura usada en {@link #createOffer}.
+     *
+     * Regla: si ya existe otra oferta del mismo par practitioner+treatment en
+     * un estado que ocupa el "slot de unicidad" (ACTIVE o PAUSED), reactivar
+     * esta INACTIVE generaría un duplicado e invalidaría la invariante del
+     * catálogo. Se rechaza con 422 con mensaje accionable para que el FE
+     * sugiera al practicante eliminar/archivar la otra oferta primero.
+     *
+     * El método NO persiste: muta el objeto in-memory y deja la persistencia
+     * al servicio de aplicación dentro de su transacción.
+     *
+     * @param offer Oferta cargada en memoria (debe estar INACTIVE)
+     * @throws InvalidBusinessRuleException si la transición es inválida (POJO)
+     *         o si reactivar generaría un conflicto de unicidad (este método)
+     */
+    public void reactivateOffer(OfferedTreatment offer) {
+        // Unicidad ANTES del flip de estado. Aprovecha que
+        // existsByPractitionerAndTreatment ya cuenta sólo ACTIVE+PAUSED y
+        // por lo tanto ignora la propia oferta (que está INACTIVE) sin
+        // necesidad de excluirla explícitamente.
+        if (offeredTreatmentRepository.existsByPractitionerAndTreatment(
+                offer.getPractitioner(), offer.getTreatment())) {
+            throw new InvalidBusinessRuleException(
+                    "Ya existe otra oferta vigente o pausada para el tratamiento '" +
+                    offer.getTreatment().getName() + "' en su catálogo. " +
+                    "Para reactivar ésta, primero archive o elimine la otra."
+            );
+        }
+        offer.activate();
+    }
+
+    /**
      * Decide la estrategia de eliminación de una oferta del catálogo (RF16).
      *
      * Política del Dominio:
