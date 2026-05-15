@@ -46,6 +46,32 @@ public final class OfferedTreatmentSpecifications {
     }
 
     /**
+     * Filtro de vigencia temporal: la fecha actual debe caer dentro de
+     * {@code [offerStartDate, offerEndDate]}. Las ofertas con fechas null
+     * son tolerantes (no caducan automáticamente) — históricamente la
+     * obligatoriedad la enforza el constructor del POJO en alta nueva,
+     * y filas legacy podrían carecer de fechas.
+     *
+     * Es la garantía complementaria a {@link #isActive()} para que el
+     * catálogo público no muestre ofertas vencidas por tiempo. La oferta
+     * permanece ACTIVE en BD; el servidor la oculta hasta que el practicante
+     * extienda la vigencia o la dé de baja.
+     */
+    public static Specification<OfferedTreatmentEntity> isWithinTemporalWindow(java.time.LocalDate today) {
+        return (root, query, cb) -> {
+            jakarta.persistence.criteria.Predicate startOk = cb.or(
+                    cb.isNull(root.get("offerStartDate")),
+                    cb.lessThanOrEqualTo(root.get("offerStartDate"), today)
+            );
+            jakarta.persistence.criteria.Predicate endOk = cb.or(
+                    cb.isNull(root.get("offerEndDate")),
+                    cb.greaterThanOrEqualTo(root.get("offerEndDate"), today)
+            );
+            return cb.and(startOk, endOk);
+        };
+    }
+
+    /**
      * Filtro por palabra clave: busca coincidencias parciales y case-insensitive
      * en el nombre/descripción del Treatment y en firstName/lastName del User
      * detrás del Practitioner.
@@ -151,10 +177,13 @@ public final class OfferedTreatmentSpecifications {
     /**
      * Compone una Specification a partir de los criterios opcionales.
      * Cada filtro se agrega sólo si está presente; el resultado siempre
-     * incluye {@link #isActive()} como cláusula base.
+     * incluye {@link #isActive()} y {@link #isWithinTemporalWindow}
+     * como cláusulas base — el catálogo público nunca expone ofertas
+     * vencidas por tiempo ni en estados no-bookables.
      */
     public static Specification<OfferedTreatmentEntity> fromCriteria(OfferedTreatmentSearchCriteria criteria) {
-        Specification<OfferedTreatmentEntity> spec = isActive();
+        Specification<OfferedTreatmentEntity> spec =
+                isActive().and(isWithinTemporalWindow(java.time.LocalDate.now()));
         if (criteria == null) {
             return spec;
         }

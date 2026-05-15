@@ -24,6 +24,7 @@ import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.P
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.TreatmentPersistenceMapper;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.specification.OfferedTreatmentSpecifications;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
@@ -144,9 +145,11 @@ public class OfferedTreatmentPersistenceAdapter implements OfferedTreatmentRepos
 
     @Override
     public List<OfferedTreatment> findAll() {
-        // Catálogo público sin filtros: sólo expone ofertas bookables (ACTIVE).
-        // PAUSED e INACTIVE quedan ocultas.
+        // Catálogo público sin filtros: sólo expone ofertas bookables (ACTIVE)
+        // y dentro de la ventana temporal vigente. PAUSED, INACTIVE y vencidas
+        // por tiempo quedan ocultas.
         return jpaOfferedTreatmentRepository.findByStatus(OfferedTreatmentStatus.ACTIVE).stream()
+                .filter(this::isWithinTemporalWindowToday)
                 .map(OfferedTreatmentPersistenceMapper::toDomain)
                 .collect(Collectors.toList());
     }
@@ -155,8 +158,26 @@ public class OfferedTreatmentPersistenceAdapter implements OfferedTreatmentRepos
     public List<OfferedTreatment> findByTreatmentId(Long treatmentId) {
         return jpaOfferedTreatmentRepository
                 .findByTreatmentIdAndStatus(treatmentId, OfferedTreatmentStatus.ACTIVE).stream()
+                .filter(this::isWithinTemporalWindowToday)
                 .map(OfferedTreatmentPersistenceMapper::toDomain)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Predicado del filtro temporal aplicado en memoria sobre la entidad,
+     * coherente con la Specification {@code isWithinTemporalWindow} usada
+     * en el motor de búsqueda paginado. Fechas {@code null} se consideran
+     * tolerantes (no caducan).
+     */
+    private boolean isWithinTemporalWindowToday(OfferedTreatmentEntity entity) {
+        LocalDate today = LocalDate.now();
+        if (entity.getOfferStartDate() != null && entity.getOfferStartDate().isAfter(today)) {
+            return false;
+        }
+        if (entity.getOfferEndDate() != null && entity.getOfferEndDate().isBefore(today)) {
+            return false;
+        }
+        return true;
     }
 
     @Override
