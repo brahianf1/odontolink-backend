@@ -101,6 +101,13 @@ public class OfferedTreatmentDomainService {
                                         Integer newMaxCompletedAttentions) {
 
         validateRequiredUpdateFields(newOfferStartDate, newOfferEndDate, newMaxCompletedAttentions);
+        validateUpdateDateRange(newOfferStartDate, newOfferEndDate);
+        validateUpdateMaxCompletedAttentions(newMaxCompletedAttentions);
+
+        // Nota deliberada: no se valida "startDate no en el pasado" en el update.
+        // Una oferta ya en curso tiene legítimamente un startDate pasado, y los
+        // updates de otros campos (requirements, slots, endDate) no deberían
+        // fallar por eso. La regla de no-backdating sólo aplica al crear.
 
         if (newDurationInMinutes != null) {
             validateDuration(newDurationInMinutes);
@@ -126,6 +133,29 @@ public class OfferedTreatmentDomainService {
         existingOffer.setMaxCompletedAttentions(newMaxCompletedAttentions);
 
         return existingOffer;
+    }
+
+    /**
+     * Valida que la fecha de fin no sea anterior a la de inicio en un update.
+     * Es la misma regla que el constructor del POJO aplica al crear, replicada
+     * acá porque las validaciones del constructor sólo corren en construcción.
+     */
+    private void validateUpdateDateRange(java.time.LocalDate startDate, java.time.LocalDate endDate) {
+        if (endDate.isBefore(startDate)) {
+            throw new InvalidBusinessRuleException(
+                    "La fecha de fin no puede ser anterior a la fecha de inicio."
+            );
+        }
+    }
+
+    /**
+     * Valida que el cupo máximo sea un número positivo en un update.
+     * Espeja la regla del constructor.
+     */
+    private void validateUpdateMaxCompletedAttentions(Integer maxCompletedAttentions) {
+        if (maxCompletedAttentions <= 0) {
+            throw new InvalidBusinessRuleException("El cupo debe ser un número positivo.");
+        }
     }
 
     /**
