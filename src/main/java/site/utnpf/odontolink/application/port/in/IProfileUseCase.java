@@ -1,5 +1,6 @@
 package site.utnpf.odontolink.application.port.in;
 
+import site.utnpf.odontolink.domain.model.AuthResult;
 import site.utnpf.odontolink.domain.model.User;
 
 /**
@@ -56,14 +57,27 @@ public interface IProfileUseCase {
     /**
      * Cambia la contraseña del usuario autenticado.
      *
-     * Es un endpoint distinto del flujo de recuperación pública (RF04):
+     * <p>Es un endpoint distinto del flujo de recuperación pública (RF04):
      * aquí el usuario ya está autenticado y debe demostrar conocimiento de
      * la contraseña actual antes de poder rotarla. Esta verificación es
      * obligatoria para mitigar ataques de "session-fixation + password
      * change" si el atacante obtuviera temporalmente la sesión.
      *
+     * <p>Como efecto secundario, la operación bumpea {@code passwordChangedAt},
+     * lo que invalida cualquier JWT emitido antes del cambio. Para evitar
+     * obligar al usuario a re-loguearse manualmente, este método devuelve un
+     * {@link AuthResult} con un JWT recién emitido que el frontend debe usar
+     * para reemplazar el token anterior.
+     *
      * @throws site.utnpf.odontolink.domain.exception.AuthenticationFailedException
      *         si la contraseña actual no coincide con la almacenada.
      */
-    void changeMyPassword(Long userId, String currentPassword, String newPassword);
+    AuthResult changeMyPassword(Long userId, String currentPassword, String newPassword);
+
+    /**
+     * Invalida todas las sesiones JWT activas del usuario sin tocar su
+     * contraseña. Es el motor del endpoint {@code POST /api/users/me/logout-all}
+     * y deja al usuario forzado a re-loguearse desde cualquier dispositivo.
+     */
+    void logoutAllSessions(Long userId);
 }

@@ -39,6 +39,23 @@ public class User {
 
     private Instant createdAt;
 
+    /**
+     * Marca temporal del ultimo evento que invalida sesiones JWT previas:
+     * cambio de contrasenia, reset de contrasenia, logout-all o desactivacion
+     * administrativa.
+     *
+     * <p>El filtro JWT compara este valor con el claim {@code iat} (issued at)
+     * del token recibido: si el token fue emitido ANTES de {@code passwordChangedAt}
+     * se rechaza con 401. Es una forma de "token versioning" basada en timestamp
+     * que no requiere persistir blacklists y sigue siendo stateless desde el
+     * cliente: el server-side solo necesita esta columna y un check en el filtro.
+     *
+     * <p>Si la columna esta en {@code null} (cuentas antiguas pre-migracion), el
+     * filtro se comporta como antes y no rechaza ningun token: la invalidacion
+     * empieza a regir desde el primer evento que la setea.
+     */
+    private Instant passwordChangedAt;
+
     // Constructores
     public User() {
         this.isActive = true;
@@ -105,17 +122,41 @@ public class User {
 
     /**
      * Lógica de negocio para cambiar la contraseña.
+     *
+     * <p>Al rotar la credencial bumpeamos {@link #passwordChangedAt} para que
+     * el filtro JWT invalide cualquier token emitido antes de este instante.
+     * Esta invariante es clave para OWASP A07: que un cambio o reset de
+     * contraseña corte sesiones activas previas de forma efectiva (no
+     * meramente cosmética).
      */
-    public void changePassword(String currentPasswordHash, String newPasswordHash) {
-        // if (!passwordEncoder.matches(currentPassword, this.password)) {
-        //    throw new SecurityException("Contraseña actual incorrecta");
-        // }
+    public void changePassword(String newPasswordHash, Instant changedAt) {
+        if (newPasswordHash == null || newPasswordHash.isEmpty()) {
+            throw new IllegalArgumentException("El hash de la nueva contraseña no puede ser vacío.");
+        }
+        if (changedAt == null) {
+            throw new IllegalArgumentException("changedAt es obligatorio para invalidar sesiones previas.");
+        }
         this.password = newPasswordHash;
+        this.passwordChangedAt = changedAt;
     }
 
     /**
-     * Actualiza los datos modificables por el propio usuario autenticado
-     * desde el flujo de autoservicio (RF06).
+     * Invalida todas las sesiones JWT previas sin tocar la contraseña.
+     *
+     * <p>Es el motor del endpoint {@code POST /api/users/me/logout-all} y se
+     * llama también desde la desactivación administrativa para asegurar que
+     * el usuario apagado pierde acceso inmediato a la API en vez de quedar
+     * operando hasta que su token expire naturalmente.
+     */
+    public void invalidateActiveSessions(Instant invalidatedAt) {
+        if (invalidatedAt == null) {
+            throw new IllegalArgumentException("invalidatedAt es obligatorio.");
+        }
+        this.passwordChangedAt = invalidatedAt;
+    }
+
+    /**
+     * Actualiza los campos REQUERIDOS del autoservicio de perfil (RF06).
      *
      * Se separa deliberadamente de {@link #updateProfile} (RF05) porque la
      * autoservicio tiene reglas distintas a la administrativa:
@@ -126,20 +167,17 @@ public class User {
      *   <li>El DNI sigue inmutable: es identificador funcional y de
      *       trazabilidad clínica, no debe poder reescribirse desde una API
      *       de perfil.</li>
-     *   <li>Se admiten dos campos nuevos del RF06: {@code address} y
-     *       {@code profilePictureUrl}.</li>
      * </ul>
-     * Aceptar {@code null} para campos opcionales (teléfono, fecha de
-     * nacimiento, dirección, foto) implica limpieza explícita: el adaptador
-     * REST decide qué enviar y qué omitir.
+     *
+     * <p>Los campos opcionales del perfil ({@code phone}, {@code birthDate},
+     * {@code address}, {@code profilePictureUrl}) NO se manejan aquí: el
+     * servicio de aplicación los setea individualmente vía los setters
+     * estándar cuando el patch los incluye, preservando la semántica PATCH
+     * de "ausente = no tocar, vacío = limpiar".
      */
     public void updateSelfProfile(String email,
                                   String firstName,
-                                  String lastName,
-                                  String phone,
-                                  LocalDate birthDate,
-                                  String address,
-                                  String profilePictureUrl) {
+                                  String lastName) {
         if (email != null) {
             this.email = email;
         }
@@ -149,12 +187,6 @@ public class User {
         if (lastName != null) {
             this.lastName = lastName;
         }
-        // Los campos opcionales se sobreescriben siempre con el valor recibido
-        // (incluido null) para permitir "limpiar" el dato desde la UI.
-        this.phone = phone;
-        this.birthDate = birthDate;
-        this.address = address;
-        this.profilePictureUrl = profilePictureUrl;
     }
 
     // Getters y Setters
@@ -260,5 +292,13 @@ public class User {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Instant getPasswordChangedAt() {
+        return passwordChangedAt;
+    }
+
+    public void setPasswordChangedAt(Instant passwordChangedAt) {
+        this.passwordChangedAt = passwordChangedAt;
     }
 }

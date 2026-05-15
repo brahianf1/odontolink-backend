@@ -82,6 +82,21 @@ public class JwtProvider {
     }
 
     /**
+     * Extrae la marca temporal {@code iat} (issued-at) del token. El filtro
+     * JWT la usa para detectar tokens emitidos antes de un cambio de
+     * contrasenia o de una invalidacion explicita de sesiones.
+     */
+    public java.time.Instant getIssuedAtFromToken(String token) {
+        java.util.Date issuedAt = Jwts.parser()
+                .verifyWith(signingKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getIssuedAt();
+        return issuedAt != null ? issuedAt.toInstant() : null;
+    }
+
+    /**
      * Valida el token JWT. Devuelve true si la firma y el formato son validos
      * y el token aun no ha expirado.
      *

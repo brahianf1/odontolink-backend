@@ -18,6 +18,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import site.utnpf.odontolink.infrastructure.config.ratelimit.RateLimitingFilter;
 import site.utnpf.odontolink.infrastructure.config.security.CustomUserDetailsService;
 import site.utnpf.odontolink.infrastructure.config.security.JwtAuthenticationFilter;
 
@@ -36,14 +37,17 @@ public class SecurityConfig {
 
     private final CustomUserDetailsService userDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitingFilter rateLimitingFilter;
 
     @Value("${cors.allowed.origins}")
     private String allowedOrigins;
 
     public SecurityConfig(CustomUserDetailsService userDetailsService,
-                         JwtAuthenticationFilter jwtAuthenticationFilter) {
+                         JwtAuthenticationFilter jwtAuthenticationFilter,
+                         RateLimitingFilter rateLimitingFilter) {
         this.userDetailsService = userDetailsService;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.rateLimitingFilter = rateLimitingFilter;
     }
 
     @Bean
@@ -68,7 +72,11 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(daoAuthenticationProvider())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                // El orden importa: rate-limit primero (anonimo, contra IP),
+                // luego JWT (autenticacion). Asi un atacante anonimo no puede
+                // saturar credenciales del filtro mas costoso del JWT.
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(rateLimitingFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

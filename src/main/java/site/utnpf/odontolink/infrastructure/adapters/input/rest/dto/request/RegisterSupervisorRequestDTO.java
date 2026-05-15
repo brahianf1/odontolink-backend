@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 
 import jakarta.validation.constraints.*;
+import site.utnpf.odontolink.infrastructure.config.validation.StrongPassword;
 
 import java.time.LocalDate;
 
@@ -16,7 +17,7 @@ public class RegisterSupervisorRequestDTO {
     private String email;
 
     @NotBlank(message = "La contraseña es obligatoria")
-    @Size(min = 6, max = 100, message = "La contraseña debe tener entre 6 y 100 caracteres")
+    @StrongPassword
     private String password;
 
     @NotBlank(message = "El nombre es obligatorio")

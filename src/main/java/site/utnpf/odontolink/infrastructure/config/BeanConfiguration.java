@@ -18,12 +18,15 @@ import site.utnpf.odontolink.application.port.in.ISearchOfferedTreatmentsUseCase
 import site.utnpf.odontolink.application.port.in.IPasswordResetUseCase;
 import site.utnpf.odontolink.application.port.in.IPatientRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.IPractitionerRegistrationUseCase;
+import site.utnpf.odontolink.application.port.in.IProfilePictureUseCase;
 import site.utnpf.odontolink.application.port.in.IProfileUseCase;
+import site.utnpf.odontolink.application.port.in.IUserDetailsUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorAttentionUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorRegistrationUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorUseCase;
 import site.utnpf.odontolink.application.port.in.ITreatmentUseCase;
 import site.utnpf.odontolink.application.port.out.IEmailSenderPort;
+import site.utnpf.odontolink.application.port.out.IObjectStoragePort;
 import site.utnpf.odontolink.application.port.out.ITokenProvider;
 import site.utnpf.odontolink.application.service.AdminUserManagementService;
 import site.utnpf.odontolink.application.service.AppointmentService;
@@ -38,7 +41,9 @@ import site.utnpf.odontolink.application.service.SearchOfferedTreatmentsService;
 import site.utnpf.odontolink.application.service.PasswordResetService;
 import site.utnpf.odontolink.application.service.PatientRegistrationService;
 import site.utnpf.odontolink.application.service.PractitionerRegistrationService;
+import site.utnpf.odontolink.application.service.ProfilePictureService;
 import site.utnpf.odontolink.application.service.ProfileService;
+import site.utnpf.odontolink.application.service.UserDetailsService;
 import site.utnpf.odontolink.application.service.SupervisorAttentionService;
 import site.utnpf.odontolink.application.service.SupervisorRegistrationService;
 import site.utnpf.odontolink.application.service.SupervisorService;
@@ -68,6 +73,7 @@ import site.utnpf.odontolink.domain.service.SupervisorPolicyService;
 import site.utnpf.odontolink.domain.service.slotstrategy.DynamicDurationSlotStrategy;
 import site.utnpf.odontolink.domain.service.slotstrategy.FixedIntervalSlotStrategy;
 import site.utnpf.odontolink.domain.service.slotstrategy.SlotGenerationStrategy;
+import site.utnpf.odontolink.infrastructure.config.ratelimit.RateLimitRegistry;
 
 /**
  * Configuración de Beans para la capa de aplicación.
@@ -120,12 +126,14 @@ public class BeanConfiguration {
                                                       PasswordResetTokenRepository passwordResetTokenRepository,
                                                       IEmailSenderPort emailSenderPort,
                                                       PasswordEncoder passwordEncoder,
+                                                      RateLimitRegistry rateLimitRegistry,
                                                       @Value("${odontolink.password-reset.token-ttl-minutes:30}") long tokenTtlMinutes) {
         return new PasswordResetService(
                 userRepository,
                 passwordResetTokenRepository,
                 emailSenderPort,
                 passwordEncoder,
+                rateLimitRegistry,
                 tokenTtlMinutes
         );
     }
@@ -562,15 +570,58 @@ public class BeanConfiguration {
     /**
      * Bean para el caso de uso de autoservicio del perfil del usuario (RF06).
      *
-     * Se cablea contra el {@link UserRepository} para leer/persistir y contra
+     * Se cablea contra el {@link UserRepository} para leer/persistir, contra
      * el {@link PasswordEncoder} ya definido en {@code SecurityConfig} para
      * verificar y reescribir el hash de la contraseña sin acoplarse a una
-     * implementación concreta de hashing.
+     * implementación concreta de hashing, y contra {@link ITokenProvider}
+     * para emitir un JWT fresco tras el cambio de contraseña (Fase 2).
      */
     @Bean
     public IProfileUseCase profileUseCase(UserRepository userRepository,
-                                          PasswordEncoder passwordEncoder) {
-        return new ProfileService(userRepository, passwordEncoder);
+                                          PasswordEncoder passwordEncoder,
+                                          ITokenProvider tokenProvider,
+                                          RateLimitRegistry rateLimitRegistry) {
+        return new ProfileService(userRepository, passwordEncoder, tokenProvider, rateLimitRegistry);
+    }
+
+    /**
+     * Bean para el use case de detalles rol-especificos (RF06 extension).
+     *
+     * Se cablea contra los tres repositorios de subtipos (Patient,
+     * Practitioner, Supervisor) ya que cada PATCH actua sobre la tabla
+     * correspondiente; el {@link UserRepository} se usa solo para resolver
+     * el rol y validar que la operacion sea legitima.
+     */
+    @Bean
+    public IUserDetailsUseCase userDetailsUseCase(UserRepository userRepository,
+                                                  PatientRepository patientRepository,
+                                                  PractitionerRepository practitionerRepository,
+                                                  SupervisorRepository supervisorRepository) {
+        return new UserDetailsService(userRepository, patientRepository,
+                practitionerRepository, supervisorRepository);
+    }
+
+    /**
+     * Bean para el use case de gestion de foto de perfil (RF06 extension).
+     *
+     * Los limites de tamanio, dimensiones y calidad JPEG se inyectan desde
+     * {@code application.properties} para poder ajustarlos por ambiente
+     * sin recompilar.
+     */
+    @Bean
+    public IProfilePictureUseCase profilePictureUseCase(
+            UserRepository userRepository,
+            IObjectStoragePort objectStorage,
+            @Value("${odontolink.profile-picture.max-bytes:2097152}") int maxBytes,
+            @Value("${odontolink.profile-picture.target-size-px:512}") int targetSizePx,
+            @Value("${odontolink.profile-picture.jpeg-quality:0.85}") double jpegQuality) {
+        return new ProfilePictureService(
+                userRepository,
+                objectStorage,
+                maxBytes,
+                targetSizePx,
+                jpegQuality
+        );
     }
 
     /**

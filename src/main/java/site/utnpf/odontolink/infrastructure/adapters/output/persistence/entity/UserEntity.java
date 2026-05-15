@@ -65,6 +65,15 @@ public class UserEntity {
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    /**
+     * Marca temporal del ultimo evento que invalida sesiones JWT previas. Se
+     * compara contra el claim {@code iat} de cada token recibido. Nullable
+     * porque las cuentas creadas antes de introducir esta columna no tienen
+     * el dato y el filtro JWT trata ese caso como "no rechazar".
+     */
+    @Column(name = "password_changed_at")
+    private Instant passwordChangedAt;
+
     @PrePersist
     protected void onCreate() {
         if (createdAt == null) {
@@ -182,5 +191,13 @@ public class UserEntity {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Instant getPasswordChangedAt() {
+        return passwordChangedAt;
+    }
+
+    public void setPasswordChangedAt(Instant passwordChangedAt) {
+        this.passwordChangedAt = passwordChangedAt;
     }
 }

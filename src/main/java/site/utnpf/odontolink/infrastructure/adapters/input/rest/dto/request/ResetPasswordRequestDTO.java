@@ -2,7 +2,7 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import site.utnpf.odontolink.infrastructure.config.validation.StrongPassword;
 
 /**
  * DTO de entrada para confirmar el restablecimiento de contraseña (RF04).
@@ -20,11 +20,11 @@ public class ResetPasswordRequestDTO {
     @NotBlank(message = "El token es obligatorio")
     private String token;
 
-    @Schema(description = "Nueva contraseña a establecer (mínimo 6 caracteres)",
-            example = "MiNuevaPass123!",
+    @Schema(description = "Nueva contraseña a establecer (mínimo 8 caracteres; no puede ser una contraseña común)",
+            example = "MiNuevaClave2026",
             requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "La nueva contraseña es obligatoria")
-    @Size(min = 6, message = "La nueva contraseña debe tener al menos 6 caracteres")
+    @StrongPassword
     private String newPassword;
 
     public ResetPasswordRequestDTO() {

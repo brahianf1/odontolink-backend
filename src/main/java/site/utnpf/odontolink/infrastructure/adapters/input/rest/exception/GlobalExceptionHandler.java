@@ -11,10 +11,13 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import site.utnpf.odontolink.application.port.out.StorageException;
 import site.utnpf.odontolink.domain.exception.AuthenticationFailedException;
 import site.utnpf.odontolink.domain.exception.DuplicateResourceException;
 import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.exception.InvalidPasswordResetTokenException;
+import site.utnpf.odontolink.domain.exception.RateLimitExceededException;
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
 import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ErrorResponseDTO;
@@ -174,6 +177,72 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    /**
+     * Maneja {@link RateLimitExceededException} disparado por servicios
+     * (no por el filtro: el filtro escribe directamente la respuesta sin
+     * pasar por aqui).
+     */
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ErrorResponseDTO> handleRateLimitExceededException(
+            RateLimitExceededException ex,
+            HttpServletRequest request) {
+
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                HttpStatus.TOO_MANY_REQUESTS.value(),
+                "Too Many Requests",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS);
+        if (ex.getRetryAfterSeconds() != null) {
+            builder.header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        return builder.body(errorResponse);
+    }
+
+    /**
+     * Maneja el limite de tamanio del subsistema multipart de Spring. La
+     * cota propia del use case de fotos (max-bytes) se valida despues y
+     * devuelve 422 con mensaje especifico; este handler atrapa el corte
+     * mas grueso de Spring antes de que llegue al controller.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponseDTO> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException ex,
+            HttpServletRequest request) {
+
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                HttpStatus.PAYLOAD_TOO_LARGE.value(),
+                "Payload Too Large",
+                "El archivo subido excede el tamanio maximo permitido.",
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(errorResponse);
+    }
+
+    /**
+     * Maneja fallas del adaptador de object storage. Devolvemos 503 porque
+     * en general son fallas de infraestructura externa (credenciales,
+     * conectividad al bucket); el frontend puede sugerir reintentar.
+     */
+    @ExceptionHandler(StorageException.class)
+    public ResponseEntity<ErrorResponseDTO> handleStorageException(
+            StorageException ex,
+            HttpServletRequest request) {
+
+        log.warn("Falla del object storage al servir {} {}: {}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage(), ex);
+
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                HttpStatus.SERVICE_UNAVAILABLE.value(),
+                "Storage Unavailable",
+                "El servicio de almacenamiento no esta disponible temporalmente. Intente nuevamente.",
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse);
     }
 
     /**
