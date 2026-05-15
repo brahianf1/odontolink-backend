@@ -17,6 +17,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import site.utnpf.odontolink.application.port.in.IAppointmentUseCase;
 import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
+import site.utnpf.odontolink.application.port.in.OfferedTreatmentListFilter;
 import site.utnpf.odontolink.domain.model.Appointment;
 import site.utnpf.odontolink.domain.model.AvailabilitySlot;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
@@ -238,10 +239,15 @@ public class PractitionerController {
      */
     @Operation(
             summary = "Obtener el catálogo personal del practicante",
-            description = "Devuelve todas las ofertas de tratamientos publicadas por el practicante " +
-                    "autenticado (incluyendo las desactivadas por Baja Lógica), enriquecidas con " +
-                    "el progreso académico: atenciones completadas, activas y canceladas. " +
-                    "Se calcula la bandera `availabilityBlocked` cuando `completed + active >= maxCompletedAttentions`."
+            description = "Devuelve las ofertas del practicante autenticado, enriquecidas con el progreso " +
+                    "académico (completadas, activas y canceladas) y la bandera `availabilityBlocked` " +
+                    "(cupo lleno cuando `completed + active >= maxCompletedAttentions`).\n\n" +
+                    "El parámetro `status` selecciona el bucket a devolver:\n" +
+                    "- `ACTIVE` (default): vigentes y dentro de la ventana temporal — lo que el paciente puede reservar.\n" +
+                    "- `PAUSED`: pausadas voluntariamente.\n" +
+                    "- `INACTIVE`: dadas de baja por RF16 (histórico, no bookable, reactivable).\n" +
+                    "- `EXPIRED`: ACTIVE cuya `offerEndDate` ya pasó (necesitan renovación).\n" +
+                    "- `ALL`: sin filtro."
     )
     @ApiResponses(value = {
             @ApiResponse(
@@ -265,11 +271,17 @@ public class PractitionerController {
             )
     })
     @GetMapping("/offered-treatments")
-    public ResponseEntity<List<OfferedTreatmentResponseDTO>> getMyOfferedTreatments() {
+    public ResponseEntity<List<OfferedTreatmentResponseDTO>> getMyOfferedTreatments(
+            @Parameter(
+                    description = "Bucket a devolver. Default: ACTIVE.",
+                    schema = @Schema(implementation = OfferedTreatmentListFilter.class),
+                    example = "ACTIVE"
+            )
+            @RequestParam(name = "status", defaultValue = "ACTIVE") OfferedTreatmentListFilter status) {
 
         Long practitionerId = authenticationFacade.getAuthenticatedPractitionerId();
 
-        List<OfferedTreatment> offeredTreatments = offeredTreatmentUseCase.getMyOfferedTreatments(practitionerId);
+        List<OfferedTreatment> offeredTreatments = offeredTreatmentUseCase.getMyOfferedTreatments(practitionerId, status);
         Map<Long, Long> completedMap = offeredTreatmentUseCase.getCompletedAttentionsProgressForPractitioner(practitionerId);
         Map<Long, Long> activeMap = offeredTreatmentUseCase.getActiveAttentionsProgressForPractitioner(practitionerId);
         Map<Long, Long> cancelledMap = offeredTreatmentUseCase.getCancelledAttentionsProgressForPractitioner(practitionerId);

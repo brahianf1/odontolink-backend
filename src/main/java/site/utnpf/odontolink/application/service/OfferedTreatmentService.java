@@ -2,6 +2,7 @@ package site.utnpf.odontolink.application.service;
 
 import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
+import site.utnpf.odontolink.application.port.in.OfferedTreatmentListFilter;
 import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
 import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
@@ -17,9 +18,11 @@ import site.utnpf.odontolink.domain.repository.PractitionerRepository;
 import site.utnpf.odontolink.domain.repository.TreatmentRepository;
 import site.utnpf.odontolink.domain.service.OfferedTreatmentDomainService;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Servicio de aplicación para la gestión del catálogo personal de tratamientos del practicante.
@@ -272,12 +275,17 @@ public class OfferedTreatmentService implements IOfferedTreatmentUseCase {
      */
     @Override
     @Transactional(readOnly = true)
-    public List<OfferedTreatment> getMyOfferedTreatments(Long practitionerId) {
+    public List<OfferedTreatment> getMyOfferedTreatments(Long practitionerId, OfferedTreatmentListFilter filter) {
         if (!practitionerRepository.findById(practitionerId).isPresent()) {
             throw new ResourceNotFoundException("Practitioner", "id", practitionerId.toString());
         }
 
-        return offeredTreatmentRepository.findByPractitionerId(practitionerId);
+        OfferedTreatmentListFilter effectiveFilter = filter != null ? filter : OfferedTreatmentListFilter.ACTIVE;
+        LocalDate today = LocalDate.now();
+
+        return offeredTreatmentRepository.findByPractitionerId(practitionerId).stream()
+                .filter(effectiveFilter.asPredicate(today))
+                .collect(Collectors.toList());
     }
 
     /**

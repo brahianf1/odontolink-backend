@@ -123,13 +123,18 @@ public interface IOfferedTreatmentUseCase {
     OfferedTreatmentDeletionResult removeFromCatalog(Long practitionerId, Long offeredTreatmentId);
 
     /**
-     * Obtiene todos los tratamientos que ofrece un practicante específico.
-     * Usado para mostrar "Mi Catálogo Personal" al practicante.
+     * Obtiene los tratamientos del catálogo personal del practicante,
+     * filtrados según el bucket solicitado. Usado para "Mi Catálogo Personal".
+     *
+     * El filtrado se aplica en memoria sobre el resultado del repositorio:
+     * el catálogo personal de un practicante no escala a volúmenes que
+     * justifiquen empujar el predicado a la BD (esperable < 100 filas).
      *
      * @param practitionerId ID del practicante
-     * @return Lista de tratamientos ofrecidos por el practicante
+     * @param filter Bucket a devolver. Ver {@link OfferedTreatmentListFilter}.
+     * @return Lista de ofertas que satisfacen el filtro, posiblemente vacía
      */
-    List<OfferedTreatment> getMyOfferedTreatments(Long practitionerId);
+    List<OfferedTreatment> getMyOfferedTreatments(Long practitionerId, OfferedTreatmentListFilter filter);
 
     /**
      * Busca un tratamiento ofrecido por su ID.
