@@ -22,6 +22,8 @@ public class AuthResponseMapper {
 
     /**
      * Convierte un AuthResult del dominio a JwtResponseDTO de infraestructura.
+     * Incluye {@code profilePictureUrl} para que el frontend pueda renderizar
+     * el avatar inmediatamente al recibir el JWT, sin un GET /me adicional.
      */
     public static JwtResponseDTO toJwtResponseDTO(AuthResult authResult) {
         User user = authResult.getUser();
@@ -31,7 +33,8 @@ public class AuthResponseMapper {
                 user.getEmail(),
                 user.getRole().name(),
                 user.getFirstName(),
-                user.getLastName()
+                user.getLastName(),
+                user.getProfilePictureUrl()
         );
     }
 

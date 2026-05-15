@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import org.openapitools.jackson.nullable.JsonNullable;
 
 import java.time.LocalDate;
 
@@ -18,12 +19,21 @@ import java.time.LocalDate;
  * propio endpoint ({@code PUT /api/users/me/password}) con verificación de la
  * contraseña actual.
  *
- * Decisión de validación: {@code firstName}, {@code lastName} y {@code email}
- * son obligatorios porque ya son obligatorios en el dominio (NOT NULL en la
- * tabla {@code users}). El resto son opcionales, con validaciones de formato
- * cuando estén presentes.
+ * <p>Semántica PATCH (RFC 5789): campos requeridos del modelo
+ * ({@code email}, {@code firstName}, {@code lastName}) viajan como
+ * {@code String} obligatorio para preservar las invariantes del dominio. Los
+ * opcionales viajan envueltos en {@link JsonNullable}, de modo que el servicio
+ * pueda distinguir tres estados distintos por campo:
+ * <ul>
+ *   <li>"undefined" (no presente en el JSON) → no tocar el valor existente;</li>
+ *   <li>"present con null" → limpiar el campo;</li>
+ *   <li>"present con valor" → sobreescribir.</li>
+ * </ul>
+ * Sin esta distinción, omitir un opcional en el payload borraría el dato
+ * existente — bug observable por el usuario como "se me limpió el teléfono
+ * al editar el nombre".
  */
-@Schema(description = "Payload del autoservicio de actualización de perfil (RF06)")
+@Schema(description = "Payload del autoservicio de actualización de perfil (RF06). Semántica PATCH.")
 public class UpdateMyProfileRequestDTO {
 
     @Schema(description = "Email de contacto y de login", example = "carlos.rodriguez@gmail.com", required = true)
@@ -43,26 +53,31 @@ public class UpdateMyProfileRequestDTO {
     private String lastName;
 
     /**
-     * Teléfono opcional. Se valida con regex laxa (sólo dígitos, espacios y
-     * '+') para no rechazar formatos internacionales legítimos: la validación
-     * estricta corresponde al servicio de notificaciones, no a este endpoint.
+     * Teléfono opcional. Las anotaciones se aplican al tipo contenido vía
+     * {@link site.utnpf.odontolink.infrastructure.config.validation.JsonNullableValueExtractor},
+     * que permite a Bean Validation atravesar el wrapper.
      */
-    @Schema(description = "Teléfono de contacto", example = "3815234567")
-    @Size(max = 20, message = "El teléfono no puede superar los 20 caracteres")
-    @Pattern(regexp = "^[0-9 +()-]*$", message = "El teléfono sólo puede contener dígitos, espacios y los símbolos + ( ) -")
-    private String phone;
+    @Schema(description = "Teléfono de contacto (omitir para no modificar; vacío para limpiar)",
+            example = "3815234567")
+    private JsonNullable<@Size(max = 20, message = "El teléfono no puede superar los 20 caracteres")
+                        @Pattern(regexp = "^[0-9 +()-]*$",
+                                 message = "El teléfono sólo puede contener dígitos, espacios y los símbolos + ( ) -")
+                        String> phone = JsonNullable.undefined();
 
-    @Schema(description = "Fecha de nacimiento", example = "1995-06-15")
-    @Past(message = "La fecha de nacimiento debe ser una fecha pasada")
-    private LocalDate birthDate;
+    @Schema(description = "Fecha de nacimiento (omitir para no modificar; null para limpiar)",
+            example = "1995-06-15")
+    private JsonNullable<@Past(message = "La fecha de nacimiento debe ser una fecha pasada")
+                        LocalDate> birthDate = JsonNullable.undefined();
 
-    @Schema(description = "Dirección postal", example = "Av. Independencia 1234, San Miguel de Tucumán")
-    @Size(max = 255, message = "La dirección no puede superar los 255 caracteres")
-    private String address;
+    @Schema(description = "Dirección postal (omitir para no modificar; vacío para limpiar)",
+            example = "Av. Independencia 1234, San Miguel de Tucumán")
+    private JsonNullable<@Size(max = 255, message = "La dirección no puede superar los 255 caracteres")
+                        String> address = JsonNullable.undefined();
 
-    @Schema(description = "URL pública de la foto de perfil", example = "https://cdn.odontolink/u/15/avatar.png")
-    @Size(max = 512, message = "La URL de la foto no puede superar los 512 caracteres")
-    private String profilePictureUrl;
+    @Schema(description = "URL pública de la foto de perfil (omitir para no modificar; vacío para limpiar)",
+            example = "https://cdn.odontolink/u/15/avatar.png")
+    private JsonNullable<@Size(max = 512, message = "La URL de la foto no puede superar los 512 caracteres")
+                        String> profilePictureUrl = JsonNullable.undefined();
 
     public UpdateMyProfileRequestDTO() {
     }
@@ -91,35 +106,35 @@ public class UpdateMyProfileRequestDTO {
         this.lastName = lastName;
     }
 
-    public String getPhone() {
+    public JsonNullable<String> getPhone() {
         return phone;
     }
 
-    public void setPhone(String phone) {
+    public void setPhone(JsonNullable<String> phone) {
         this.phone = phone;
     }
 
-    public LocalDate getBirthDate() {
+    public JsonNullable<LocalDate> getBirthDate() {
         return birthDate;
     }
 
-    public void setBirthDate(LocalDate birthDate) {
+    public void setBirthDate(JsonNullable<LocalDate> birthDate) {
         this.birthDate = birthDate;
     }
 
-    public String getAddress() {
+    public JsonNullable<String> getAddress() {
         return address;
     }
 
-    public void setAddress(String address) {
+    public void setAddress(JsonNullable<String> address) {
         this.address = address;
     }
 
-    public String getProfilePictureUrl() {
+    public JsonNullable<String> getProfilePictureUrl() {
         return profilePictureUrl;
     }
 
-    public void setProfilePictureUrl(String profilePictureUrl) {
+    public void setProfilePictureUrl(JsonNullable<String> profilePictureUrl) {
         this.profilePictureUrl = profilePictureUrl;
     }
 }

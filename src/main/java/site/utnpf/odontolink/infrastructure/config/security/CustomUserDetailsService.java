@@ -14,7 +14,9 @@ import java.util.Collections;
 
 /**
  * Implementación personalizada de UserDetailsService para Spring Security.
- * Carga los datos del usuario desde nuestro repositorio de dominio.
+ * Carga los datos del usuario desde nuestro repositorio de dominio y devuelve
+ * un {@link OdontolinkUserDetails} que lleva los campos extra que necesitamos
+ * en el filtro JWT (userId, passwordChangedAt).
  */
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
@@ -34,14 +36,16 @@ public class CustomUserDetailsService implements UserDetailsService {
             throw new UsernameNotFoundException("Usuario inactivo: " + email);
         }
 
-        return new org.springframework.security.core.userdetails.User(
+        return new OdontolinkUserDetails(
+                user.getId(),
                 user.getEmail(),
                 user.getPassword(),
                 user.isActive(),
                 true, // accountNonExpired
                 true, // credentialsNonExpired
                 true, // accountNonLocked
-                getAuthorities(user)
+                getAuthorities(user),
+                user.getPasswordChangedAt()
         );
     }
 

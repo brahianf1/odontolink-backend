@@ -5,6 +5,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * DTO de respuesta para operaciones de autenticación.
  * Contiene el token JWT y la información básica del usuario.
+ *
+ * <p>Se incluye {@code profilePictureUrl} para que el frontend pueda renderizar
+ * el avatar del usuario desde el primer instante post-login sin tener que
+ * disparar un GET /me adicional. El campo puede venir como {@code null} cuando
+ * el usuario aún no subió una foto.
  */
 @Schema(description = "Respuesta de autenticación exitosa con token JWT y datos del usuario")
 public class JwtResponseDTO {
@@ -30,17 +35,23 @@ public class JwtResponseDTO {
     @Schema(description = "Apellido del usuario", example = "Pérez")
     private String lastName;
 
+    @Schema(description = "URL pública de la foto de perfil. Puede ser null si el usuario no tiene foto.",
+            example = "https://cdn.odontolink/u/15/avatar.jpg")
+    private String profilePictureUrl;
+
     // Constructores
     public JwtResponseDTO() {
     }
 
-    public JwtResponseDTO(String token, Long userId, String email, String role, String firstName, String lastName) {
+    public JwtResponseDTO(String token, Long userId, String email, String role,
+                          String firstName, String lastName, String profilePictureUrl) {
         this.token = token;
         this.userId = userId;
         this.email = email;
         this.role = role;
         this.firstName = firstName;
         this.lastName = lastName;
+        this.profilePictureUrl = profilePictureUrl;
     }
 
     // Getters y Setters
@@ -98,5 +109,13 @@ public class JwtResponseDTO {
 
     public void setLastName(String lastName) {
         this.lastName = lastName;
+    }
+
+    public String getProfilePictureUrl() {
+        return profilePictureUrl;
+    }
+
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
     }
 }

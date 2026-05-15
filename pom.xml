@@ -99,6 +99,67 @@
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>2.8.3</version>
         </dependency>
+        <!--
+            jackson-databind-nullable: habilita JsonNullable<T> para distinguir
+            "campo ausente" (no presente en el JSON) de "campo presente con
+            valor null o vacio". Imprescindible para implementar PATCH con
+            semantica de actualizacion parcial sin caer en el bug de borrar
+            campos opcionales al omitirlos en el payload.
+        -->
+        <dependency>
+            <groupId>org.openapitools</groupId>
+            <artifactId>jackson-databind-nullable</artifactId>
+            <version>0.2.6</version>
+        </dependency>
+        <!--
+            AWS SDK v2 - cliente S3. Compatible con cualquier object storage
+            S3-compliant: AWS S3, Cloudflare R2, MinIO, Backblaze B2, etc.
+            El endpoint, region y credenciales se configuran por entorno; no
+            hay acoplamiento al proveedor concreto en el codigo.
+        -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.31.6</version>
+            <exclusions>
+                <!-- El SDK trae apache-client por defecto; usamos url-connection
+                     que es mas liviano y suficiente para uploads pequenios. -->
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>2.31.6</version>
+        </dependency>
+        <!--
+            Thumbnailator: libreria pequenia (~30 KB) para resize/crop de
+            imagenes con API fluida. Mas legible y robusta que armar el
+            resize a mano con BufferedImage + Graphics2D.
+        -->
+        <dependency>
+            <groupId>net.coobird</groupId>
+            <artifactId>thumbnailator</artifactId>
+            <version>0.4.20</version>
+        </dependency>
+        <!--
+            Bucket4j: rate limiting basado en token-bucket. Backend en memoria
+            (ConcurrentHashMap) ya que la app corre single-instance en VPS.
+            Si en el futuro se escala horizontalmente, sustituir con
+            bucket4j-redis sin tocar la capa de aplicacion.
+        -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j-core</artifactId>
+            <version>8.10.1</version>
+        </dependency>
     </dependencies>
 
     <build>

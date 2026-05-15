@@ -2,7 +2,7 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import site.utnpf.odontolink.infrastructure.config.validation.StrongPassword;
 
 /**
  * DTO de entrada para que el usuario autenticado cambie su propia contraseña
@@ -26,11 +26,11 @@ public class ChangeMyPasswordRequestDTO {
     @NotBlank(message = "La contraseña actual es obligatoria")
     private String currentPassword;
 
-    @Schema(description = "Nueva contraseña a establecer (mínimo 6 caracteres)",
-            example = "MiNuevaPass456!",
+    @Schema(description = "Nueva contraseña a establecer (mínimo 8 caracteres; no puede ser una contraseña común)",
+            example = "MiNuevaClave2026",
             requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "La nueva contraseña es obligatoria")
-    @Size(min = 6, message = "La nueva contraseña debe tener al menos 6 caracteres")
+    @StrongPassword
     private String newPassword;
 
     public ChangeMyPasswordRequestDTO() {

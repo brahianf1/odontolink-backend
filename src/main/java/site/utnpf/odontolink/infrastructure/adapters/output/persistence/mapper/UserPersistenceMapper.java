@@ -31,6 +31,7 @@ public class UserPersistenceMapper {
         user.setAddress(entity.getAddress());
         user.setProfilePictureUrl(entity.getProfilePictureUrl());
         user.setCreatedAt(entity.getCreatedAt());
+        user.setPasswordChangedAt(entity.getPasswordChangedAt());
 
         return user;
     }
@@ -57,6 +58,7 @@ public class UserPersistenceMapper {
         entity.setAddress(user.getAddress());
         entity.setProfilePictureUrl(user.getProfilePictureUrl());
         entity.setCreatedAt(user.getCreatedAt());
+        entity.setPasswordChangedAt(user.getPasswordChangedAt());
 
         return entity;
     }

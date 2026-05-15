@@ -2,6 +2,7 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
+import site.utnpf.odontolink.infrastructure.config.validation.StrongPassword;
 
 import java.time.LocalDate;
 
@@ -18,9 +19,10 @@ public class RegisterPatientRequestDTO {
     @Size(max = 100, message = "El email no puede superar los 100 caracteres")
     private String email;
 
-    @Schema(description = "Contraseña para la cuenta (mínimo 6 caracteres)", example = "miPassword123", required = true)
+    @Schema(description = "Contraseña para la cuenta (mínimo 8 caracteres; no puede ser una contraseña común)",
+            example = "MiClaveSegura2026", required = true)
     @NotBlank(message = "La contraseña es obligatoria")
-    @Size(min = 6, max = 100, message = "La contraseña debe tener entre 6 y 100 caracteres")
+    @StrongPassword
     private String password;
 
     @Schema(description = "Nombre del paciente", example = "Juan", required = true)

@@ -14,6 +14,7 @@ import site.utnpf.odontolink.domain.model.Supervisor;
 import site.utnpf.odontolink.domain.model.User;
 import site.utnpf.odontolink.domain.repository.UserRepository;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -127,6 +128,14 @@ public class AdminUserManagementService implements IAdminUserManagementUseCase {
             // que entiende el GlobalExceptionHandler para producir 422.
             throw new InvalidBusinessRuleException(ex.getMessage());
         }
+        // Sin este bump, un usuario "desactivado" seguiria operando hasta que
+        // expire su JWT (24h por default). Invalidar sus sesiones activas en
+        // el acto cierra la ventana de abuso post-desactivacion. El filtro
+        // JWT del CustomUserDetailsService tambien rechazaria al user inactivo
+        // por isActive=false, pero el bump es defensa en profundidad y, sobre
+        // todo, evita que tokens en cache (proxies, mobile offline) sigan
+        // siendo aceptados por ventanas cortas.
+        user.invalidateActiveSessions(Instant.now());
         return userRepository.save(user);
     }
 

@@ -11,6 +11,7 @@ import site.utnpf.odontolink.domain.model.PasswordResetToken;
 import site.utnpf.odontolink.domain.model.User;
 import site.utnpf.odontolink.domain.repository.PasswordResetTokenRepository;
 import site.utnpf.odontolink.domain.repository.UserRepository;
+import site.utnpf.odontolink.infrastructure.config.ratelimit.RateLimitRegistry;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -55,6 +56,7 @@ public class PasswordResetService implements IPasswordResetUseCase {
     private final PasswordResetTokenRepository tokenRepository;
     private final IEmailSenderPort emailSender;
     private final PasswordEncoder passwordEncoder;
+    private final RateLimitRegistry rateLimitRegistry;
     private final SecureRandom secureRandom;
     private final long tokenTtlMinutes;
 
@@ -62,11 +64,13 @@ public class PasswordResetService implements IPasswordResetUseCase {
                                 PasswordResetTokenRepository tokenRepository,
                                 IEmailSenderPort emailSender,
                                 PasswordEncoder passwordEncoder,
+                                RateLimitRegistry rateLimitRegistry,
                                 long tokenTtlMinutes) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
         this.emailSender = emailSender;
         this.passwordEncoder = passwordEncoder;
+        this.rateLimitRegistry = rateLimitRegistry;
         this.tokenTtlMinutes = tokenTtlMinutes;
         // SecureRandom se mantiene como dependencia interna del servicio porque
         // su construcción es costosa y la clase es thread-safe; reutilizarla
@@ -86,6 +90,19 @@ public class PasswordResetService implements IPasswordResetUseCase {
         }
 
         User user = userOpt.get();
+
+        // Rate limit por email: ademas del rate limit por IP del filtro,
+        // protegemos contra un atacante distribuido (botnet) que pruebe
+        // muchos emails desde distintas IPs intentando spamear la bandeja
+        // del usuario. Si excede, NO enviamos mail pero respondemos como si
+        // todo hubiese salido bien (anti-enumeracion).
+        String emailKey = user.getEmail().toLowerCase();
+        if (!rateLimitRegistry.tryConsume(RateLimitRegistry.FORGOT_PASSWORD_EMAIL, emailKey)) {
+            log.debug("Rate limit por email excedido en forgot-password; salida silenciada para userId={}",
+                    user.getId());
+            return;
+        }
+
         Instant now = Instant.now();
 
         // Política de unicidad temporal: cada nueva solicitud invalida los
@@ -127,7 +144,9 @@ public class PasswordResetService implements IPasswordResetUseCase {
         // Actualización atómica: marcar el token como consumido y persistir el
         // nuevo hash de contraseña. La anotación @Transactional garantiza que
         // ambos cambios se confirmen juntos o se reviertan ante un fallo.
-        user.changePassword(user.getPassword(), passwordEncoder.encode(newPassword));
+        // El bump de passwordChangedAt dentro de changePassword invalida los
+        // JWT emitidos antes del reset, alineado con OWASP A07.
+        user.changePassword(passwordEncoder.encode(newPassword), now);
         userRepository.save(user);
 
         token.markAsUsed(now);

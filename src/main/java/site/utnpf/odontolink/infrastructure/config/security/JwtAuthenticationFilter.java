@@ -15,10 +15,17 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 /**
  * Filtro JWT que intercepta cada request para validar el token.
  * Se ejecuta una vez por cada petición HTTP.
+ *
+ * <p>Capa extra de invalidación (Fase 2): compara el claim {@code iat} del
+ * token contra {@link OdontolinkUserDetails#getPasswordChangedAt()}. Si el
+ * token fue emitido antes de la última rotación de credenciales o de un
+ * logout-all explícito, se descarta sin autenticar la request.
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -67,6 +74,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String email = jwtProvider.getEmailFromToken(jwt);
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+
+        if (!isJwtFreshAfterCredentialChange(jwt, userDetails)) {
+            // Token emitido antes del ultimo cambio de credencial / logout-all
+            // / desactivacion administrativa. No autenticamos; la cadena seguira
+            // pero el endpoint protegido devolvera 401 al no haber Authentication.
+            if (logger.isDebugEnabled()) {
+                logger.debug("JWT descartado: emitido antes del passwordChangedAt del usuario "
+                        + userDetails.getUsername());
+            }
+            return;
+        }
+
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
                         userDetails,
@@ -76,6 +95,36 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    /**
+     * Devuelve {@code true} cuando el token fue emitido en o despues del
+     * ultimo evento que invalida sesiones del usuario. Si el usuario no es
+     * {@link OdontolinkUserDetails} o el campo es {@code null} (cuentas
+     * pre-migracion), aceptamos sin comparar.
+     *
+     * <p>Truncamos a segundos antes de comparar porque el claim {@code iat}
+     * tiene precision de segundos (estandar JWT) y {@code Instant} en Java
+     * tiene precision de nanos: comparar directamente produciria falsos
+     * positivos cuando el bump y el {@code iat} caen dentro del mismo segundo.
+     */
+    private boolean isJwtFreshAfterCredentialChange(String jwt, UserDetails userDetails) {
+        if (!(userDetails instanceof OdontolinkUserDetails details)) {
+            return true;
+        }
+        Instant passwordChangedAt = details.getPasswordChangedAt();
+        if (passwordChangedAt == null) {
+            return true;
+        }
+        Instant issuedAt = jwtProvider.getIssuedAtFromToken(jwt);
+        if (issuedAt == null) {
+            // Un JWT sin iat es atipico pero deja la puerta abierta a tokens
+            // legacy si los hubiera; preferimos rechazar.
+            return false;
+        }
+        Instant issuedAtTruncated = issuedAt.truncatedTo(ChronoUnit.SECONDS);
+        Instant changedAtTruncated = passwordChangedAt.truncatedTo(ChronoUnit.SECONDS);
+        return !issuedAtTruncated.isBefore(changedAtTruncated);
     }
 
     /**

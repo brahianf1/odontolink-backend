@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.application.port.in;
 
+import org.openapitools.jackson.nullable.JsonNullable;
+
 import java.time.LocalDate;
 import java.util.Objects;
 
@@ -7,43 +9,50 @@ import java.util.Objects;
  * Comando inmutable que transporta los datos de actualización del perfil
  * desde la capa de adaptadores hacia el caso de uso (RF06).
  *
- * Se modela como tipo dedicado, en vez de pasar siete parámetros sueltos al
- * método de la interfaz, por dos razones:
+ * <p>Semántica PATCH:
  * <ul>
- *   <li>Legibilidad y evolución: agregar un nuevo campo del perfil no
- *       cambia la firma del puerto, sólo el contenido del comando.</li>
- *   <li>Inmutabilidad: el caso de uso recibe un snapshot estable de la
- *       intención del usuario y no puede mutarla durante la transacción.</li>
+ *   <li>Los campos requeridos del modelo ({@code email}, {@code firstName},
+ *       {@code lastName}) viajan como tipos planos: el adaptador REST
+ *       garantiza que estén presentes via {@code @NotBlank}.</li>
+ *   <li>Los opcionales viajan envueltos en {@link JsonNullable} para que el
+ *       caso de uso pueda distinguir tres estados:
+ *       <ul>
+ *         <li>{@code JsonNullable.undefined()} → no tocar.</li>
+ *         <li>{@code JsonNullable.of(null)} o {@code of("")} → limpiar.</li>
+ *         <li>{@code JsonNullable.of(value)} → sobreescribir.</li>
+ *       </ul>
+ *   </li>
  * </ul>
  *
- * Las validaciones sintácticas (formato de email, longitud, presencia)
- * viven en el DTO REST con Bean Validation. Aquí sólo viajan los valores
- * ya saneados.
+ * <p>El uso de {@code JsonNullable} en la capa de aplicación es un trade-off
+ * deliberado: la librería es un wrapper utility (no framework runtime) y
+ * preserva exactamente la semántica que necesitamos. Crear un wrapper propio
+ * sería duplicar trabajo sin ganancia sustantiva.
  */
 public final class UpdateProfileCommand {
 
     private final String email;
     private final String firstName;
     private final String lastName;
-    private final String phone;
-    private final LocalDate birthDate;
-    private final String address;
-    private final String profilePictureUrl;
+    private final JsonNullable<String> phone;
+    private final JsonNullable<LocalDate> birthDate;
+    private final JsonNullable<String> address;
+    private final JsonNullable<String> profilePictureUrl;
 
     public UpdateProfileCommand(String email,
                                 String firstName,
                                 String lastName,
-                                String phone,
-                                LocalDate birthDate,
-                                String address,
-                                String profilePictureUrl) {
+                                JsonNullable<String> phone,
+                                JsonNullable<LocalDate> birthDate,
+                                JsonNullable<String> address,
+                                JsonNullable<String> profilePictureUrl) {
         this.email = email;
         this.firstName = firstName;
         this.lastName = lastName;
-        this.phone = phone;
-        this.birthDate = birthDate;
-        this.address = address;
-        this.profilePictureUrl = profilePictureUrl;
+        this.phone = phone != null ? phone : JsonNullable.undefined();
+        this.birthDate = birthDate != null ? birthDate : JsonNullable.undefined();
+        this.address = address != null ? address : JsonNullable.undefined();
+        this.profilePictureUrl = profilePictureUrl != null ? profilePictureUrl : JsonNullable.undefined();
     }
 
     public String getEmail() {
@@ -58,19 +67,19 @@ public final class UpdateProfileCommand {
         return lastName;
     }
 
-    public String getPhone() {
+    public JsonNullable<String> getPhone() {
         return phone;
     }
 
-    public LocalDate getBirthDate() {
+    public JsonNullable<LocalDate> getBirthDate() {
         return birthDate;
     }
 
-    public String getAddress() {
+    public JsonNullable<String> getAddress() {
         return address;
     }
 
-    public String getProfilePictureUrl() {
+    public JsonNullable<String> getProfilePictureUrl() {
         return profilePictureUrl;
     }
 
