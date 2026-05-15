@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
 import site.utnpf.odontolink.domain.model.OfferedTreatmentSearchCriteria;
+import site.utnpf.odontolink.domain.model.OfferedTreatmentStatus;
 import site.utnpf.odontolink.domain.model.PageQuery;
 import site.utnpf.odontolink.domain.model.PageResult;
 import site.utnpf.odontolink.domain.model.Practitioner;
@@ -24,6 +25,7 @@ import site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper.T
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.specification.OfferedTreatmentSpecifications;
 
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -100,10 +102,14 @@ public class OfferedTreatmentPersistenceAdapter implements OfferedTreatmentRepos
     public boolean existsByPractitionerAndTreatment(Practitioner practitioner, Treatment treatment) {
         PractitionerEntity practitionerEntity = PractitionerPersistenceMapper.toEntity(practitioner);
         TreatmentEntity treatmentEntity = TreatmentPersistenceMapper.toEntity(treatment);
-        // Sólo mira ofertas activas — las bajas lógicas no compiten por la
-        // unicidad del catálogo personal vigente (ver contrato del puerto).
+        // Sólo cuentan los estados que ocupan el "slot" del par practitioner+treatment
+        // (ACTIVE y PAUSED). INACTIVE es histórico y no compite por la unicidad.
         return jpaOfferedTreatmentRepository
-                .existsByPractitionerAndTreatmentAndActiveTrue(practitionerEntity, treatmentEntity);
+                .existsByPractitionerAndTreatmentAndStatusIn(
+                        practitionerEntity,
+                        treatmentEntity,
+                        EnumSet.of(OfferedTreatmentStatus.ACTIVE, OfferedTreatmentStatus.PAUSED)
+                );
     }
 
     @Override
@@ -138,15 +144,17 @@ public class OfferedTreatmentPersistenceAdapter implements OfferedTreatmentRepos
 
     @Override
     public List<OfferedTreatment> findAll() {
-        // Catálogo público sin filtros: nunca expone bajas lógicas.
-        return jpaOfferedTreatmentRepository.findByActiveTrue().stream()
+        // Catálogo público sin filtros: sólo expone ofertas bookables (ACTIVE).
+        // PAUSED e INACTIVE quedan ocultas.
+        return jpaOfferedTreatmentRepository.findByStatus(OfferedTreatmentStatus.ACTIVE).stream()
                 .map(OfferedTreatmentPersistenceMapper::toDomain)
                 .collect(Collectors.toList());
     }
 
     @Override
     public List<OfferedTreatment> findByTreatmentId(Long treatmentId) {
-        return jpaOfferedTreatmentRepository.findByTreatmentIdAndActiveTrue(treatmentId).stream()
+        return jpaOfferedTreatmentRepository
+                .findByTreatmentIdAndStatus(treatmentId, OfferedTreatmentStatus.ACTIVE).stream()
                 .map(OfferedTreatmentPersistenceMapper::toDomain)
                 .collect(Collectors.toList());
     }

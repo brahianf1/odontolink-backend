@@ -7,6 +7,7 @@ import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 import site.utnpf.odontolink.domain.model.OfferedTreatmentSearchCriteria;
+import site.utnpf.odontolink.domain.model.OfferedTreatmentStatus;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AvailabilitySlotEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.OfferedTreatmentEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.PractitionerEntity;
@@ -37,10 +38,11 @@ public final class OfferedTreatmentSpecifications {
     }
 
     /**
-     * Filtro {@code active = true}. Garantía base del catálogo público.
+     * Filtro {@code status = ACTIVE}. Garantía base del catálogo público:
+     * sólo las ofertas bookables son visibles. PAUSED e INACTIVE quedan ocultas.
      */
     public static Specification<OfferedTreatmentEntity> isActive() {
-        return (root, query, cb) -> cb.isTrue(root.get("active"));
+        return (root, query, cb) -> cb.equal(root.get("status"), OfferedTreatmentStatus.ACTIVE);
     }
 
     /**

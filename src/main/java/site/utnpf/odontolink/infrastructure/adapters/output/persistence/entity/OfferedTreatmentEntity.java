@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity;
 
 import jakarta.persistence.*;
+import site.utnpf.odontolink.domain.model.OfferedTreatmentStatus;
 
 import java.time.LocalDate;
 import java.util.HashSet;
@@ -67,21 +68,28 @@ public class OfferedTreatmentEntity {
     private Integer maxCompletedAttentions;
 
     /**
-     * Flag de Baja Lógica (RF16).
+     * Estado del ciclo de vida de la oferta. Reemplaza al booleano {@code active}
+     * previo. Persistido como cadena para que el dump de la BD sea autoexplicativo
+     * y resistente a renumerados del enum (un {@code @Enumerated(EnumType.ORDINAL)}
+     * almacenaría el índice, lo cual es frágil ante reordenamientos).
      *
      * - {@code columnDefinition} fija el DEFAULT a nivel de BD para que el ALTER
-     *   TABLE que aplica Hibernate en {@code ddl-auto=update} no falle al
-     *   poblar las filas preexistentes (que no tenían la columna).
-     * - En producción ({@code ddl-auto=validate}) se requiere ejecutar
-     *   manualmente la migración SQL antes del primer deploy de esta versión:
+     *   TABLE que aplica Hibernate en {@code ddl-auto=update} no falle al poblar
+     *   las filas preexistentes que no tenían la columna.
+     * - En producción ({@code ddl-auto=validate}) se requiere ejecutar manualmente
+     *   la migración SQL antes del primer deploy de esta versión:
      *     ALTER TABLE offered_treatments
-     *       ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE;
+     *       ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE';
+     *     UPDATE offered_treatments SET status = 'INACTIVE' WHERE active = FALSE;
+     *     ALTER TABLE offered_treatments DROP COLUMN active;
      *
-     * Se inicializa a {@code true} en el campo para los flujos en memoria
-     * (constructor por defecto, tests) donde la BD no interviene.
+     * Se inicializa a {@code ACTIVE} en el campo para los flujos en memoria
+     * (constructor por defecto) donde la BD no interviene.
      */
-    @Column(name = "active", nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT TRUE")
-    private boolean active = true;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20,
+            columnDefinition = "VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'")
+    private OfferedTreatmentStatus status = OfferedTreatmentStatus.ACTIVE;
 
     // Constructores
     public OfferedTreatmentEntity() {
@@ -160,12 +168,12 @@ public class OfferedTreatmentEntity {
         this.maxCompletedAttentions = maxCompletedAttentions;
     }
 
-    public boolean isActive() {
-        return active;
+    public OfferedTreatmentStatus getStatus() {
+        return status;
     }
 
-    public void setActive(boolean active) {
-        this.active = active;
+    public void setStatus(OfferedTreatmentStatus status) {
+        this.status = status;
     }
 
     // Métodos de utilidad para mantener la consistencia bidireccional

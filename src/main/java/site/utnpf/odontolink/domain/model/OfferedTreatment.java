@@ -61,23 +61,18 @@ public class OfferedTreatment {
     private Integer maxCompletedAttentions;
 
     /**
-     * Bandera de Baja Lógica (Soft Delete) — RF16.
+     * Estado del ciclo de vida de la oferta. Reemplaza al booleano {@code active}
+     * previo para soportar la pausa voluntaria del practicante (PAUSED) además
+     * de la baja lógica de RF16 (INACTIVE). Ver {@link OfferedTreatmentStatus}.
      *
-     * Cuando la oferta tiene compromisos vivos (turnos SCHEDULED futuros
-     * o Atenciones IN_PROGRESS del mismo par practitioner/treatment) no
-     * se puede borrar físicamente sin romper la integridad referencial
-     * del historial clínico. En ese caso esta bandera pasa a false:
-     * - La oferta desaparece del catálogo público.
-     * - Los turnos y la cadena de Atenciones permanecen consultables.
-     *
-     * Por defecto las ofertas se crean activas (true).
+     * Por defecto las ofertas se crean en estado {@link OfferedTreatmentStatus#ACTIVE}.
      */
-    private boolean active = true;
+    private OfferedTreatmentStatus status = OfferedTreatmentStatus.ACTIVE;
 
     // Constructores
     public OfferedTreatment() {
         this.availabilitySlots = new HashSet<>();
-        this.active = true;
+        this.status = OfferedTreatmentStatus.ACTIVE;
     }
 
     public OfferedTreatment(Practitioner practitioner, Treatment treatment, String requirements) {
@@ -130,9 +125,9 @@ public class OfferedTreatment {
         this.offerStartDate = offerStartDate;
         this.offerEndDate = offerEndDate;
         this.maxCompletedAttentions = maxCompletedAttentions;
-        // Toda oferta nace activa: la baja lógica sólo se aplica como
-        // consecuencia explícita de RF16, nunca por defecto al construir.
-        this.active = true;
+        // Toda oferta nace ACTIVE: PAUSED e INACTIVE sólo se alcanzan por
+        // transiciones explícitas (pause/deactivate), nunca por defecto.
+        this.status = OfferedTreatmentStatus.ACTIVE;
     }
 
     /**
@@ -260,29 +255,76 @@ public class OfferedTreatment {
         this.maxCompletedAttentions = maxCompletedAttentions;
     }
 
-    public boolean isActive() {
-        return active;
+    public OfferedTreatmentStatus getStatus() {
+        return status;
     }
 
-    public void setActive(boolean active) {
-        this.active = active;
+    public void setStatus(OfferedTreatmentStatus status) {
+        this.status = status;
     }
 
     /**
-     * Aplica la Baja Lógica de la oferta (RF16).
-     * Idempotente: si ya está desactivada no produce efectos secundarios.
+     * Conveniencia: verdadero solo cuando la oferta es bookable.
+     * Equivalente semántico al {@code isActive()} previo, ahora delegado al enum.
+     */
+    public boolean isActive() {
+        return status != null && status.isBookable();
+    }
+
+    /**
+     * Aplica la Baja Lógica de la oferta (RF16): transición a INACTIVE.
+     * Idempotente: si ya está INACTIVE no produce efectos secundarios.
      */
     public void deactivate() {
-        this.active = false;
+        this.status = OfferedTreatmentStatus.INACTIVE;
     }
 
     /**
-     * Reactiva la oferta para que vuelva al catálogo público.
-     * Permite revertir manualmente una Baja Lógica si las restricciones
-     * de integridad que la justificaron desaparecen.
+     * Reactiva una oferta dada de baja lógicamente (INACTIVE → ACTIVE).
+     * Sólo aplica desde INACTIVE: para volver de PAUSED a ACTIVE usar
+     * {@link #resume()}.
+     *
+     * @throws InvalidBusinessRuleException si la oferta no está INACTIVE
      */
     public void activate() {
-        this.active = true;
+        if (status != OfferedTreatmentStatus.INACTIVE) {
+            throw new InvalidBusinessRuleException(
+                    "Solo se puede reactivar una oferta dada de baja. " +
+                    "Estado actual: " + status + "."
+            );
+        }
+        this.status = OfferedTreatmentStatus.ACTIVE;
+    }
+
+    /**
+     * Pausa voluntaria temporal: ACTIVE → PAUSED.
+     * La oferta deja de estar visible en el catálogo público y deja de
+     * aceptar nuevas reservas, pero los turnos y atenciones existentes
+     * siguen su curso. El practicante puede reanudarla con {@link #resume()}.
+     *
+     * @throws InvalidBusinessRuleException si la oferta no está ACTIVE
+     */
+    public void pause() {
+        if (status != OfferedTreatmentStatus.ACTIVE) {
+            throw new InvalidBusinessRuleException(
+                    "Solo se puede pausar una oferta activa. Estado actual: " + status + "."
+            );
+        }
+        this.status = OfferedTreatmentStatus.PAUSED;
+    }
+
+    /**
+     * Reanuda una oferta pausada: PAUSED → ACTIVE.
+     *
+     * @throws InvalidBusinessRuleException si la oferta no está PAUSED
+     */
+    public void resume() {
+        if (status != OfferedTreatmentStatus.PAUSED) {
+            throw new InvalidBusinessRuleException(
+                    "Solo se puede reanudar una oferta pausada. Estado actual: " + status + "."
+            );
+        }
+        this.status = OfferedTreatmentStatus.ACTIVE;
     }
 
     // Métodos de utilidad

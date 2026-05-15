@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import site.utnpf.odontolink.domain.model.OfferedTreatmentStatus;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.OfferedTreatmentEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.PractitionerEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.TreatmentEntity;
@@ -37,26 +38,29 @@ public interface JpaOfferedTreatmentRepository
     List<OfferedTreatmentEntity> findByPractitionerId(Long practitionerId);
 
     /**
-     * Obtiene las ofertas ACTIVAS filtradas por tipo de tratamiento.
-     * Endpoint legacy: el catálogo público nunca debe ver bajas lógicas.
+     * Obtiene las ofertas BOOKABLES (status=ACTIVE) filtradas por tipo de tratamiento.
+     * Endpoint legacy: el catálogo público nunca debe ver pausadas ni bajas lógicas.
      */
-    List<OfferedTreatmentEntity> findByTreatmentIdAndActiveTrue(Long treatmentId);
+    List<OfferedTreatmentEntity> findByTreatmentIdAndStatus(Long treatmentId, OfferedTreatmentStatus status);
 
     /**
-     * Obtiene todas las ofertas ACTIVAS (catálogo público sin filtros).
+     * Obtiene todas las ofertas en un estado dado. Para el catálogo público
+     * usar {@link OfferedTreatmentStatus#ACTIVE}.
      */
-    List<OfferedTreatmentEntity> findByActiveTrue();
+    List<OfferedTreatmentEntity> findByStatus(OfferedTreatmentStatus status);
 
     /**
-     * Verifica unicidad sobre el catálogo VIGENTE del practicante.
+     * Verifica unicidad sobre el catálogo del practicante para los estados
+     * que ocupan el "slot" del par practitioner+treatment (ACTIVE y PAUSED).
      *
-     * Sólo cuentan las ofertas activas: si una se dio de baja lógica por
-     * RF16 queda como histórico y no debe impedir agregar una nueva con
-     * el mismo treatment.
+     * INACTIVE no compite por la unicidad: la baja lógica deja la oferta
+     * como histórico y el practicante puede crear una nueva con el mismo
+     * treatment.
      */
-    boolean existsByPractitionerAndTreatmentAndActiveTrue(
+    boolean existsByPractitionerAndTreatmentAndStatusIn(
             PractitionerEntity practitioner,
-            TreatmentEntity treatment
+            TreatmentEntity treatment,
+            java.util.Collection<OfferedTreatmentStatus> statuses
     );
 
     /**

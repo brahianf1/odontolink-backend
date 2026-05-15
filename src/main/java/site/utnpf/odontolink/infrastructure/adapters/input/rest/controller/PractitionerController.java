@@ -128,7 +128,7 @@ public class PractitionerController {
                                               "currentActiveAttentions": 0,
                                               "currentCancelledAttentions": 0,
                                               "availabilityBlocked": false,
-                                              "active": true
+                                              "status": "ACTIVE"
                                             }
                                             """
                             )

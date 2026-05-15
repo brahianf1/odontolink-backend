@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import site.utnpf.odontolink.domain.model.OfferedTreatmentStatus;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.AvailabilitySlotDTO;
 
 import java.time.LocalDate;
@@ -54,8 +55,14 @@ public class OfferedTreatmentResponseDTO {
     @Schema(description = "Indica si la oferta está bloqueada por alcanzar el cupo máximo (Completed + Active >= Max)", example = "false")
     private boolean isAvailabilityBlocked;
 
-    @Schema(description = "Indica si la oferta está activa en el catálogo. Las ofertas con baja lógica (RF16) no aparecen en el catálogo público.", example = "true")
-    private boolean active;
+    @Schema(
+            description = "Estado de la oferta en el ciclo de vida del catálogo personal. " +
+                    "ACTIVE: vigente y bookable. " +
+                    "PAUSED: pausada voluntariamente por el practicante (oculta del catálogo público). " +
+                    "INACTIVE: dada de baja por RF16 (oculta del catálogo público).",
+            example = "ACTIVE"
+    )
+    private OfferedTreatmentStatus status;
 
     // Constructores
     public OfferedTreatmentResponseDTO() {
@@ -191,11 +198,11 @@ public class OfferedTreatmentResponseDTO {
         isAvailabilityBlocked = availabilityBlocked;
     }
 
-    public boolean isActive() {
-        return active;
+    public OfferedTreatmentStatus getStatus() {
+        return status;
     }
 
-    public void setActive(boolean active) {
-        this.active = active;
+    public void setStatus(OfferedTreatmentStatus status) {
+        this.status = status;
     }
 }
