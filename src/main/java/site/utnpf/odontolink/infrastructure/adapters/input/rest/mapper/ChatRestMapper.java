@@ -1,10 +1,14 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper;
 
+import site.utnpf.odontolink.application.port.in.dto.ChatPollResult;
 import site.utnpf.odontolink.application.port.in.dto.ChatSessionView;
 import site.utnpf.odontolink.application.port.in.dto.PagedMessages;
+import site.utnpf.odontolink.application.port.in.dto.ReadReceipt;
 import site.utnpf.odontolink.domain.model.ChatMessage;
 import site.utnpf.odontolink.domain.model.ChatSession;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ChatMessageResponseDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ChatPollResponseDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ChatReadReceiptDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ChatSessionResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.PagedChatMessagesResponseDTO;
 
@@ -120,8 +124,30 @@ public class ChatRestMapper {
                 page.getSize(),
                 page.getTotalElements(),
                 page.getTotalPages(),
-                page.isLast()
+                page.isLast(),
+                page.hasNext(),
+                page.hasPrevious()
         );
+    }
+
+    public static ChatPollResponseDTO toChatPollResponseDTO(ChatPollResult result) {
+        if (result == null) {
+            return null;
+        }
+        List<ChatMessageResponseDTO> messages = result.getMessages().stream()
+                .map(ChatRestMapper::toChatMessageResponseDTO)
+                .collect(Collectors.toList());
+        List<ChatReadReceiptDTO> receipts = result.getReadReceipts().stream()
+                .map(ChatRestMapper::toReadReceiptDTO)
+                .collect(Collectors.toList());
+        return new ChatPollResponseDTO(messages, receipts, result.getServerTime());
+    }
+
+    public static ChatReadReceiptDTO toReadReceiptDTO(ReadReceipt rr) {
+        if (rr == null) {
+            return null;
+        }
+        return new ChatReadReceiptDTO(rr.getMessageId(), rr.getReadAt());
     }
 
     private static String truncate(String text, int max) {

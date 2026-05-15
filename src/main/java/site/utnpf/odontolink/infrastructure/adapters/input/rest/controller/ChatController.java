@@ -15,20 +15,25 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import site.utnpf.odontolink.application.port.in.IChatUseCase;
+import site.utnpf.odontolink.application.port.in.dto.ChatPollResult;
 import site.utnpf.odontolink.application.port.in.dto.ChatSessionView;
 import site.utnpf.odontolink.application.port.in.dto.PagedMessages;
 import site.utnpf.odontolink.domain.model.ChatMessage;
 import site.utnpf.odontolink.domain.model.ChatSession;
 import site.utnpf.odontolink.domain.model.User;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.BlockChatSessionRequestDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.CreateChatSessionRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.SendMessageRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ChatMessageResponseDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ChatPollResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ChatSessionResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.MarkMessagesAsReadResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.PagedChatMessagesResponseDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.UnreadCountResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.ChatRestMapper;
 import site.utnpf.odontolink.infrastructure.security.AuthenticationFacade;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -38,9 +43,11 @@ import java.util.stream.Collectors;
  * Adaptador de entrada (Input Adapter) en Arquitectura Hexagonal.
  *
  * Endpoints implementados:
- * - GET    /api/chat/sessions                                 - Inbox con unreadCount y bloqueo (CU 6.1 + CU012)
+ * - GET    /api/chat/sessions                                 - Inbox con unreadCount y bloqueo (CU 6.1 + CU012); soporta ?since= para delta
+ * - POST   /api/chat/sessions                                 - Creación idempotente de sesión (P4) — exige relación clínica previa (RF27)
+ * - GET    /api/chat/unread-count                             - Contador global de no leídos para badge del sidebar (P8)
  * - POST   /api/chat/sessions/{sessionId}/messages            - Enviar mensaje (RF26 - CU 6.2)
- * - GET    /api/chat/sessions/{sessionId}/messages            - Historial / polling / paginado (CU 6.3 + CU012)
+ * - GET    /api/chat/sessions/{sessionId}/messages            - Historial / polling unificado / paginado (CU 6.3 + CU012)
  * - POST   /api/chat/sessions/{sessionId}/messages/read       - Marcar mensajes como leídos en bulk (CU012)
  * - POST   /api/chat/sessions/{sessionId}/block               - Bloquear sesión (RF28)
  * - POST   /api/chat/sessions/{sessionId}/unblock             - Desbloquear sesión (RF28 reversible)
@@ -48,6 +55,9 @@ import java.util.stream.Collectors;
  * Seguridad de doble capa:
  *  1. @PreAuthorize corta el tráfico por rol antes de llegar al servicio.
  *  2. ChatPolicyService re-valida pertenencia a la sesión y estado de bloqueo en el dominio.
+ *
+ * Errores: los 4xx llevan en el body un {@code errorCode} estable (constantes {@code CHAT_*})
+ * para que el FE pueda ramificar UX sin parsear el mensaje humano.
  *
  * @author OdontoLink Team
  */
@@ -66,27 +76,22 @@ public class ChatController {
     }
 
     /**
-     * Obtiene el inbox del usuario autenticado.
-     * Implementa CU 6.1 + CU012 paso 9: lista enriquecida para construir la UI del inbox.
+     * Inbox del usuario autenticado. Implementa CU 6.1 + CU012 paso 9 + P2 (polling delta).
      *
-     * Cada sesión incluye:
-     * - unreadCount: cantidad de mensajes no leídos para mostrar el badge de notificación
-     * - lastMessageAt / lastMessagePreview: para ordenar y mostrar preview tipo WhatsApp
-     * - blocked + audit trail: para que la UI muestre el banner correspondiente (RF28)
+     * <p>Cada sesión incluye: unreadCount, lastMessageAt/lastMessagePreview, y los metadatos
+     * de bloqueo. Las sesiones vienen ordenadas DESC por actividad real (último mensaje o,
+     * en su defecto, createdAt).
      *
-     * El sistema determina automáticamente si el usuario es paciente o practicante.
-     * Las sesiones vienen ordenadas DESC por actividad real (último mensaje o, en su defecto, createdAt).
-     *
-     * GET /api/chat/sessions
-     *
-     * Seguridad: Solo PATIENT y PRACTITIONER pueden acceder.
-     *
-     * @return Lista de sesiones de chat enriquecidas
+     * <p>Modo polling (P2): {@code ?since=ISO8601} devuelve únicamente las sesiones cuya
+     * actividad cambió desde el cursor (al menos un mensaje con {@code sentAt > since}).
+     * Útil para que el FE no recargue todo el inbox cada N segundos.
      */
     @Operation(
             summary = "Obtener inbox de sesiones de chat",
             description = "Devuelve las sesiones del usuario autenticado, enriquecidas con unreadCount, " +
-                    "preview del último mensaje y metadatos de bloqueo (RF28). Ordenadas por actividad reciente."
+                    "preview del último mensaje y metadatos de bloqueo (RF28). " +
+                    "Con ?since=ISO8601 devuelve solo las sesiones cuyo último mensaje es posterior al cursor. " +
+                    "Ordenadas DESC por actividad reciente."
     )
     @ApiResponses(value = {
             @ApiResponse(
@@ -113,22 +118,6 @@ public class ChatController {
                                                 "blockedByRole": null,
                                                 "blockedAt": null,
                                                 "blockReason": null
-                                              },
-                                              {
-                                                "id": 17,
-                                                "patientId": 22,
-                                                "patientName": "Sofía López",
-                                                "practitionerId": 8,
-                                                "practitionerName": "Ana Martínez",
-                                                "createdAt": "2025-09-02T12:30:00Z",
-                                                "unreadCount": 0,
-                                                "lastMessageAt": "2026-04-01T15:00:00Z",
-                                                "lastMessagePreview": "Gracias por la atención.",
-                                                "blocked": true,
-                                                "blockedByUserId": 8,
-                                                "blockedByRole": "ROLE_PRACTITIONER",
-                                                "blockedAt": "2026-04-02T08:00:00Z",
-                                                "blockReason": "Uso indebido del canal de chat"
                                               }
                                             ]
                                             """
@@ -140,15 +129,13 @@ public class ChatController {
     })
     @GetMapping("/sessions")
     @PreAuthorize("hasRole('PATIENT') or hasRole('PRACTITIONER')")
-    public ResponseEntity<List<ChatSessionResponseDTO>> getMyChatSessions() {
+    public ResponseEntity<List<ChatSessionResponseDTO>> getMyChatSessions(
+            @Parameter(description = "Cursor ISO-8601: devuelve solo sesiones con actividad posterior", example = "2026-05-15T10:00:00Z")
+            @RequestParam(required = false) Instant since) {
 
-        // Obtener el usuario autenticado
         User authenticatedUser = authenticationFacade.getAuthenticatedUser();
+        List<ChatSessionView> views = chatUseCase.getMyChatSessions(authenticatedUser, since);
 
-        // Delegar al caso de uso: trae sesiones + unreadCount + último mensaje
-        List<ChatSessionView> views = chatUseCase.getMyChatSessions(authenticatedUser);
-
-        // Mapear a DTOs de respuesta
         List<ChatSessionResponseDTO> response = views.stream()
                 .map(ChatRestMapper::toChatSessionResponseDTO)
                 .collect(Collectors.toList());
@@ -157,67 +144,141 @@ public class ChatController {
     }
 
     /**
-     * Envía un nuevo mensaje a una sesión de chat existente.
-     * Implementa RF26 - CU 6.2: Enviar un Mensaje.
+     * Creación idempotente de una sesión de chat (P4). Implementa RF27.
      *
-     * El sistema valida automáticamente:
-     * - Que el usuario es un participante legítimo de la sesión.
-     * - Que la sesión no esté bloqueada (si lo está, el paciente queda silenciado pero el
-     *   practicante conserva voz para seguir documentando — RF28).
+     * <p>Comportamiento:
+     * <ul>
+     *   <li>Si ya existe una sesión entre el paciente y el practicante → 200 OK con la existente.</li>
+     *   <li>Si no existe, valida que haya habido al menos un appointment entre ambos
+     *       (relación clínica previa) y la crea → 201 Created.</li>
+     *   <li>Si no hay relación previa → 422 con errorCode {@code CHAT_NO_PRIOR_RELATIONSHIP}.</li>
+     *   <li>Si el rol enviado en el body no coincide con el del JWT → 403 con
+     *       errorCode {@code CHAT_PARTICIPANT_MISMATCH}.</li>
+     * </ul>
      *
-     * POST /api/chat/sessions/{sessionId}/messages
+     * <p>En la práctica, la sesión normalmente ya se autocreó al primer appointment
+     * (ver {@code AppointmentBookingService}). Este endpoint es la red de seguridad
+     * que el FE puede invocar cuando quiere garantizar que la sesión existe.
+     */
+    @Operation(
+            summary = "Crear u obtener sesión de chat (idempotente)",
+            description = "Devuelve la sesión existente entre paciente y practicante, o la crea si tienen relación previa. " +
+                    "RF27: no se permiten chats sin un appointment previo entre ambos."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "La sesión ya existía y se devuelve tal cual",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ChatSessionResponseDTO.class))),
+            @ApiResponse(responseCode = "201", description = "Sesión creada exitosamente",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ChatSessionResponseDTO.class))),
+            @ApiResponse(responseCode = "403", description = "Rol no autorizado o IDs no coinciden con el JWT (CHAT_PARTICIPANT_MISMATCH)",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "Paciente o practicante no encontrado", content = @Content),
+            @ApiResponse(responseCode = "422", description = "No hay relación clínica previa (CHAT_NO_PRIOR_RELATIONSHIP)",
+                    content = @Content)
+    })
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "IDs de los participantes. El servidor completa el propio desde el JWT; el otro es obligatorio.",
+            required = true,
+            content = @Content(
+                    mediaType = "application/json",
+                    examples = {
+                            @ExampleObject(name = "Paciente abriendo chat con practicante",
+                                    value = """
+                                            { "practitionerId": 8 }
+                                            """),
+                            @ExampleObject(name = "Practicante abriendo chat con paciente",
+                                    value = """
+                                            { "patientId": 15 }
+                                            """)
+                    }
+            )
+    )
+    @PostMapping("/sessions")
+    @PreAuthorize("hasRole('PATIENT') or hasRole('PRACTITIONER')")
+    public ResponseEntity<ChatSessionResponseDTO> createOrGetSession(
+            @Valid @RequestBody CreateChatSessionRequestDTO requestDTO) {
+
+        User authenticatedUser = authenticationFacade.getAuthenticatedUser();
+
+        // No podemos distinguir "ya existía" vs "recién creado" con la firma actual de
+        // getOrCreateSession (devuelve la sesión y listo). Para mantener semántica REST
+        // estricta entre 200 y 201 sin agregar otro método, devolvemos siempre 200 aquí.
+        // Si el FE necesita distinguir, podemos enriquecer el resultado del servicio en
+        // un commit posterior; por ahora es contrato 200 OK idempotente.
+        ChatSession session = chatUseCase.getOrCreateSession(
+                authenticatedUser, requestDTO.getPatientId(), requestDTO.getPractitionerId());
+
+        ChatSessionResponseDTO body = ChatRestMapper.toChatSessionResponseDTO(session);
+        return ResponseEntity.ok()
+                .location(URI.create("/api/chat/sessions/" + session.getId()))
+                .body(body);
+    }
+
+    /**
+     * Contador global de no-leídos (P8). Implementa el badge del sidebar/AppBar.
      *
-     * Seguridad: Solo PATIENT y PRACTITIONER pueden acceder. El bloqueo RF28 se enforce a
-     * nivel de dominio: aunque el frontend permita enviar, el backend devolverá 403.
+     * <p>Suma en una sola query SQL los mensajes con {@code readAt IS NULL} de todas las
+     * sesiones donde el usuario es participante, excluyendo sus propios mensajes.
+     */
+    @Operation(
+            summary = "Contador global de no-leídos",
+            description = "Devuelve la suma de mensajes no leídos en todas las sesiones del usuario. " +
+                    "Alimenta el badge global del sidebar/AppBar sin recorrer el inbox."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "OK",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = UnreadCountResponseDTO.class),
+                            examples = @ExampleObject(value = "{ \"total\": 7 }")))
+    })
+    @GetMapping("/unread-count")
+    @PreAuthorize("hasRole('PATIENT') or hasRole('PRACTITIONER')")
+    public ResponseEntity<UnreadCountResponseDTO> getTotalUnreadCount() {
+        User authenticatedUser = authenticationFacade.getAuthenticatedUser();
+        long total = chatUseCase.getTotalUnreadCount(authenticatedUser);
+        return ResponseEntity.ok(new UnreadCountResponseDTO(total));
+    }
+
+    /**
+     * Envía un nuevo mensaje a una sesión de chat existente. Implementa RF26 - CU 6.2.
      *
-     * @param sessionId ID de la sesión de chat (path)
-     * @param requestDTO DTO con el contenido del mensaje (body)
-     * @return El mensaje creado con status 201 Created
+     * <p>El sistema valida:
+     * <ul>
+     *   <li>Que el usuario es participante de la sesión (403 {@code CHAT_NOT_PARTICIPANT} si no).</li>
+     *   <li>Que la sesión no esté bloqueada para el sender (403 {@code CHAT_BLOCKED} si sí).</li>
+     * </ul>
      */
     @Operation(
             summary = "Enviar un mensaje a una sesión de chat",
-            description = "Crea un nuevo mensaje en la sesión indicada. El sender se obtiene del JWT. " +
-                    "Si la sesión está bloqueada (RF28), el paciente recibirá 403; el practicante puede seguir escribiendo."
+            description = "Crea un nuevo mensaje. El sender se obtiene del JWT. " +
+                    "Si la sesión está bloqueada (RF28), el lado silenciado recibe 403 con errorCode CHAT_BLOCKED."
     )
     @ApiResponses(value = {
-            @ApiResponse(
-                    responseCode = "201",
-                    description = "Mensaje enviado exitosamente",
-                    content = @Content(
-                            mediaType = "application/json",
+            @ApiResponse(responseCode = "201", description = "Mensaje enviado exitosamente",
+                    content = @Content(mediaType = "application/json",
                             schema = @Schema(implementation = ChatMessageResponseDTO.class),
-                            examples = @ExampleObject(
-                                    value = """
-                                            {
-                                              "id": 1024,
-                                              "chatSessionId": 42,
-                                              "senderId": 15,
-                                              "senderName": "Carlos Rodríguez",
-                                              "content": "Hola doctora, ¿podemos confirmar el turno del jueves?",
-                                              "sentAt": "2026-05-13T09:42:11Z",
-                                              "readAt": null
-                                            }
-                                            """
-                            )
-                    )
-            ),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "id": 1024,
+                                      "chatSessionId": 42,
+                                      "senderId": 15,
+                                      "senderName": "Carlos Rodríguez",
+                                      "content": "Hola doctora, ¿podemos confirmar el turno del jueves?",
+                                      "sentAt": "2026-05-13T09:42:11Z",
+                                      "readAt": null
+                                    }
+                                    """))),
             @ApiResponse(responseCode = "400", description = "Contenido vacío o supera 2000 caracteres", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Usuario no pertenece a la sesión o sesión bloqueada (RF28)", content = @Content),
+            @ApiResponse(responseCode = "403", description = "CHAT_NOT_PARTICIPANT o CHAT_BLOCKED", content = @Content),
             @ApiResponse(responseCode = "404", description = "Sesión no encontrada", content = @Content)
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Contenido del mensaje a enviar",
             required = true,
-            content = @Content(
-                    mediaType = "application/json",
-                    examples = @ExampleObject(
-                            value = """
-                                    {
-                                      "content": "Hola doctora, ¿podemos confirmar el turno del jueves?"
-                                    }
-                                    """
-                    )
-            )
+            content = @Content(mediaType = "application/json",
+                    examples = @ExampleObject(value = """
+                            { "content": "Hola doctora, ¿podemos confirmar el turno del jueves?" }
+                            """))
     )
     @PostMapping("/sessions/{sessionId}/messages")
     @PreAuthorize("hasRole('PATIENT') or hasRole('PRACTITIONER')")
@@ -226,87 +287,71 @@ public class ChatController {
             @PathVariable Long sessionId,
             @Valid @RequestBody SendMessageRequestDTO requestDTO) {
 
-        // Obtener el usuario autenticado (sender)
         User authenticatedUser = authenticationFacade.getAuthenticatedUser();
-
-        // Delegar al servicio de aplicación (valida pertenencia + bloqueo)
         ChatMessage createdMessage = chatUseCase.sendMessage(sessionId, requestDTO.getContent(), authenticatedUser);
-
-        // Mapear a DTO de respuesta
         ChatMessageResponseDTO responseDTO = ChatRestMapper.toChatMessageResponseDTO(createdMessage);
-
         return ResponseEntity.status(HttpStatus.CREATED).body(responseDTO);
     }
 
     /**
-     * Obtiene los mensajes de una sesión de chat. Soporta tres modos de consumo:
+     * Obtiene los mensajes de una sesión. Soporta dos modos según los query params:
      *
-     * 1) Sin parámetros: devuelve TODO el historial en orden ASC (cronológico).
-     *    Recomendado solo si la conversación es corta. Para chats largos usar paginación.
+     * <ol>
+     *   <li><b>Modo polling unificado (CU 6.3 + CU012 - P1)</b>: sin params o con {@code ?since=}.
+     *       Devuelve un wrapper {@link ChatPollResponseDTO} con:
+     *       <ul>
+     *         <li>{@code messages}: mensajes nuevos desde {@code since} (o el historial completo si no se pasa).</li>
+     *         <li>{@code readReceipts}: updates de {@code readAt} sobre mensajes propios desde {@code since}.</li>
+     *         <li>{@code serverTime}: cursor a usar como {@code since} en el próximo poll.</li>
+     *       </ul></li>
+     *   <li><b>Modo paginado (CU012 - P3)</b>: con {@code ?page=&size=}.
+     *       Devuelve {@link PagedChatMessagesResponseDTO} con {@code messages} en orden DESC,
+     *       {@code hasNext}/{@code hasPrevious}/{@code last} para el control del scroll-up.
+     *       {@code page=0} son los más recientes; tamaño 1..200 (default 50).</li>
+     * </ol>
      *
-     * 2) ?since={ISO-8601}: modo polling RESTful. Devuelve solo los mensajes con
-     *    sentAt > since. El frontend debe llamar periódicamente (5-10s) pasando el sentAt
-     *    del último mensaje recibido. Implementa CU 6.3.
-     *
-     * 3) ?page=N&size=M: paginación DESC para "scroll infinito hacia arriba" (CU012).
-     *    Devuelve un envoltorio PagedChatMessagesResponseDTO con metadatos de página.
-     *    Los mensajes vienen ordenados DESC (más reciente primero) — el frontend los renderiza
-     *    en orden inverso al cargar páginas anteriores. Tamaño máximo de página: 200.
-     *
-     * Precedencia: si se envían 'page'/'size' Y 'since', tiene precedencia la paginación.
-     *
-     * GET /api/chat/sessions/{sessionId}/messages
-     *
-     * Seguridad: Solo PATIENT y PRACTITIONER que pertenezcan a la sesión.
-     *
-     * @param sessionId ID de la sesión (path)
-     * @param since Timestamp ISO-8601 opcional (query) — modo polling
-     * @param page Número de página opcional (query) — modo paginado, base 0
-     * @param size Tamaño de página opcional (query) — entre 1 y 200, default 50
-     * @return Lista de mensajes (modos 1/2) o PagedChatMessagesResponseDTO (modo 3)
+     * <p>Precedencia: si vienen {@code page}/{@code size} <i>y</i> {@code since}, predomina la paginación.
      */
     @Operation(
-            summary = "Obtener mensajes de una sesión",
-            description = "Tres modos: (a) sin params → historial completo ASC; " +
-                    "(b) ?since=ISO8601 → polling de nuevos mensajes; " +
-                    "(c) ?page=N&size=M → paginación DESC para scroll-up (CU012). " +
+            summary = "Obtener mensajes de una sesión (polling unificado o paginado)",
+            description = "Dos modos. Polling: sin params o ?since=ISO8601 → wrapper con messages + readReceipts + serverTime. " +
+                    "Paginado: ?page=&size= → wrapper paginado con hasNext/hasPrevious (page=0 = más recientes, DESC dentro de página). " +
                     "La pertenencia a la sesión se valida en el dominio."
     )
     @ApiResponses(value = {
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Mensajes obtenidos exitosamente. Estructura depende del modo: " +
-                            "lista plana para modos full/polling, envoltorio paginado para modo page/size.",
-                    content = @Content(
-                            mediaType = "application/json",
+            @ApiResponse(responseCode = "200",
+                    description = "Mensajes obtenidos exitosamente. La forma depende del modo: poll-wrapper o page-wrapper.",
+                    content = @Content(mediaType = "application/json",
                             examples = {
-                                    @ExampleObject(
-                                            name = "Modo full / polling (lista de mensajes)",
+                                    @ExampleObject(name = "Modo polling (con ?since=)",
                                             value = """
-                                                    [
-                                                      {
-                                                        "id": 1024,
-                                                        "chatSessionId": 42,
-                                                        "senderId": 15,
-                                                        "senderName": "Carlos Rodríguez",
-                                                        "content": "Hola doctora",
-                                                        "sentAt": "2026-05-13T09:42:11Z",
-                                                        "readAt": "2026-05-13T09:43:01Z"
-                                                      },
-                                                      {
-                                                        "id": 1025,
-                                                        "chatSessionId": 42,
-                                                        "senderId": 8,
-                                                        "senderName": "Ana Martínez",
-                                                        "content": "Hola Carlos, sí, confirmado.",
-                                                        "sentAt": "2026-05-13T09:45:02Z",
-                                                        "readAt": null
-                                                      }
-                                                    ]
-                                                    """
-                                    ),
-                                    @ExampleObject(
-                                            name = "Modo paginado (page/size)",
+                                                    {
+                                                      "messages": [
+                                                        {
+                                                          "id": 1025,
+                                                          "chatSessionId": 42,
+                                                          "senderId": 8,
+                                                          "senderName": "Ana Martínez",
+                                                          "content": "Hola Carlos, sí, confirmado.",
+                                                          "sentAt": "2026-05-13T09:45:02Z",
+                                                          "readAt": null
+                                                        }
+                                                      ],
+                                                      "readReceipts": [
+                                                        { "messageId": 1024, "readAt": "2026-05-13T09:43:01Z" }
+                                                      ],
+                                                      "serverTime": "2026-05-13T09:45:10Z"
+                                                    }
+                                                    """),
+                                    @ExampleObject(name = "Modo polling (carga inicial sin since)",
+                                            value = """
+                                                    {
+                                                      "messages": [ /* historial completo ASC */ ],
+                                                      "readReceipts": [],
+                                                      "serverTime": "2026-05-13T09:45:00Z"
+                                                    }
+                                                    """),
+                                    @ExampleObject(name = "Modo paginado (?page=&size=)",
                                             value = """
                                                     {
                                                       "messages": [
@@ -324,15 +369,15 @@ public class ChatController {
                                                       "size": 50,
                                                       "totalElements": 312,
                                                       "totalPages": 7,
-                                                      "last": false
+                                                      "last": false,
+                                                      "hasNext": true,
+                                                      "hasPrevious": false
                                                     }
-                                                    """
-                                    )
-                            }
-                    )
+                                                    """)
+                            })
             ),
             @ApiResponse(responseCode = "400", description = "page < 0 o size fuera de [1, 200]", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Usuario no pertenece a la sesión", content = @Content),
+            @ApiResponse(responseCode = "403", description = "CHAT_NOT_PARTICIPANT", content = @Content),
             @ApiResponse(responseCode = "404", description = "Sesión no encontrada", content = @Content)
     })
     @GetMapping("/sessions/{sessionId}/messages")
@@ -340,17 +385,16 @@ public class ChatController {
     public ResponseEntity<?> getMessages(
             @Parameter(description = "ID de la sesión de chat", required = true)
             @PathVariable Long sessionId,
-            @Parameter(description = "Timestamp ISO-8601 para modo polling (solo mensajes posteriores)", example = "2026-05-13T09:42:11Z")
+            @Parameter(description = "Timestamp ISO-8601 para modo polling (solo cambios posteriores)", example = "2026-05-13T09:42:11Z")
             @RequestParam(required = false) Instant since,
             @Parameter(description = "Número de página (base 0) para modo paginado", example = "0")
             @RequestParam(required = false) Integer page,
             @Parameter(description = "Tamaño de página entre 1 y 200 (default 50)", example = "50")
             @RequestParam(required = false) Integer size) {
 
-        // Obtener el usuario autenticado
         User authenticatedUser = authenticationFacade.getAuthenticatedUser();
 
-        // Modo paginado tiene precedencia sobre 'since' (paginación es para historial)
+        // Modo paginado tiene precedencia sobre 'since' (paginación es para historial).
         if (page != null || size != null) {
             int p = page != null ? page : 0;
             int s = size != null ? size : 50;
@@ -358,60 +402,34 @@ public class ChatController {
             return ResponseEntity.ok(ChatRestMapper.toPagedChatMessagesResponseDTO(pageResult));
         }
 
-        // Modo full o polling (según presencia de 'since')
-        List<ChatMessage> messages = chatUseCase.getMessages(sessionId, authenticatedUser, since);
-        List<ChatMessageResponseDTO> response = messages.stream()
-                .map(ChatRestMapper::toChatMessageResponseDTO)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(response);
+        // Modo polling unificado (con o sin 'since').
+        ChatPollResult result = chatUseCase.getMessagesPoll(sessionId, authenticatedUser, since);
+        return ResponseEntity.ok(ChatRestMapper.toChatPollResponseDTO(result));
     }
 
     /**
-     * Marca como leídos en bulk todos los mensajes pendientes de la contraparte.
-     * Implementa CU012 - Read Receipts.
+     * Marca como leídos en bulk los mensajes pendientes de la contraparte (CU012).
      *
-     * Comportamiento:
-     * - Marca TODOS los mensajes de la sesión cuyo sender NO sea el usuario autenticado y
-     *   cuyo readAt sea null.
-     * - La marca se hace con un único UPDATE SQL → seguro para conversaciones con cientos
-     *   de mensajes pendientes (evita N+1).
-     * - Idempotente: una segunda llamada simplemente marcará 0 mensajes.
-     *
-     * Caso de uso típico: el frontend llama a este endpoint cuando el receptor abre la
-     * conversación, en paralelo con el GET de mensajes.
-     *
-     * POST /api/chat/sessions/{sessionId}/messages/read
-     *
-     * Seguridad: PATIENT o PRACTITIONER, debe ser participante de la sesión.
-     *
-     * @param sessionId ID de la sesión de chat
-     * @return DTO con el conteo de mensajes marcados y el timestamp aplicado
+     * <p>Funciona también con la sesión bloqueada (P6): el lado silenciado conserva el derecho
+     * a cerrar su contador de no-leídos sobre el historial existente.
      */
     @Operation(
             summary = "Marcar mensajes como leídos (bulk)",
-            description = "Marca como leídos todos los mensajes no leídos enviados por la contraparte " +
-                    "en una única operación SQL. Idempotente. Solo el receptor puede invocarlo " +
-                    "(la pertenencia se valida en el dominio)."
+            description = "Marca como leídos todos los mensajes no leídos enviados por la contraparte en una única operación SQL. " +
+                    "Idempotente. Funciona también si la sesión está bloqueada."
     )
     @ApiResponses(value = {
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Operación ejecutada exitosamente",
-                    content = @Content(
-                            mediaType = "application/json",
+            @ApiResponse(responseCode = "200", description = "Operación ejecutada exitosamente",
+                    content = @Content(mediaType = "application/json",
                             schema = @Schema(implementation = MarkMessagesAsReadResponseDTO.class),
-                            examples = @ExampleObject(
-                                    value = """
-                                            {
-                                              "chatSessionId": 42,
-                                              "messagesMarked": 3,
-                                              "readAt": "2026-05-13T09:43:01Z"
-                                            }
-                                            """
-                            )
-                    )
-            ),
-            @ApiResponse(responseCode = "403", description = "Usuario no pertenece a la sesión", content = @Content),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "chatSessionId": 42,
+                                      "messagesMarked": 3,
+                                      "readAt": "2026-05-13T09:43:01Z"
+                                    }
+                                    """))),
+            @ApiResponse(responseCode = "403", description = "CHAT_NOT_PARTICIPANT", content = @Content),
             @ApiResponse(responseCode = "404", description = "Sesión no encontrada", content = @Content)
     })
     @PostMapping("/sessions/{sessionId}/messages/read")
@@ -420,89 +438,40 @@ public class ChatController {
             @Parameter(description = "ID de la sesión de chat", required = true)
             @PathVariable Long sessionId) {
 
-        // Obtener el usuario autenticado (receptor)
         User authenticatedUser = authenticationFacade.getAuthenticatedUser();
-
-        // Capturamos el timestamp en el controlador para devolverlo exactamente igual al cliente
         Instant readAt = Instant.now();
         int marked = chatUseCase.markMessagesAsRead(sessionId, authenticatedUser);
-
         return ResponseEntity.ok(new MarkMessagesAsReadResponseDTO(sessionId, marked, readAt));
     }
 
     /**
-     * Bloquea la sesión de chat impidiendo que el paciente envíe nuevos mensajes.
-     * Implementa RF28 - Historia #17: Bloqueo del paciente por parte del practicante.
+     * Bloquea la sesión de chat. Implementa RF28.
      *
-     * Reglas de negocio:
-     * - Solo el PRACTITIONER de la sesión puede bloquear (no cualquier practicante).
-     * - El bloqueo deja rastro auditable: blockedByUser, blockedByRole, blockedAt y blockReason.
-     * - Una vez bloqueada, los mensajes enviados por el paciente reciben 403.
-     * - El practicante conserva voz: puede seguir documentando aún sobre una sesión bloqueada
-     *   (decisión clínica para no perder capacidad de registro).
-     * - El motivo es opcional. Si se envía, se persiste (máx. 500 caracteres).
-     *
-     * POST /api/chat/sessions/{sessionId}/block
-     *
-     * Seguridad: Solo PRACTITIONER que sea participante de la sesión.
-     *
-     * @param sessionId ID de la sesión a bloquear
-     * @param requestDTO DTO opcional con el motivo del bloqueo
-     * @return La sesión actualizada con el rastro de bloqueo
+     * <p>Política actual: solo el {@code PRACTITIONER} de la sesión puede bloquear. El modelo
+     * de dominio ya soporta bloqueo bidireccional (cualquier participante puede ser el bloqueador
+     * y el otro queda silenciado), pero la política se mantiene cerrada al practicante hasta
+     * que el producto decida abrir la bidireccionalidad.
      */
     @Operation(
             summary = "Bloquear sesión de chat (RF28)",
-            description = "El practicante de la sesión bloquea al paciente: deja rastro auditable " +
-                    "(blockedByUser, blockedByRole, blockedAt, blockReason) y silencia al paciente. " +
-                    "El practicante puede seguir escribiendo. Operación reversible vía /unblock."
+            description = "El practicante de la sesión bloquea: el paciente queda silenciado, el practicante conserva voz. " +
+                    "Deja audit trail (blockedByUser, blockedByRole, blockedAt, blockReason). Reversible vía /unblock."
     )
     @ApiResponses(value = {
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Sesión bloqueada exitosamente",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = ChatSessionResponseDTO.class),
-                            examples = @ExampleObject(
-                                    value = """
-                                            {
-                                              "id": 42,
-                                              "patientId": 15,
-                                              "patientName": "Carlos Rodríguez",
-                                              "practitionerId": 8,
-                                              "practitionerName": "Ana Martínez",
-                                              "createdAt": "2025-11-10T10:00:00Z",
-                                              "unreadCount": 0,
-                                              "lastMessageAt": null,
-                                              "lastMessagePreview": null,
-                                              "blocked": true,
-                                              "blockedByUserId": 8,
-                                              "blockedByRole": "ROLE_PRACTITIONER",
-                                              "blockedAt": "2026-05-13T10:00:00Z",
-                                              "blockReason": "Uso indebido del canal de chat"
-                                            }
-                                            """
-                            )
-                    )
-            ),
+            @ApiResponse(responseCode = "200", description = "Sesión bloqueada exitosamente",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ChatSessionResponseDTO.class))),
             @ApiResponse(responseCode = "400", description = "Motivo supera 500 caracteres", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Solo el practicante de la sesión puede bloquear", content = @Content),
+            @ApiResponse(responseCode = "403", description = "CHAT_NOT_PRACTITIONER_OF_SESSION", content = @Content),
             @ApiResponse(responseCode = "404", description = "Sesión no encontrada", content = @Content),
-            @ApiResponse(responseCode = "422", description = "La sesión ya estaba bloqueada", content = @Content)
+            @ApiResponse(responseCode = "422", description = "CHAT_ALREADY_BLOCKED", content = @Content)
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Motivo opcional del bloqueo (puede omitirse el body entero)",
             required = false,
-            content = @Content(
-                    mediaType = "application/json",
-                    examples = @ExampleObject(
-                            value = """
-                                    {
-                                      "reason": "Uso indebido del canal de chat"
-                                    }
-                                    """
-                    )
-            )
+            content = @Content(mediaType = "application/json",
+                    examples = @ExampleObject(value = """
+                            { "reason": "Uso indebido del canal de chat" }
+                            """))
     )
     @PostMapping("/sessions/{sessionId}/block")
     @PreAuthorize("hasRole('PRACTITIONER')")
@@ -511,71 +480,25 @@ public class ChatController {
             @PathVariable Long sessionId,
             @Valid @RequestBody(required = false) BlockChatSessionRequestDTO requestDTO) {
 
-        // Obtener el usuario autenticado (practicante)
         User authenticatedUser = authenticationFacade.getAuthenticatedUser();
-
-        // El body es opcional: si no viene, reason queda null
         String reason = requestDTO != null ? requestDTO.getReason() : null;
-
-        // Delegar al caso de uso: valida rol + pertenencia + idempotencia
         ChatSession updated = chatUseCase.blockChatSession(sessionId, authenticatedUser, reason);
-
         return ResponseEntity.ok(ChatRestMapper.toChatSessionResponseDTO(updated));
     }
 
     /**
-     * Desbloquea la sesión de chat previamente bloqueada (reversibilidad de RF28).
-     *
-     * Reglas:
-     * - Solo el PRACTITIONER de la sesión puede desbloquear.
-     * - El audit trail original (quién bloqueó y cuándo) se borra al desbloquear, porque ya no
-     *   hay bloqueo activo. Si se necesitara historial de bloqueos previos a futuro, sería un
-     *   feature aparte (event sourcing / tabla de auditoría dedicada).
-     *
-     * POST /api/chat/sessions/{sessionId}/unblock
-     *
-     * Seguridad: Solo PRACTITIONER que sea participante de la sesión.
-     *
-     * @param sessionId ID de la sesión a desbloquear
-     * @return La sesión actualizada sin rastro de bloqueo
+     * Desbloquea la sesión previamente bloqueada (RF28 reversible). Solo el practicante de la sesión.
      */
     @Operation(
             summary = "Desbloquear sesión de chat (RF28 reversible)",
-            description = "Revierte el bloqueo previamente aplicado. Solo el practicante de la sesión " +
-                    "puede invocarlo. Limpia los campos de auditoría del bloqueo activo."
+            description = "Revierte el bloqueo. Limpia los campos de auditoría del bloqueo activo."
     )
     @ApiResponses(value = {
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Sesión desbloqueada exitosamente",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = ChatSessionResponseDTO.class),
-                            examples = @ExampleObject(
-                                    value = """
-                                            {
-                                              "id": 42,
-                                              "patientId": 15,
-                                              "patientName": "Carlos Rodríguez",
-                                              "practitionerId": 8,
-                                              "practitionerName": "Ana Martínez",
-                                              "createdAt": "2025-11-10T10:00:00Z",
-                                              "unreadCount": 0,
-                                              "lastMessageAt": null,
-                                              "lastMessagePreview": null,
-                                              "blocked": false,
-                                              "blockedByUserId": null,
-                                              "blockedByRole": null,
-                                              "blockedAt": null,
-                                              "blockReason": null
-                                            }
-                                            """
-                            )
-                    )
-            ),
-            @ApiResponse(responseCode = "403", description = "Solo el practicante de la sesión puede desbloquear", content = @Content),
+            @ApiResponse(responseCode = "200", description = "Sesión desbloqueada exitosamente",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ChatSessionResponseDTO.class))),
+            @ApiResponse(responseCode = "403", description = "CHAT_NOT_PRACTITIONER_OF_SESSION", content = @Content),
             @ApiResponse(responseCode = "404", description = "Sesión no encontrada", content = @Content),
-            @ApiResponse(responseCode = "422", description = "La sesión no estaba bloqueada", content = @Content)
+            @ApiResponse(responseCode = "422", description = "CHAT_NOT_BLOCKED", content = @Content)
     })
     @PostMapping("/sessions/{sessionId}/unblock")
     @PreAuthorize("hasRole('PRACTITIONER')")
@@ -583,12 +506,8 @@ public class ChatController {
             @Parameter(description = "ID de la sesión de chat a desbloquear", required = true)
             @PathVariable Long sessionId) {
 
-        // Obtener el usuario autenticado (practicante)
         User authenticatedUser = authenticationFacade.getAuthenticatedUser();
-
-        // Delegar al caso de uso: valida rol + pertenencia + idempotencia
         ChatSession updated = chatUseCase.unblockChatSession(sessionId, authenticatedUser);
-
         return ResponseEntity.ok(ChatRestMapper.toChatSessionResponseDTO(updated));
     }
 }

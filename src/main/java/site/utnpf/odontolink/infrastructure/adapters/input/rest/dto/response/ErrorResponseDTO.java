@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -15,6 +17,19 @@ public class ErrorResponseDTO {
     private String message;
     private String path;
     private List<String> details;
+
+    /**
+     * Código estable y legible-por-máquina del error (p. ej. {@code CHAT_BLOCKED},
+     * {@code CHAT_NOT_PARTICIPANT}). Permite al frontend ramificar UX sin parsear
+     * el mensaje humano, que está sujeto a cambios de copy/i18n.
+     *
+     * <p>Es opcional: muchos 4xx genéricos no necesitan código (basta el {@code status}
+     * + {@code error}). Cuando una excepción de dominio incluye uno, el handler lo
+     * propaga al body; cuando no, queda en {@code null} y se omite del JSON via
+     * {@link JsonInclude} para no contaminar respuestas existentes.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String errorCode;
 
     /**
      * Identificador unico del incidente. Se rellena solo en errores 5xx para
@@ -42,6 +57,14 @@ public class ErrorResponseDTO {
 
     public void setTraceId(String traceId) {
         this.traceId = traceId;
+    }
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
     }
 
     // Getters y Setters

@@ -248,6 +248,19 @@ public interface JpaAppointmentRepository extends JpaRepository<AppointmentEntit
     int updateStatus(@Param("id") Long id, @Param("status") AppointmentStatus status);
 
     /**
+     * Prueba de existencia (en cualquier estado) de un turno entre un paciente y un practicante.
+     * Es la verificación de "relación clínica previa" exigida por RF27 para permitir abrir un
+     * canal de chat sin un appointment activo. Incluir CANCELLED es deliberado: la relación
+     * existió aunque el turno haya sido cancelado posteriormente.
+     */
+    @Query("SELECT CASE WHEN COUNT(a) > 0 THEN true ELSE false END " +
+           "FROM AppointmentEntity a " +
+           "WHERE a.attention.patient.id = :patientId " +
+           "AND a.attention.practitioner.id = :practitionerId")
+    boolean existsByPatientIdAndPractitionerId(@Param("patientId") Long patientId,
+                                               @Param("practitionerId") Long practitionerId);
+
+    /**
      * Actualiza el estado y el motivo de cancelación en una única operación.
      * Se persiste como UPDATE directo para mantener la atomicidad y evitar
      * el problema de referencias bidireccionales nulas que aparece al

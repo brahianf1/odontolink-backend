@@ -212,6 +212,20 @@ public interface AppointmentRepository {
     boolean updateStatus(Long appointmentId, AppointmentStatus newStatus);
 
     /**
+     * Verifica si existe al menos un turno (en cualquier estado) entre el paciente y el
+     * practicante indicados. Es la prueba de "relación clínica previa" exigida por RF27
+     * para abrir un canal de chat: la sesión se materializa automáticamente al primer
+     * appointment, pero también puede crearse explícitamente vía POST /api/chat/sessions
+     * siempre que esta verificación pase.
+     *
+     * <p>No filtra por estado (incluye CANCELLED): basta con que el paciente haya
+     * intentado agendar con el practicante para considerar establecida la relación.
+     * Mantiene el contrato de historia clínica: un canal abierto sobrevive aunque
+     * después se cancele el turno que lo originó.
+     */
+    boolean existsByPatientIdAndPractitionerId(Long patientId, Long practitionerId);
+
+    /**
      * Actualiza el estado del turno y, simultáneamente, el motivo de cancelación.
      *
      * Se ofrece como operación atómica para que no quede ventana donde el
