@@ -131,7 +131,8 @@ public class PractitionerController {
                                               "currentCompletedAttentions": 0,
                                               "currentActiveAttentions": 0,
                                               "currentCancelledAttentions": 0,
-                                              "availabilityBlocked": false,
+                                              "quotaExhausted": false,
+                                              "expired": false,
                                               "status": "ACTIVE"
                                             }
                                             """
@@ -240,8 +241,9 @@ public class PractitionerController {
     @Operation(
             summary = "Obtener el catálogo personal del practicante",
             description = "Devuelve las ofertas del practicante autenticado, enriquecidas con el progreso " +
-                    "académico (completadas, activas y canceladas) y la bandera `availabilityBlocked` " +
-                    "(cupo lleno cuando `completed + active >= maxCompletedAttentions`).\n\n" +
+                    "académico (completadas, activas y canceladas), la bandera `quotaExhausted` " +
+                    "(cupo lleno cuando `completed + active >= maxCompletedAttentions`) y `expired` " +
+                    "(`offerEndDate < today`).\n\n" +
                     "El parámetro `status` selecciona el bucket a devolver:\n" +
                     "- `ACTIVE` (default): vigentes y dentro de la ventana temporal — lo que el paciente puede reservar.\n" +
                     "- `PAUSED`: pausadas voluntariamente.\n" +

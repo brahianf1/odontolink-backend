@@ -153,7 +153,8 @@ public class PatientController {
                                                   "currentCompletedAttentions": 3,
                                                   "currentActiveAttentions": 2,
                                                   "currentCancelledAttentions": 1,
-                                                  "availabilityBlocked": false,
+                                                  "quotaExhausted": false,
+                                                  "expired": false,
                                                   "status": "ACTIVE"
                                                 }
                                               ],

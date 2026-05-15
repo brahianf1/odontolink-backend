@@ -3,6 +3,8 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper;
 import site.utnpf.odontolink.domain.model.OfferedTreatment;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.OfferedTreatmentResponseDTO;
 
+import java.time.LocalDate;
+
 /**
  * Mapper para convertir objetos de dominio OfferedTreatment a DTOs de respuesta.
  *
@@ -81,13 +83,21 @@ public class OfferedTreatmentRestMapper {
         response.setCurrentActiveAttentions(currentActiveAttentions);
         response.setCurrentCancelledAttentions(currentCancelledAttentions);
 
-        // Cálculo de bloqueo (Lógica de Negocio replicada para visualización)
-        boolean isBlocked = false;
+        // Cupo lleno: completed + active >= max. Sólo flag visual; el enforcement
+        // al reservar vive en AppointmentBookingService.
+        boolean quotaExhausted = false;
         if (domain.getMaxCompletedAttentions() != null) {
             int totalConsumed = currentCompletedAttentions + currentActiveAttentions;
-            isBlocked = totalConsumed >= domain.getMaxCompletedAttentions();
+            quotaExhausted = totalConsumed >= domain.getMaxCompletedAttentions();
         }
-        response.setAvailabilityBlocked(isBlocked);
+        response.setQuotaExhausted(quotaExhausted);
+
+        // Vencimiento por tiempo: derivado para que el frontend no recalcule.
+        // Se compara con la fecha de hoy del servidor; el huso horario asumido
+        // es el del backend (mismo criterio que el resto del cálculo de cupos).
+        boolean expired = domain.getOfferEndDate() != null
+                && domain.getOfferEndDate().isBefore(LocalDate.now());
+        response.setExpired(expired);
 
         if (domain.getAvailabilitySlots() != null) {
             response.setAvailabilitySlots(

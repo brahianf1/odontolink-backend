@@ -52,8 +52,21 @@ public class OfferedTreatmentResponseDTO {
     @Schema(description = "Número histórico de casos cancelados (Estadística de Deserción)", example = "1")
     private int currentCancelledAttentions;
 
-    @Schema(description = "Indica si la oferta está bloqueada por alcanzar el cupo máximo (Completed + Active >= Max)", example = "false")
-    private boolean isAvailabilityBlocked;
+    @Schema(
+            description = "Indica si la oferta tiene el cupo lleno (`completed + active >= maxCompletedAttentions`). " +
+                    "No es un flag de bloqueo administrativo: representa exclusivamente la condición de cupo. " +
+                    "Reemplaza al campo previo `availabilityBlocked`, cuyo nombre era engañoso.",
+            example = "false"
+    )
+    private boolean quotaExhausted;
+
+    @Schema(
+            description = "Indica si la oferta venció por tiempo (`offerEndDate < today`). " +
+                    "Derivado en el servidor para no obligar al frontend a recalcularlo. " +
+                    "Una oferta vencida en estado ACTIVE deja de aparecer en el catálogo público.",
+            example = "false"
+    )
+    private boolean expired;
 
     @Schema(
             description = "Estado de la oferta en el ciclo de vida del catálogo personal. " +
@@ -190,12 +203,20 @@ public class OfferedTreatmentResponseDTO {
         this.currentCancelledAttentions = currentCancelledAttentions;
     }
 
-    public boolean isAvailabilityBlocked() {
-        return isAvailabilityBlocked;
+    public boolean isQuotaExhausted() {
+        return quotaExhausted;
     }
 
-    public void setAvailabilityBlocked(boolean availabilityBlocked) {
-        isAvailabilityBlocked = availabilityBlocked;
+    public void setQuotaExhausted(boolean quotaExhausted) {
+        this.quotaExhausted = quotaExhausted;
+    }
+
+    public boolean isExpired() {
+        return expired;
+    }
+
+    public void setExpired(boolean expired) {
+        this.expired = expired;
     }
 
     public OfferedTreatmentStatus getStatus() {
