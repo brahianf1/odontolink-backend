@@ -100,6 +100,12 @@ public class AttentionPolicyService {
      *       para este caso. El practicante debe cancelarlos uno a uno antes
      *       (UX: el frontend lo guía). Política deliberada: evitar el borrado
      *       en cascada de turnos del paciente sin confirmación granular.</li>
+     *   <li>No deben existir turnos SCHEDULED pasados sin marcar (los que el
+     *       practicante todavía debe resolver como COMPLETED o NO_SHOW).
+     *       Espeja la regla de {@link #finalizeAttention}: cualquier cierre
+     *       del caso (sea por completar o por cancelar) exige que el destino
+     *       de cada turno pasado esté declarado, para no dejar turnos huérfanos
+     *       que distorsionan reportes y métricas.</li>
      * </ul>
      *
      * El POJO {@link Attention#cancelByPractitioner(String, User)} se encarga
@@ -115,6 +121,13 @@ public class AttentionPolicyService {
             throw new InvalidBusinessRuleException(
                     "No se puede cancelar el caso clínico mientras existan turnos a futuro " +
                     "agendados. Cancele primero los turnos pendientes y vuelva a intentar."
+            );
+        }
+        if (hasPendingPastAppointments(attention.getId())) {
+            throw new InvalidBusinessRuleException(
+                    "No se puede cancelar el caso clínico mientras existan turnos pasados " +
+                    "sin marcar. Marque cada turno como 'completado' o 'ausente' antes de " +
+                    "cancelar el caso."
             );
         }
         attention.cancelByPractitioner(motive, author);
