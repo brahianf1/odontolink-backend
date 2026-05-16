@@ -78,4 +78,36 @@ public interface JpaChatMessageRepository extends JpaRepository<ChatMessageEntit
      * (en lugar de por createdAt de la sesión, que solo refleja la primera atención).
      */
     Optional<ChatMessageEntity> findFirstByChatSessionOrderBySentAtDesc(ChatSessionEntity chatSession);
+
+    /**
+     * Suma los no-leídos de TODAS las sesiones (paciente o practicante) donde el usuario
+     * indicado es participante. Usado por el badge global del sidebar (CU012 - P8).
+     *
+     * <p>Se filtra por participación (el usuario debe ser el patient.user o el practitioner.user
+     * de la sesión) y por que el sender del mensaje NO sea él (los propios mensajes nunca
+     * cuentan como no-leídos).
+     */
+    @Query("SELECT COUNT(m) FROM ChatMessageEntity m " +
+           "WHERE m.readAt IS NULL " +
+           "AND m.sender.id <> :userId " +
+           "AND (m.chatSession.patient.user.id = :userId " +
+           "     OR m.chatSession.practitioner.user.id = :userId)")
+    long countTotalUnreadByReceiver(@Param("userId") Long userId);
+
+    /**
+     * Read-receipts entrantes para el sender (P1): mensajes que envió {@code senderUserId}
+     * en la sesión, cuya marca {@code readAt} es posterior a {@code since}.
+     *
+     * <p>Devuelve los mensajes completos (el caller solo expone messageId + readAt al cliente).
+     * Orden ASC por {@code readAt} para que el frontend los aplique en orden cronológico.
+     */
+    @Query("SELECT m FROM ChatMessageEntity m " +
+           "WHERE m.chatSession = :session " +
+           "AND m.sender.id = :senderUserId " +
+           "AND m.readAt IS NOT NULL " +
+           "AND m.readAt > :since " +
+           "ORDER BY m.readAt ASC")
+    List<ChatMessageEntity> findReadReceiptsForSenderSince(@Param("session") ChatSessionEntity session,
+                                                           @Param("senderUserId") Long senderUserId,
+                                                           @Param("since") Instant since);
 }

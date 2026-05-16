@@ -7,11 +7,17 @@ import java.util.List;
 /**
  * Projection paginada de mensajes para evitar saturar memoria en chats largos (CU012).
  *
- * No exponemos {@code org.springframework.data.domain.Page} en el puerto para mantener
+ * <p>No exponemos {@code org.springframework.data.domain.Page} en el puerto para mantener
  * la capa de aplicación independiente de Spring Data.
  *
- * Convención: los mensajes vienen ordenados DESC (más reciente primero), como en Telegram/WhatsApp.
- * El frontend los renderiza en orden inverso a medida que se cargan páginas anteriores.
+ * <p>Convención del API:
+ * <ul>
+ *   <li>{@code page=0} es la página de los mensajes <b>más recientes</b> (orden DESC global).</li>
+ *   <li>{@code page=N+1} retrocede en el tiempo (mensajes más antiguos).</li>
+ *   <li>Dentro de cada página, los mensajes vienen ordenados <b>DESC por {@code sentAt}</b>
+ *       (el más reciente de la página primero). El frontend los renderiza de abajo hacia
+ *       arriba al hacer scroll-up, igual que WhatsApp/Telegram.</li>
+ * </ul>
  *
  * @author OdontoLink Team
  */
@@ -51,7 +57,30 @@ public class PagedMessages {
         return totalPages;
     }
 
+    /**
+     * {@code true} cuando esta es la última página existente (no hay más páginas siguientes
+     * en la convención DESC: no hay mensajes <i>más antiguos</i> por cargar).
+     */
     public boolean isLast() {
         return page + 1 >= totalPages;
+    }
+
+    /**
+     * {@code true} si hay otra página después de la actual en el sentido del paginador
+     * (es decir, hay mensajes <b>más antiguos</b> sin cargar). Útil para que el frontend
+     * decida si seguir habilitando el scroll-up.
+     */
+    public boolean hasNext() {
+        return !isLast();
+    }
+
+    /**
+     * {@code true} si hay una página antes que la actual en el sentido del paginador
+     * (mensajes <b>más nuevos</b> que los de esta página). En la práctica equivale a
+     * {@code page > 0}; el frontend rara vez lo necesita porque la página 0 ya es la
+     * de los más recientes, pero lo exponemos por contrato de paginación estándar.
+     */
+    public boolean hasPrevious() {
+        return page > 0;
     }
 }

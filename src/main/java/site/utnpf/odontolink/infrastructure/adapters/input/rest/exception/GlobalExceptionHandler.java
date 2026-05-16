@@ -103,7 +103,8 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Maneja excepciones de reglas de negocio inválidas.
+     * Maneja excepciones de reglas de negocio inválidas. Propaga el {@code errorCode}
+     * si la excepción lo definió, para que el frontend ramifique UX sin parsear el mensaje.
      */
     @ExceptionHandler(InvalidBusinessRuleException.class)
     public ResponseEntity<ErrorResponseDTO> handleInvalidBusinessRuleException(
@@ -116,12 +117,15 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 request.getRequestURI()
         );
+        errorResponse.setErrorCode(ex.getErrorCode());
 
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(errorResponse);
     }
 
     /**
-     * Maneja excepciones de operaciones no autorizadas.
+     * Maneja excepciones de operaciones no autorizadas. Propaga el {@code errorCode}
+     * para distinguir motivos distintos del mismo 403 (p. ej. {@code CHAT_BLOCKED}
+     * vs {@code CHAT_NOT_PARTICIPANT}).
      */
     @ExceptionHandler(UnauthorizedOperationException.class)
     public ResponseEntity<ErrorResponseDTO> handleUnauthorizedOperationException(
@@ -134,6 +138,7 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 request.getRequestURI()
         );
+        errorResponse.setErrorCode(ex.getErrorCode());
 
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
     }

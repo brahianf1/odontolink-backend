@@ -534,12 +534,14 @@ public class BeanConfiguration {
             ChatMessageRepository chatMessageRepository,
             PatientRepository patientRepository,
             PractitionerRepository practitionerRepository,
+            AppointmentRepository appointmentRepository,
             ChatPolicyService chatPolicyService) {
         return new ChatService(
                 chatSessionRepository,
                 chatMessageRepository,
                 patientRepository,
                 practitionerRepository,
+                appointmentRepository,
                 chatPolicyService
         );
     }

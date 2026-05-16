@@ -239,4 +239,9 @@ public class AppointmentPersistenceAdapter implements AppointmentRepository {
         );
         return rowsAffected > 0;
     }
+
+    @Override
+    public boolean existsByPatientIdAndPractitionerId(Long patientId, Long practitionerId) {
+        return jpaAppointmentRepository.existsByPatientIdAndPractitionerId(patientId, practitionerId);
+    }
 }

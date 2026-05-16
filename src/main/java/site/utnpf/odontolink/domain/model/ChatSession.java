@@ -86,10 +86,18 @@ public class ChatSession {
      * - No se puede re-bloquear una sesión ya bloqueada (idempotencia explícita: no consideramos
      *   silenciosamente "ya bloqueado", lanzamos error para que el caller corrija el flujo).
      * - El motivo es opcional pero, si se envía, se persiste para auditoría.
+     *
+     * <p>El modelo no hardcodea qué rol puede bloquear: acepta {@link User} + {@link Role}
+     * arbitrarios. La autorización de quién bloquea ({@code ROLE_PRACTITIONER} solamente
+     * por ahora, RF28) vive en {@link site.utnpf.odontolink.domain.service.ChatPolicyService}.
+     * Esto permite habilitar bloqueo bidireccional (RF28 extendido) cambiando únicamente
+     * la política, sin tocar el modelo ni los datos persistidos.
      */
     public void block(User blocker, Role blockerRole, String reason) {
         if (this.blocked) {
-            throw new InvalidBusinessRuleException("La sesión de chat ya se encuentra bloqueada.");
+            throw new InvalidBusinessRuleException(
+                    "La sesión de chat ya se encuentra bloqueada.",
+                    "CHAT_ALREADY_BLOCKED");
         }
         if (blocker == null || blockerRole == null) {
             throw new IllegalArgumentException("El usuario y el rol que ejecutan el bloqueo son obligatorios.");
@@ -106,7 +114,9 @@ public class ChatSession {
      */
     public void unblock() {
         if (!this.blocked) {
-            throw new InvalidBusinessRuleException("La sesión de chat no está bloqueada.");
+            throw new InvalidBusinessRuleException(
+                    "La sesión de chat no está bloqueada.",
+                    "CHAT_NOT_BLOCKED");
         }
         this.blocked = false;
         this.blockedByUser = null;
@@ -116,19 +126,31 @@ public class ChatSession {
     }
 
     /**
-     * Verifica si el paciente puede continuar enviando mensajes. Si la sesión fue bloqueada
-     * por el practicante, el paciente queda silenciado pero el practicante conserva voz para
-     * seguir documentando el caso (decisión clínica documentada en RF28).
+     * Verifica si el {@code sender} puede continuar enviando mensajes en una sesión bloqueada.
+     *
+     * <p>Regla generalizada (RF28): cuando la sesión está bloqueada, queda silenciado todo
+     * usuario que <b>no</b> sea el bloqueador. El bloqueador conserva voz para seguir
+     * documentando/registrando el caso (decisión clínica que se mantiene incluso si se
+     * habilita el bloqueo del paciente a futuro).
+     *
+     * <p>Hoy (RF28 canónico) solo el practicante bloquea, así que en la práctica esta
+     * regla silencia al paciente. La generalización deja el modelo listo para habilitar
+     * el bloqueo en ambos sentidos sin migración de datos.
      */
     public void ensureSenderCanWrite(User sender) {
         if (!this.blocked) {
             return;
         }
-        boolean senderIsPatient = patient != null
-                && patient.getUser() != null
-                && patient.getUser().getId().equals(sender.getId());
-        if (senderIsPatient) {
-            throw new UnauthorizedOperationException("El paciente ha sido bloqueado en esta sesión de chat por el practicante.");
+        if (sender == null) {
+            throw new IllegalArgumentException("El sender no puede ser nulo al validar el bloqueo.");
+        }
+        boolean senderIsBlocker = blockedByUser != null
+                && blockedByUser.getId() != null
+                && blockedByUser.getId().equals(sender.getId());
+        if (!senderIsBlocker) {
+            throw new UnauthorizedOperationException(
+                    "Esta sesión de chat está bloqueada: no puede enviar mensajes.",
+                    "CHAT_BLOCKED");
         }
     }
 

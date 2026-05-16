@@ -117,4 +117,19 @@ public class ChatMessagePersistenceAdapter implements ChatMessageRepository {
         return jpaChatMessageRepository.findFirstByChatSessionOrderBySentAtDesc(sessionEntity)
                 .map(ChatMessagePersistenceMapper::toDomainShallow);
     }
+
+    @Override
+    public long countTotalUnreadByReceiver(Long receiverUserId) {
+        return jpaChatMessageRepository.countTotalUnreadByReceiver(receiverUserId);
+    }
+
+    @Override
+    public List<ChatMessage> findReadReceiptsForSenderSince(ChatSession session, Long senderUserId, Instant since) {
+        ChatSessionEntity sessionEntity = ChatSessionPersistenceMapper.toEntityShallow(session);
+        return jpaChatMessageRepository
+                .findReadReceiptsForSenderSince(sessionEntity, senderUserId, since)
+                .stream()
+                .map(ChatMessagePersistenceMapper::toDomainShallow)
+                .collect(Collectors.toList());
+    }
 }
