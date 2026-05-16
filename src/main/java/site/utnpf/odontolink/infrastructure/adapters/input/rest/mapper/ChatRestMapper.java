@@ -126,7 +126,8 @@ public class ChatRestMapper {
                 page.getTotalPages(),
                 page.isLast(),
                 page.hasNext(),
-                page.hasPrevious()
+                page.hasPrevious(),
+                page.getServerTime()
         );
     }
 

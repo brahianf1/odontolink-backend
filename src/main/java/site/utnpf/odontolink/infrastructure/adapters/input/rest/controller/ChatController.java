@@ -130,7 +130,9 @@ public class ChatController {
     @GetMapping("/sessions")
     @PreAuthorize("hasRole('PATIENT') or hasRole('PRACTITIONER')")
     public ResponseEntity<List<ChatSessionResponseDTO>> getMyChatSessions(
-            @Parameter(description = "Cursor ISO-8601: devuelve solo sesiones con actividad posterior", example = "2026-05-15T10:00:00Z")
+            @Parameter(description = "Cursor ISO-8601 inclusivo (>=): devuelve solo sesiones cuyo lastMessage.sentAt es posterior o igual al cursor. " +
+                                     "Misma semántica que el cursor de mensajes; el FE deduplica por id de sesión.",
+                       example = "2026-05-15T10:00:00.000Z")
             @RequestParam(required = false) Instant since) {
 
         User authenticatedUser = authenticationFacade.getAuthenticatedUser();
@@ -297,26 +299,40 @@ public class ChatController {
      * Obtiene los mensajes de una sesión. Soporta dos modos según los query params:
      *
      * <ol>
-     *   <li><b>Modo polling unificado (CU 6.3 + CU012 - P1)</b>: sin params o con {@code ?since=}.
+     *   <li><b>Modo polling unificado (CU 6.3 + CU012)</b>: sin params o con {@code ?since=}.
      *       Devuelve un wrapper {@link ChatPollResponseDTO} con:
      *       <ul>
-     *         <li>{@code messages}: mensajes nuevos desde {@code since} (o el historial completo si no se pasa).</li>
-     *         <li>{@code readReceipts}: updates de {@code readAt} sobre mensajes propios desde {@code since}.</li>
+     *         <li>{@code messages}: si {@code since==null}, los <b>últimos N</b> mensajes en
+     *             orden ASC (N configurable, default 100). Para historiales más grandes el FE
+     *             debe pasar a modo paginado. Si {@code since != null}, los mensajes con
+     *             {@code sentAt >= since}.</li>
+     *         <li>{@code readReceipts}: updates de {@code readAt} con {@code readAt >= since}
+     *             sobre mensajes propios.</li>
      *         <li>{@code serverTime}: cursor a usar como {@code since} en el próximo poll.</li>
      *       </ul></li>
-     *   <li><b>Modo paginado (CU012 - P3)</b>: con {@code ?page=&size=}.
+     *   <li><b>Modo paginado</b>: con {@code ?page=&size=}.
      *       Devuelve {@link PagedChatMessagesResponseDTO} con {@code messages} en orden DESC,
-     *       {@code hasNext}/{@code hasPrevious}/{@code last} para el control del scroll-up.
-     *       {@code page=0} son los más recientes; tamaño 1..200 (default 50).</li>
+     *       {@code hasNext}/{@code hasPrevious}/{@code last} para el control del scroll-up,
+     *       y {@code serverTime} para seedear polling tras la carga paginada.
+     *       {@code page=0} son los más recientes; {@code size} en [1, 200] (default 50).</li>
      * </ol>
+     *
+     * <p>Orden estable: todas las queries ordenan por {@code sentAt} con tie-break por
+     * {@code id} en la misma dirección. Garantía sólida ante mensajes con timestamp empatado
+     * (seeds batch, alta concurrencia).
+     *
+     * <p>Cursor inclusivo: el filtro {@code since} es {@code >=}, no estricto. Combinado con
+     * el {@code serverTime} capturado antes del read, garantiza que ningún mensaje borde se
+     * pierda; el FE deduplica por {@code id} (el mismo mensaje en dos polls consecutivos es
+     * idempotente).
      *
      * <p>Precedencia: si vienen {@code page}/{@code size} <i>y</i> {@code since}, predomina la paginación.
      */
     @Operation(
             summary = "Obtener mensajes de una sesión (polling unificado o paginado)",
-            description = "Dos modos. Polling: sin params o ?since=ISO8601 → wrapper con messages + readReceipts + serverTime. " +
-                    "Paginado: ?page=&size= → wrapper paginado con hasNext/hasPrevious (page=0 = más recientes, DESC dentro de página). " +
-                    "La pertenencia a la sesión se valida en el dominio."
+            description = "Dos modos. Polling: sin params (últimos N + serverTime) o con ?since=ISO8601 (inclusive >=). " +
+                    "Paginado: ?page=&size= → wrapper con hasNext/hasPrevious + serverTime (page=0 = más recientes, DESC dentro de página). " +
+                    "Orden estable: sentAt + id como tie-break. size en [1,200] default 50. La pertenencia se valida en el dominio."
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200",
@@ -333,22 +349,22 @@ public class ChatController {
                                                           "senderId": 8,
                                                           "senderName": "Ana Martínez",
                                                           "content": "Hola Carlos, sí, confirmado.",
-                                                          "sentAt": "2026-05-13T09:45:02Z",
+                                                          "sentAt": "2026-05-13T09:45:02.345Z",
                                                           "readAt": null
                                                         }
                                                       ],
                                                       "readReceipts": [
-                                                        { "messageId": 1024, "readAt": "2026-05-13T09:43:01Z" }
+                                                        { "messageId": 1024, "readAt": "2026-05-13T09:43:01.012Z" }
                                                       ],
-                                                      "serverTime": "2026-05-13T09:45:10Z"
+                                                      "serverTime": "2026-05-13T09:45:10.789Z"
                                                     }
                                                     """),
                                     @ExampleObject(name = "Modo polling (carga inicial sin since)",
                                             value = """
                                                     {
-                                                      "messages": [ /* historial completo ASC */ ],
+                                                      "messages": [ /* últimos N en orden ASC */ ],
                                                       "readReceipts": [],
-                                                      "serverTime": "2026-05-13T09:45:00Z"
+                                                      "serverTime": "2026-05-13T09:45:00.000Z"
                                                     }
                                                     """),
                                     @ExampleObject(name = "Modo paginado (?page=&size=)",
@@ -361,7 +377,7 @@ public class ChatController {
                                                           "senderId": 8,
                                                           "senderName": "Ana Martínez",
                                                           "content": "Hola Carlos, sí, confirmado.",
-                                                          "sentAt": "2026-05-13T09:45:02Z",
+                                                          "sentAt": "2026-05-13T09:45:02.345Z",
                                                           "readAt": null
                                                         }
                                                       ],
@@ -371,7 +387,8 @@ public class ChatController {
                                                       "totalPages": 7,
                                                       "last": false,
                                                       "hasNext": true,
-                                                      "hasPrevious": false
+                                                      "hasPrevious": false,
+                                                      "serverTime": "2026-05-13T09:45:10.789Z"
                                                     }
                                                     """)
                             })
@@ -385,7 +402,8 @@ public class ChatController {
     public ResponseEntity<?> getMessages(
             @Parameter(description = "ID de la sesión de chat", required = true)
             @PathVariable Long sessionId,
-            @Parameter(description = "Timestamp ISO-8601 para modo polling (solo cambios posteriores)", example = "2026-05-13T09:42:11Z")
+            @Parameter(description = "Cursor ISO-8601 inclusivo (>=) para modo polling. Usar el serverTime del wrapper previo. El FE deduplica por id.",
+                       example = "2026-05-13T09:42:11.000Z")
             @RequestParam(required = false) Instant since,
             @Parameter(description = "Número de página (base 0) para modo paginado", example = "0")
             @RequestParam(required = false) Integer page,

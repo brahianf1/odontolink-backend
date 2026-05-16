@@ -528,6 +528,12 @@ public class BeanConfiguration {
      * El sistema de chat utiliza Simple Polling (REST) en lugar de WebSockets
      * para mantener la simplicidad y robustez de la arquitectura.
      */
+    /**
+     * El cap inicial es la cantidad máxima de mensajes que devuelve {@code GET /messages}
+     * cuando no se envían cursor ni paginación (modo de carga inicial sin params). Default
+     * 100, suficiente para conversaciones modestas. Para historiales mayores el FE pasa a
+     * paginación explícita ({@code ?page=&size=}).
+     */
     @Bean
     public IChatUseCase chatUseCase(
             ChatSessionRepository chatSessionRepository,
@@ -535,14 +541,16 @@ public class BeanConfiguration {
             PatientRepository patientRepository,
             PractitionerRepository practitionerRepository,
             AppointmentRepository appointmentRepository,
-            ChatPolicyService chatPolicyService) {
+            ChatPolicyService chatPolicyService,
+            @Value("${odontolink.chat.initial-load-cap:100}") int chatInitialLoadCap) {
         return new ChatService(
                 chatSessionRepository,
                 chatMessageRepository,
                 patientRepository,
                 practitionerRepository,
                 appointmentRepository,
-                chatPolicyService
+                chatPolicyService,
+                chatInitialLoadCap
         );
     }
 

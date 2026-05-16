@@ -1,5 +1,6 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -18,6 +19,9 @@ import java.util.List;
  *   <li>{@code hasPrevious = page > 0}: hay una página más reciente (menos común; el FE
  *       suele iniciar siempre desde page=0).</li>
  *   <li>{@code last} se conserva como sinónimo de {@code !hasNext} por compatibilidad.</li>
+ *   <li>{@code serverTime} es el instante capturado por el servidor justo antes de leer la
+ *       base. Idéntico al del wrapper polling: el FE lo usa como {@code ?since=} del próximo
+ *       poll, evitando clock skew con el reloj local.</li>
  * </ul>
  *
  * <p>Se devuelve un envoltorio propio en lugar de {@code org.springframework.data.domain.Page}
@@ -72,12 +76,19 @@ public class PagedChatMessagesResponseDTO {
      */
     private boolean hasPrevious;
 
+    /**
+     * Instante de referencia capturado por el servidor antes de la lectura. El FE lo usa
+     * como {@code ?since=} para arrancar el polling tras una carga inicial paginada,
+     * evitando clock skew. Idéntico contrato al wrapper polling.
+     */
+    private Instant serverTime;
+
     public PagedChatMessagesResponseDTO() {
     }
 
     public PagedChatMessagesResponseDTO(List<ChatMessageResponseDTO> messages, int page, int size,
                                         long totalElements, int totalPages, boolean last,
-                                        boolean hasNext, boolean hasPrevious) {
+                                        boolean hasNext, boolean hasPrevious, Instant serverTime) {
         this.messages = messages;
         this.page = page;
         this.size = size;
@@ -86,6 +97,7 @@ public class PagedChatMessagesResponseDTO {
         this.last = last;
         this.hasNext = hasNext;
         this.hasPrevious = hasPrevious;
+        this.serverTime = serverTime;
     }
 
     // Getters y Setters
@@ -151,5 +163,13 @@ public class PagedChatMessagesResponseDTO {
 
     public void setHasPrevious(boolean hasPrevious) {
         this.hasPrevious = hasPrevious;
+    }
+
+    public Instant getServerTime() {
+        return serverTime;
+    }
+
+    public void setServerTime(Instant serverTime) {
+        this.serverTime = serverTime;
     }
 }

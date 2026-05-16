@@ -16,35 +16,42 @@ import java.util.Optional;
 /**
  * Repositorio JPA para ChatMessageEntity.
  *
- * Soporta tres modos de consulta del CU012:
- * 1. Historial completo / polling (existentes).
- * 2. Historial paginado para no saturar memoria en chats largos.
- * 3. Conteo de mensajes no-leídos del usuario autenticado (badges UX).
+ * <p>Convención: todas las queries que listan mensajes ordenan por {@code sentAt} y usan
+ * {@code id} como tie-breaker en la misma dirección. Garantiza orden estable cuando dos
+ * mensajes comparten {@code sentAt} (seeds batch, alta concurrencia) para que el dedupe +
+ * scroll-up del FE no sufra saltos.
+ *
+ * <p>Los cursores temporales son <b>inclusivos</b> ({@code >=}) en lugar de estrictos
+ * ({@code >}) para no perder eventos cuya marca cae exactamente en el instante del cursor
+ * previo. El FE deduplica por id, así que ver el mensaje borde dos veces es seguro.
  *
  * @author OdontoLink Team
  */
 @Repository
 public interface JpaChatMessageRepository extends JpaRepository<ChatMessageEntity, Long> {
 
-    List<ChatMessageEntity> findByChatSessionOrderBySentAtAsc(ChatSessionEntity chatSession);
-
-    List<ChatMessageEntity> findByChatSessionAndSentAtAfterOrderBySentAtAsc(
-            ChatSessionEntity chatSession,
-            Instant sinceTimestamp
-    );
-
-    List<ChatMessageEntity> findByChatSessionIdOrderBySentAtAsc(Long chatSessionId);
-
     long countByChatSession(ChatSessionEntity chatSession);
 
-    long countByChatSessionAndSentAtAfter(ChatSessionEntity chatSession, Instant sinceTimestamp);
+    /**
+     * Página de mensajes ordenados DESC con tie-break por id (convención WhatsApp/Telegram).
+     * Se usa también para la carga inicial acotada (los últimos N) — el caller indica el
+     * tamaño vía {@link Pageable} y el adapter invierte el orden a ASC si lo necesita.
+     */
+    @Query("SELECT m FROM ChatMessageEntity m " +
+           "WHERE m.chatSession = :session " +
+           "ORDER BY m.sentAt DESC, m.id DESC")
+    List<ChatMessageEntity> findInSessionOrderedDesc(@Param("session") ChatSessionEntity chatSession,
+                                                     Pageable pageable);
 
     /**
-     * Página de mensajes ordenados por sentAt DESC. Diseñado para "carga inicial perezosa":
-     * el cliente pide la página 0 (los más recientes), y al hacer scroll-up pide páginas
-     * sucesivas. La página DESC es la convención estándar de WhatsApp/Telegram.
+     * Polling delta inclusivo: {@code sentAt >= since}, ASC + tie-break por id.
      */
-    List<ChatMessageEntity> findByChatSessionOrderBySentAtDesc(ChatSessionEntity chatSession, Pageable pageable);
+    @Query("SELECT m FROM ChatMessageEntity m " +
+           "WHERE m.chatSession = :session " +
+           "AND m.sentAt >= :since " +
+           "ORDER BY m.sentAt ASC, m.id ASC")
+    List<ChatMessageEntity> findInSessionSinceInclusiveAsc(@Param("session") ChatSessionEntity chatSession,
+                                                           @Param("since") Instant since);
 
     /**
      * Cuenta los mensajes no-leídos de los que el receptor NO es el sender.
@@ -59,10 +66,10 @@ public interface JpaChatMessageRepository extends JpaRepository<ChatMessageEntit
 
     /**
      * Bulk-update que marca como leídos todos los mensajes no-leídos enviados por la contraparte.
-     * Lo hacemos en una sola sentencia UPDATE para evitar el patrón N+1 (un select-update por mensaje)
-     * cuando un usuario abre una conversación con cientos de mensajes pendientes.
+     * Una sola sentencia UPDATE evita el patrón N+1 cuando un usuario abre una conversación con
+     * cientos de mensajes pendientes.
      *
-     * @return cantidad de filas actualizadas (útil para el frontend, p. ej. para decidir si refrescar).
+     * @return cantidad de filas actualizadas (útil para que el frontend decida si refrescar).
      */
     @Modifying
     @Query("UPDATE ChatMessageEntity m SET m.readAt = :readAt " +
@@ -74,18 +81,18 @@ public interface JpaChatMessageRepository extends JpaRepository<ChatMessageEntit
                                @Param("readAt") Instant readAt);
 
     /**
-     * Último mensaje de la sesión. Se usa para ordenar el inbox por actividad real
-     * (en lugar de por createdAt de la sesión, que solo refleja la primera atención).
+     * Último mensaje de la sesión, para ordenar el inbox por actividad real. Tie-break por id
+     * para deduplicar el caso (raro) de dos mensajes con el mismo {@code sentAt}.
      */
-    Optional<ChatMessageEntity> findFirstByChatSessionOrderBySentAtDesc(ChatSessionEntity chatSession);
+    @Query("SELECT m FROM ChatMessageEntity m " +
+           "WHERE m.chatSession = :session " +
+           "ORDER BY m.sentAt DESC, m.id DESC")
+    List<ChatMessageEntity> findLastMessageInSession(@Param("session") ChatSessionEntity chatSession,
+                                                     Pageable pageable);
 
     /**
      * Suma los no-leídos de TODAS las sesiones (paciente o practicante) donde el usuario
      * indicado es participante. Usado por el badge global del sidebar (CU012 - P8).
-     *
-     * <p>Se filtra por participación (el usuario debe ser el patient.user o el practitioner.user
-     * de la sesión) y por que el sender del mensaje NO sea él (los propios mensajes nunca
-     * cuentan como no-leídos).
      */
     @Query("SELECT COUNT(m) FROM ChatMessageEntity m " +
            "WHERE m.readAt IS NULL " +
@@ -95,19 +102,17 @@ public interface JpaChatMessageRepository extends JpaRepository<ChatMessageEntit
     long countTotalUnreadByReceiver(@Param("userId") Long userId);
 
     /**
-     * Read-receipts entrantes para el sender (P1): mensajes que envió {@code senderUserId}
-     * en la sesión, cuya marca {@code readAt} es posterior a {@code since}.
-     *
-     * <p>Devuelve los mensajes completos (el caller solo expone messageId + readAt al cliente).
-     * Orden ASC por {@code readAt} para que el frontend los aplique en orden cronológico.
+     * Read-receipts entrantes para el sender: mensajes que envió {@code senderUserId} en la
+     * sesión, cuya marca {@code readAt} es posterior o igual a {@code since}. Orden ASC por
+     * {@code readAt} con tie-break por id para aplicación cronológica idempotente.
      */
     @Query("SELECT m FROM ChatMessageEntity m " +
            "WHERE m.chatSession = :session " +
            "AND m.sender.id = :senderUserId " +
            "AND m.readAt IS NOT NULL " +
-           "AND m.readAt > :since " +
-           "ORDER BY m.readAt ASC")
-    List<ChatMessageEntity> findReadReceiptsForSenderSince(@Param("session") ChatSessionEntity session,
-                                                           @Param("senderUserId") Long senderUserId,
-                                                           @Param("since") Instant since);
+           "AND m.readAt >= :since " +
+           "ORDER BY m.readAt ASC, m.id ASC")
+    List<ChatMessageEntity> findReadReceiptsForSenderSinceInclusive(@Param("session") ChatSessionEntity session,
+                                                                    @Param("senderUserId") Long senderUserId,
+                                                                    @Param("since") Instant since);
 }
