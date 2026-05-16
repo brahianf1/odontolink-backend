@@ -11,12 +11,18 @@ import java.util.Optional;
  * Puerto de salida (Output Port) para operaciones de persistencia de ChatMessage.
  *
  * Cubre las necesidades de CU012:
- * - Historial completo / polling RESTful
+ * - Carga inicial acotada (últimos N) para no traer historiales completos sin control
+ * - Polling delta con cursor inclusivo (CU 6.3 + CU012)
  * - Historial paginado (no saturar memoria con conversaciones largas)
  * - Conteo de no-leídos para badges del inbox
  * - Bulk update de read receipts
- * - Detección de read-receipts entrantes para sincronizar al sender (P1)
- * - Contador global de no-leídos para el badge del sidebar (P8)
+ * - Detección de read-receipts entrantes para sincronizar al sender
+ * - Contador global de no-leídos para el badge del sidebar
+ *
+ * <p>Convención de ordenamiento estable: todos los listados ordenan por {@code sentAt} y
+ * usan {@code id} como tie-breaker en la misma dirección. Sin secundaria el FE puede
+ * sufrir saltos visuales o duplicados que no deduplican cuando dos mensajes comparten
+ * timestamp exacto (seed batch, alta concurrencia).
  *
  * @author OdontoLink Team
  */
@@ -26,21 +32,34 @@ public interface ChatMessageRepository {
 
     Optional<ChatMessage> findById(Long id);
 
-    /** Historial completo, ascendente (más antiguo primero) — primera carga. */
-    List<ChatMessage> findByChatSessionOrderBySentAtAsc(ChatSession session);
+    /**
+     * Últimos N mensajes de la sesión devueltos en orden cronológico ASC
+     * (el más reciente queda al final, listo para renderizar).
+     *
+     * <p>Es la carga inicial acotada del cliente: evita el anti-pattern de devolver
+     * historiales completos sin control. Para conversaciones más grandes, el FE debe
+     * pasar a paginación explícita.
+     */
+    List<ChatMessage> findLatestInSessionAsc(ChatSession session, int limit);
 
-    /** Polling: solo mensajes nuevos desde el timestamp. */
-    List<ChatMessage> findByChatSessionAndSentAtAfterOrderBySentAtAsc(ChatSession session, Instant sinceTimestamp);
-
-    List<ChatMessage> findByChatSessionIdOrderBySentAtAsc(Long chatSessionId);
+    /**
+     * Polling delta: mensajes con {@code sentAt >= since}, orden ASC por {@code sentAt}
+     * con tie-break por {@code id} ASC.
+     *
+     * <p>El cursor es <b>inclusivo</b> a propósito: con cursor estricto, un mensaje que
+     * se commita exactamente en el instante {@code since} (cuando el snapshot anterior
+     * no llegó a verlo) se pierde para siempre. Con {@code >=} el mensaje aparece de
+     * nuevo en el próximo poll y el FE lo deduplica por {@code id} (idempotencia).
+     * Esta semántica está alineada con APIs modernas tipo Slack/GitHub timeline.
+     */
+    List<ChatMessage> findInSessionSinceInclusiveAsc(ChatSession session, Instant since);
 
     long countByChatSession(ChatSession session);
 
-    long countByChatSessionAndSentAtAfter(ChatSession session, Instant sinceTimestamp);
-
     /**
-     * Página DESC del historial. Se devuelve en orden cronológico inverso (más reciente primero)
-     * porque es el contrato estándar de paginación tipo "scroll infinito" de chats modernos.
+     * Página DESC del historial (orden por {@code sentAt DESC}, tie-break por {@code id DESC}).
+     * Se devuelve en orden cronológico inverso (más reciente primero) — convención estándar
+     * de paginación tipo "scroll infinito" de chats modernos.
      */
     List<ChatMessage> findByChatSessionPagedDesc(ChatSession session, int page, int size);
 
@@ -68,12 +87,15 @@ public interface ChatMessageRepository {
 
     /**
      * Mensajes <i>enviados por</i> {@code senderUserId} en la sesión cuya marca de lectura
-     * ({@code readAt}) cambió a un valor posterior a {@code since}. Resuelve el agujero del
-     * polling clásico: con esta query el sender puede sincronizar el "doble check azul"
-     * sobre sus mensajes sin re-pedir el historial.
+     * ({@code readAt}) es posterior o igual a {@code since}. Resuelve el agujero del
+     * polling clásico: con esta query el sender sincroniza el "doble check azul" sobre sus
+     * mensajes sin re-pedir el historial.
      *
-     * <p>Los retorna ordenados por {@code readAt} ASC para que el frontend los aplique en
-     * orden cronológico.
+     * <p>Cursor inclusivo ({@code >=}) por el mismo motivo que los mensajes nuevos: evita
+     * pérdida de events en el borde y permite dedupe idempotente (aplicar el mismo
+     * {@code readAt} dos veces no cambia el estado).
+     *
+     * <p>Orden: {@code readAt ASC}, tie-break {@code id ASC}.
      */
-    List<ChatMessage> findReadReceiptsForSenderSince(ChatSession session, Long senderUserId, Instant since);
+    List<ChatMessage> findReadReceiptsForSenderSinceInclusive(ChatSession session, Long senderUserId, Instant since);
 }

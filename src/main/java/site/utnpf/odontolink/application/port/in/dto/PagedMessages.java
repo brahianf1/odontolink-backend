@@ -2,6 +2,7 @@ package site.utnpf.odontolink.application.port.in.dto;
 
 import site.utnpf.odontolink.domain.model.ChatMessage;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -15,8 +16,11 @@ import java.util.List;
  *   <li>{@code page=0} es la página de los mensajes <b>más recientes</b> (orden DESC global).</li>
  *   <li>{@code page=N+1} retrocede en el tiempo (mensajes más antiguos).</li>
  *   <li>Dentro de cada página, los mensajes vienen ordenados <b>DESC por {@code sentAt}</b>
- *       (el más reciente de la página primero). El frontend los renderiza de abajo hacia
- *       arriba al hacer scroll-up, igual que WhatsApp/Telegram.</li>
+ *       con tie-break por {@code id DESC}. Garantiza orden estable cuando dos mensajes
+ *       comparten {@code sentAt}.</li>
+ *   <li>{@code serverTime} es el instante capturado por el servidor justo antes de leer
+ *       la base. El FE lo usa como cursor de arranque para el polling subsiguiente
+ *       ({@code ?since=}), evitando clock skew con el reloj local.</li>
  * </ul>
  *
  * @author OdontoLink Team
@@ -28,13 +32,15 @@ public class PagedMessages {
     private final int size;
     private final long totalElements;
     private final int totalPages;
+    private final Instant serverTime;
 
-    public PagedMessages(List<ChatMessage> messages, int page, int size, long totalElements) {
+    public PagedMessages(List<ChatMessage> messages, int page, int size, long totalElements, Instant serverTime) {
         this.messages = messages;
         this.page = page;
         this.size = size;
         this.totalElements = totalElements;
         this.totalPages = size > 0 ? (int) Math.ceil((double) totalElements / size) : 0;
+        this.serverTime = serverTime;
     }
 
     public List<ChatMessage> getMessages() {
@@ -55,6 +61,10 @@ public class PagedMessages {
 
     public int getTotalPages() {
         return totalPages;
+    }
+
+    public Instant getServerTime() {
+        return serverTime;
     }
 
     /**

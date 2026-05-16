@@ -52,6 +52,12 @@ public class ChatService implements IChatUseCase {
     private final PractitionerRepository practitionerRepository;
     private final AppointmentRepository appointmentRepository;
     private final ChatPolicyService chatPolicyService;
+    /**
+     * Tope de mensajes devueltos por la carga inicial sin cursor (modo {@code GET /messages}
+     * sin params). Pensado para conversaciones modestas: para historiales largos el FE debe
+     * usar paginación explícita ({@code ?page=&size=}).
+     */
+    private final int initialLoadCap;
 
     public ChatService(
             ChatSessionRepository chatSessionRepository,
@@ -59,13 +65,18 @@ public class ChatService implements IChatUseCase {
             PatientRepository patientRepository,
             PractitionerRepository practitionerRepository,
             AppointmentRepository appointmentRepository,
-            ChatPolicyService chatPolicyService) {
+            ChatPolicyService chatPolicyService,
+            int initialLoadCap) {
         this.chatSessionRepository = chatSessionRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.patientRepository = patientRepository;
         this.practitionerRepository = practitionerRepository;
         this.appointmentRepository = appointmentRepository;
         this.chatPolicyService = chatPolicyService;
+        if (initialLoadCap <= 0) {
+            throw new IllegalArgumentException("initialLoadCap debe ser > 0");
+        }
+        this.initialLoadCap = initialLoadCap;
     }
 
     @Override
@@ -78,17 +89,22 @@ public class ChatService implements IChatUseCase {
         // una projection JPQL única.
         //
         // Filtro 'since' (P2): solo incluir si hubo actividad nueva relevante. Una sesión
-        // "cambió" en el sentido inbox cuando llegó un mensaje desde el cursor. Marcar mensajes
-        // como leídos por mí mismo NO cambia mi inbox (lo gestiona el FE localmente al disparar
-        // markAsRead), así que basta con consultar lastMessage.sentAt > since.
-        // Ojo con el orden: leemos primero el último mensaje (1 query) y, solo si la sesión
-        // pasa el filtro, leemos el unreadCount (otra query); así evitamos N queries de unread
+        // "cambió" en el sentido inbox cuando llegó un mensaje desde el cursor (marcar como
+        // leído lo propio no cambia mi inbox, eso lo gestiona el FE localmente).
+        //
+        // Semántica inclusiva (>=) para alinearse con el cursor de mensajes y readReceipts:
+        // si un mensaje commitea exactamente en el instante del cursor, lo queremos en el
+        // siguiente poll; el FE deduplica por id de sesión (idempotente). Sin esto, una
+        // race entre el captureTime y el commit puede perder la actualización.
+        //
+        // Orden: leemos primero el último mensaje (1 query) y, solo si la sesión pasa el
+        // filtro, leemos el unreadCount (otra query); así evitamos N queries de unread
         // cuando el usuario tiene muchas sesiones inactivas frente a un cursor reciente.
         List<ChatSessionView> enriched = new ArrayList<>(rawSessions.size());
         for (ChatSession session : rawSessions) {
             ChatMessage last = chatMessageRepository.findLastMessageInSession(session).orElse(null);
             if (since != null) {
-                if (last == null || !last.getSentAt().isAfter(since)) {
+                if (last == null || last.getSentAt().isBefore(since)) {
                     continue;
                 }
             }
@@ -122,7 +138,9 @@ public class ChatService implements IChatUseCase {
     public ChatPollResult getMessagesPoll(Long chatSessionId, User user, Instant sinceTimestamp) {
         // Capturar serverTime ANTES de las queries: cualquier mensaje que llegue durante el
         // procesamiento queda fuera de esta respuesta pero se entregará en el próximo poll
-        // cuando el FE use este serverTime como cursor. Evita carreras y clock skew.
+        // cuando el FE use este serverTime como cursor. Combinado con el cursor inclusivo
+        // ({@code >=}) en las queries, garantiza que ningún mensaje borde se pierda; el FE
+        // deduplica por id en el ciclo siguiente.
         Instant serverTime = Instant.now();
 
         ChatSession chatSession = loadSessionOrThrow(chatSessionId);
@@ -131,12 +149,15 @@ public class ChatService implements IChatUseCase {
         List<ChatMessage> messages;
         List<ReadReceipt> readReceipts;
         if (sinceTimestamp == null) {
-            // Primera carga: historial completo, sin read-receipts (el cliente lo tiene fresco).
-            messages = chatMessageRepository.findByChatSessionOrderBySentAtAsc(chatSession);
+            // Carga inicial sin cursor: devolvemos los últimos N mensajes en orden ASC.
+            // Para historiales más grandes el FE debe pasar a paginación explícita
+            // (?page=&size=) — el wrapper paginado también lleva serverTime para arrancar
+            // el polling sin necesidad de hacer una carga sin cap.
+            messages = chatMessageRepository.findLatestInSessionAsc(chatSession, initialLoadCap);
             readReceipts = Collections.emptyList();
         } else {
-            messages = chatMessageRepository.findByChatSessionAndSentAtAfterOrderBySentAtAsc(chatSession, sinceTimestamp);
-            List<ChatMessage> myReadMsgs = chatMessageRepository.findReadReceiptsForSenderSince(
+            messages = chatMessageRepository.findInSessionSinceInclusiveAsc(chatSession, sinceTimestamp);
+            List<ChatMessage> myReadMsgs = chatMessageRepository.findReadReceiptsForSenderSinceInclusive(
                     chatSession, user.getId(), sinceTimestamp);
             readReceipts = myReadMsgs.stream()
                     .map(m -> new ReadReceipt(m.getId(), m.getReadAt()))
@@ -155,12 +176,18 @@ public class ChatService implements IChatUseCase {
         if (size <= 0 || size > 200) {
             throw new IllegalArgumentException("El tamaño de página debe estar entre 1 y 200.");
         }
+        // Capturar serverTime ANTES de leer mantiene el mismo contrato de cursor que el
+        // wrapper polling: tras una carga inicial paginada, el FE puede arrancar polling
+        // con ?since=serverTime sin necesidad de Date.now() (clock skew) ni de una carga
+        // total sin cap.
+        Instant serverTime = Instant.now();
+
         ChatSession chatSession = loadSessionOrThrow(chatSessionId);
         chatPolicyService.validateMessageAccess(chatSession, user);
 
         List<ChatMessage> pageContent = chatMessageRepository.findByChatSessionPagedDesc(chatSession, page, size);
         long total = chatMessageRepository.countByChatSession(chatSession);
-        return new PagedMessages(pageContent, page, size, total);
+        return new PagedMessages(pageContent, page, size, total, serverTime);
     }
 
     @Override
