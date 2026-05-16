@@ -41,10 +41,19 @@ FROM eclipse-temurin:17-jre-jammy AS runtime
 
 # curl es necesario para el HEALTHCHECK; tini se encarga del manejo correcto
 # de señales como PID 1 para que la JVM reciba SIGTERM y haga un apagado
-# ordenado en los redeploys de Dokploy.
+# ordenado en los redeploys de Dokploy. tzdata trae los datos de zona horaria
+# (linux/arm64 jammy no los incluye por defecto y sin esto cualquier zona
+# distinta de UTC cae a GMT silenciosamente).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl tini \
+    && apt-get install -y --no-install-recommends curl tini tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# Zona horaria del OS (y por consecuencia del JVM). El proyecto opera 100% en
+# Argentina, así que pinearla acá garantiza que tanto los logs del sistema como
+# LocalDate.now() en la app vean la misma fecha de calendario sin depender de
+# Dokploy. Dokploy puede sobreescribir esta variable en su UI si en algún
+# momento se necesita.
+ENV TZ=America/Argentina/Buenos_Aires
 
 # Usuario sin privilegios para el runtime.
 RUN groupadd --system --gid 1001 spring \
