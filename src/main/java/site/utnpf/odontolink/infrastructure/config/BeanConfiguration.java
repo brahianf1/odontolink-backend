@@ -635,6 +635,61 @@ public class BeanConfiguration {
     }
 
     /**
+     * Cliente S3 del bucket compartido por las funcionalidades pre-existentes
+     * (fotos de perfil, etc.). El modulo de IA usa un cliente separado y
+     * declara su propio bean en {@code AiAgentBeanConfiguration}.
+     *
+     * <p>{@code destroyMethod = "close"}: el SDK no es leaky en la practica,
+     * pero cerrar al apagar el contexto libera el pool HTTP prolijamente.
+     */
+    @Bean(name = "profilePictureS3Client", destroyMethod = "close")
+    public software.amazon.awssdk.services.s3.S3Client profilePictureS3Client(
+            @Value("${storage.s3.endpoint:}") String endpoint,
+            @Value("${storage.s3.region:auto}") String region,
+            @Value("${storage.s3.access-key-id:unset}") String accessKeyId,
+            @Value("${storage.s3.secret-access-key:unset}") String secretAccessKey,
+            @Value("${storage.s3.path-style:false}") boolean pathStyle) {
+        // Mismo patron defensivo que el cliente de la KB: aceptamos config
+        // vacia para que la app arranque, y dejamos que el primer upload
+        // dispare StorageException con mensaje claro si las credenciales
+        // no fueron seteadas.
+        String effectiveEndpoint = (endpoint == null || endpoint.isBlank())
+                ? "https://invalid-storage-endpoint.localhost"
+                : endpoint;
+        software.amazon.awssdk.services.s3.S3Configuration s3Config =
+                software.amazon.awssdk.services.s3.S3Configuration.builder()
+                        .pathStyleAccessEnabled(pathStyle)
+                        .build();
+        return software.amazon.awssdk.services.s3.S3Client.builder()
+                .endpointOverride(java.net.URI.create(effectiveEndpoint))
+                .region(software.amazon.awssdk.regions.Region.of(region))
+                .credentialsProvider(software.amazon.awssdk.auth.credentials.StaticCredentialsProvider.create(
+                        software.amazon.awssdk.auth.credentials.AwsBasicCredentials.create(accessKeyId, secretAccessKey)))
+                .httpClient(software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient.create())
+                .requestChecksumCalculation(software.amazon.awssdk.core.checksums.RequestChecksumCalculation.WHEN_REQUIRED)
+                .responseChecksumValidation(software.amazon.awssdk.core.checksums.ResponseChecksumValidation.WHEN_REQUIRED)
+                .serviceConfiguration(s3Config)
+                .build();
+    }
+
+    /**
+     * Bean primario de {@link IObjectStoragePort}: lo consumen las
+     * funcionalidades que ya existian antes del modulo IA (fotos de perfil).
+     * El modulo IA inyecta su propio bean calificado
+     * ({@code @Qualifier("aiKbObjectStorage")}).
+     */
+    @Bean
+    @org.springframework.context.annotation.Primary
+    public IObjectStoragePort profilePictureObjectStorage(
+            @org.springframework.beans.factory.annotation.Qualifier("profilePictureS3Client")
+            software.amazon.awssdk.services.s3.S3Client s3Client,
+            @Value("${storage.s3.bucket:}") String bucket,
+            @Value("${storage.s3.public-base-url:}") String publicBaseUrl) {
+        return new site.utnpf.odontolink.infrastructure.adapters.output.storage
+                .S3CompatibleObjectStorageAdapter(s3Client, bucket, publicBaseUrl);
+    }
+
+    /**
      * Bean para el caso de uso de configuración institucional (RF07).
      *
      * El servicio aplica las modificaciones de forma inmediata sobre la

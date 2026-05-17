@@ -18,6 +18,7 @@ import site.utnpf.odontolink.domain.exception.DuplicateResourceException;
 import site.utnpf.odontolink.domain.exception.IncorrectCurrentPasswordException;
 import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.exception.InvalidPasswordResetTokenException;
+import site.utnpf.odontolink.domain.exception.LlmProviderException;
 import site.utnpf.odontolink.domain.exception.RateLimitExceededException;
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
 import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
@@ -227,6 +228,31 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(errorResponse);
+    }
+
+    /**
+     * Maneja fallas del proveedor externo del LLM (modulo de IA, RF31-RF33).
+     * Devolvemos 503 porque las causas son siempre externas (timeouts del
+     * proveedor, credencial expirada, UUID inexistente), y el frontend
+     * puede sugerir reintentar / forzar resync. El {@code errorCode} viaja
+     * para que el FE distinga la causa (unavailable vs bad_request).
+     */
+    @ExceptionHandler(LlmProviderException.class)
+    public ResponseEntity<ErrorResponseDTO> handleLlmProviderException(
+            LlmProviderException ex,
+            HttpServletRequest request) {
+
+        log.warn("Falla del proveedor de IA al servir {} {} (status={}): {}",
+                request.getMethod(), request.getRequestURI(), ex.getStatusCode(), ex.getMessage());
+
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                HttpStatus.SERVICE_UNAVAILABLE.value(),
+                "AI Provider Unavailable",
+                "El proveedor de IA no esta disponible temporalmente. Intente nuevamente.",
+                request.getRequestURI()
+        );
+        errorResponse.setErrorCode(ex.getErrorCode());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse);
     }
 
     /**
