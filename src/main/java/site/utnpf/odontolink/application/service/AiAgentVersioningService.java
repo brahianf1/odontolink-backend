@@ -10,6 +10,7 @@ import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
 import site.utnpf.odontolink.domain.model.AiAdminAuditEvent;
 import site.utnpf.odontolink.domain.model.AiAgentConfiguration;
 import site.utnpf.odontolink.domain.model.AiAgentConfigurationVersion;
+import site.utnpf.odontolink.domain.model.PageResult;
 import site.utnpf.odontolink.domain.repository.AiAdminAuditEventRepository;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationRepository;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationVersionRepository;
@@ -54,6 +55,14 @@ public class AiAgentVersioningService implements IAiAgentVersioningUseCase {
     @Transactional(readOnly = true)
     public List<AiAgentConfigurationVersion> listVersions() {
         return versionRepository.findAllOrderByVersionNumberDesc();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<AiAgentConfigurationVersion> listVersionsPaged(int page, int size) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, Math.min(size, 100));
+        return versionRepository.findPaged(safePage, safeSize);
     }
 
     @Override
@@ -149,6 +158,19 @@ public class AiAgentVersioningService implements IAiAgentVersioningUseCase {
     @Transactional(readOnly = true)
     public List<AiAdminAuditEvent> listAuditEvents(int limit) {
         return auditRepository.findAllOrderByOccurredAtDesc(limit);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<AiAdminAuditEvent> listAuditEventsPaged(AiAdminAuditEvent.Type type,
+                                                              Instant from,
+                                                              Instant to,
+                                                              int page,
+                                                              int size) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, Math.min(size, 200));
+        // type / from / to permanecen tal cual; null en cualquiera de los tres = sin filtro.
+        return auditRepository.findPaged(type, from, to, safePage, safeSize);
     }
 
     private Long resolveActorId() {

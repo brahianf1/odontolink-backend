@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.domain.repository;
 
 import site.utnpf.odontolink.domain.model.AiAgentConfigurationVersion;
+import site.utnpf.odontolink.domain.model.PageResult;
 
 import java.util.List;
 import java.util.Optional;
@@ -18,6 +19,11 @@ public interface AiAgentConfigurationVersionRepository {
      * ve mas recientes primero al revisar el historial.
      */
     List<AiAgentConfigurationVersion> findAllOrderByVersionNumberDesc();
+
+    /**
+     * Pagina de versiones ordenadas descendente por {@code versionNumber}.
+     */
+    PageResult<AiAgentConfigurationVersion> findPaged(int page, int size);
 
     Optional<AiAgentConfigurationVersion> findByVersionNumber(int versionNumber);
 

@@ -4,9 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import site.utnpf.odontolink.application.port.out.IObjectStoragePort;
 import site.utnpf.odontolink.application.port.out.StorageException;
+import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
@@ -73,6 +76,24 @@ public class S3CompatibleObjectStorageAdapter implements IObjectStoragePort {
             // Idempotente: borrar lo que no existe no es un error.
         } catch (S3Exception ex) {
             throw new StorageException("Falla al borrar el objeto '" + key + "' del storage.", ex);
+        }
+    }
+
+    @Override
+    public IObjectStoragePort.DownloadedObject download(String key) {
+        requireConfigured();
+        try {
+            GetObjectRequest request = GetObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .build();
+            ResponseBytes<GetObjectResponse> response = s3Client.getObjectAsBytes(request);
+            return new IObjectStoragePort.DownloadedObject(
+                    response.asByteArray(), response.response().contentType());
+        } catch (NoSuchKeyException ex) {
+            throw new StorageException("Objeto '" + key + "' no encontrado en el storage.", ex);
+        } catch (S3Exception ex) {
+            throw new StorageException("Falla al descargar el objeto '" + key + "' del storage.", ex);
         }
     }
 

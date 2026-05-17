@@ -12,7 +12,10 @@ import site.utnpf.odontolink.application.port.out.StorageException;
 import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.exception.LlmProviderException;
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.error.AiAgentErrorCodes;
 import site.utnpf.odontolink.domain.model.KnowledgeBaseDocument;
+import site.utnpf.odontolink.domain.model.KnowledgeBaseDocumentKind;
+import site.utnpf.odontolink.domain.model.PageResult;
 import site.utnpf.odontolink.domain.repository.KnowledgeBaseDocumentRepository;
 
 import java.nio.charset.StandardCharsets;
@@ -108,12 +111,15 @@ public class KnowledgeBaseAdminService implements IKnowledgeBaseAdminUseCase {
     public KnowledgeBaseDocument addFaqDocument(String title, String content) {
         validateModuleConfigured();
         if (content == null || content.isBlank()) {
-            throw new InvalidBusinessRuleException("El contenido de la FAQ no puede estar vacio.");
+            throw new InvalidBusinessRuleException(
+                    "El contenido de la FAQ no puede estar vacio.",
+                    AiAgentErrorCodes.AI_KB_FILE_EMPTY);
         }
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         if (bytes.length > maxUploadBytes) {
             throw new InvalidBusinessRuleException(
-                    "El contenido excede el tamanio maximo permitido (" + maxUploadBytes + " bytes).");
+                    "El contenido excede el tamanio maximo permitido (" + maxUploadBytes + " bytes).",
+                    AiAgentErrorCodes.AI_KB_FILE_TOO_LARGE);
         }
 
         KnowledgeBaseDocument doc = KnowledgeBaseDocument.faq(title, content);
@@ -127,15 +133,19 @@ public class KnowledgeBaseAdminService implements IKnowledgeBaseAdminUseCase {
                                                  String contentType) {
         validateModuleConfigured();
         if (content == null || content.length == 0) {
-            throw new InvalidBusinessRuleException("El archivo es obligatorio y no puede estar vacio.");
+            throw new InvalidBusinessRuleException(
+                    "El archivo es obligatorio y no puede estar vacio.",
+                    AiAgentErrorCodes.AI_KB_FILE_EMPTY);
         }
         if (content.length > maxUploadBytes) {
             throw new InvalidBusinessRuleException(
-                    "El archivo excede el tamanio maximo permitido (" + maxUploadBytes + " bytes).");
+                    "El archivo excede el tamanio maximo permitido (" + maxUploadBytes + " bytes).",
+                    AiAgentErrorCodes.AI_KB_FILE_TOO_LARGE);
         }
         if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType)) {
             throw new InvalidBusinessRuleException(
-                    "Tipo de archivo no soportado. Tipos aceptados: " + ALLOWED_CONTENT_TYPES);
+                    "Tipo de archivo no soportado. Tipos aceptados: " + ALLOWED_CONTENT_TYPES,
+                    AiAgentErrorCodes.AI_KB_UNSUPPORTED_TYPE);
         }
 
         KnowledgeBaseDocument doc = KnowledgeBaseDocument.file(title, originalFileName, content.length, contentType);
@@ -196,6 +206,118 @@ public class KnowledgeBaseAdminService implements IKnowledgeBaseAdminUseCase {
             persisted.markFailed("Falla al iniciar la indexacion: " + ex.getMessage());
             return documentRepository.save(persisted);
         }
+    }
+
+    @Override
+    public KnowledgeBaseDocument updateDocument(Long id, String title, String content) {
+        validateModuleConfigured();
+        KnowledgeBaseDocument doc = documentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "KnowledgeBaseDocument", "id", String.valueOf(id)));
+
+        // Solo aceptamos contenido para FAQs. Para archivos subidos rechazamos
+        // con codigo estable: la edicion de binarios pasa por delete + create.
+        if (content != null && doc.getKind() != KnowledgeBaseDocumentKind.FAQ_TEXT) {
+            throw new InvalidBusinessRuleException(
+                    "Los documentos de tipo UPLOADED_FILE no admiten edicion de contenido. " +
+                            "Elimine y vuelva a subir el archivo.",
+                    AiAgentErrorCodes.AI_KB_UNSUPPORTED_TYPE);
+        }
+
+        // Rename siempre que llegue distinto. renameTo() valida no-vacio + tamanio.
+        if (title != null && !title.equals(doc.getTitle())) {
+            doc.renameTo(title);
+        }
+
+        // Si es FAQ y el contenido cambia, re-subimos el TXT al mismo
+        // storedObjectKey (reemplazo, sin generar uno nuevo) y disparamos
+        // reindex del data source asociado. Asi el indice remoto refleja
+        // la nueva FAQ sin proliferar objetos huerfanos en el bucket.
+        boolean contentChanged = content != null
+                && doc.getKind() == KnowledgeBaseDocumentKind.FAQ_TEXT
+                && !content.equals(doc.getInlineContent());
+        if (contentChanged) {
+            byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+            if (bytes.length > maxUploadBytes) {
+                throw new InvalidBusinessRuleException(
+                        "El contenido excede el tamanio maximo permitido (" + maxUploadBytes + " bytes).",
+                        AiAgentErrorCodes.AI_KB_FILE_TOO_LARGE);
+            }
+            doc.updateFaqContent(content);
+            // Re-upload al mismo key: pisa el objeto previo (S3 PUT es atomico).
+            aiKbStorage.upload(doc.getStoredObjectKey(), bytes, "text/plain");
+        }
+
+        KnowledgeBaseDocument saved = documentRepository.save(doc);
+
+        if (contentChanged && saved.getProviderDataSourceId() != null) {
+            try {
+                IndexingJobSnapshot job = kbProvider.startIndexing(
+                        knowledgeBaseUuid, List.of(saved.getProviderDataSourceId()));
+                saved.markIndexing(job.jobId());
+                saved = documentRepository.save(saved);
+            } catch (LlmProviderException ex) {
+                log.warn("Falla al disparar reindex tras editar FAQ id={}: {}", id, ex.getMessage());
+                saved.markFailed("Falla al re-indexar la FAQ tras edicion: " + ex.getMessage());
+                saved = documentRepository.save(saved);
+            }
+        }
+        return saved;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DocumentDownload downloadDocument(Long id) {
+        validateModuleConfigured();
+        KnowledgeBaseDocument doc = documentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "KnowledgeBaseDocument", "id", String.valueOf(id)));
+
+        // Para FAQs servimos el contenido inline directamente: evita el
+        // round-trip al bucket y siempre devuelve el texto fuente (lo que
+        // el admin tipeo), no su serializacion intermedia a TXT.
+        if (doc.getKind() == KnowledgeBaseDocumentKind.FAQ_TEXT) {
+            byte[] bytes = doc.getInlineContent() == null
+                    ? new byte[0]
+                    : doc.getInlineContent().getBytes(StandardCharsets.UTF_8);
+            return new DocumentDownload(bytes, "text/plain; charset=utf-8", doc.getOriginalFileName());
+        }
+
+        if (doc.getStoredObjectKey() == null || doc.getStoredObjectKey().isBlank()) {
+            throw new InvalidBusinessRuleException(
+                    "El documento todavia no fue subido al bucket; no hay binario que descargar.",
+                    AiAgentErrorCodes.AI_KB_FILE_EMPTY);
+        }
+
+        IObjectStoragePort.DownloadedObject downloaded = aiKbStorage.download(doc.getStoredObjectKey());
+        // Preferimos el contentType persistido en BD (el que el admin subio)
+        // antes que el que reporta el storage, porque algunos backends S3-compat
+        // devuelven application/octet-stream cuando el upload no envio header.
+        String contentType = doc.getContentType() != null && !doc.getContentType().isBlank()
+                ? doc.getContentType()
+                : downloaded.contentType();
+        return new DocumentDownload(downloaded.content(), contentType, doc.getOriginalFileName());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public IndexingJobSnapshot getIndexingJob(String jobId) {
+        validateModuleConfigured();
+        if (jobId == null || jobId.isBlank()) {
+            throw new InvalidBusinessRuleException("jobId es obligatorio.");
+        }
+        return kbProvider.getIndexingJobStatus(jobId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<KnowledgeBaseDocument> listDocumentsPaged(
+            site.utnpf.odontolink.domain.model.KnowledgeBaseDocumentStatus status,
+            int page,
+            int size) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, Math.min(size, 100));
+        return documentRepository.findPaged(status, safePage, safeSize);
     }
 
     @Override

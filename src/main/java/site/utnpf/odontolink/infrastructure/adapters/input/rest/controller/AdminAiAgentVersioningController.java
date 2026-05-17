@@ -14,15 +14,18 @@ import org.springframework.web.bind.annotation.RestController;
 import site.utnpf.odontolink.application.port.in.IAiAgentVersioningUseCase;
 import site.utnpf.odontolink.domain.model.AiAdminAuditEvent;
 import site.utnpf.odontolink.domain.model.AiAgentConfigurationVersion;
+import site.utnpf.odontolink.domain.model.PageResult;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AiAdminAuditEventResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AiAgentConfigurationVersionResponseDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.PageResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.AiAgentVersioningRestMapper;
 
-import java.util.List;
+import java.time.Instant;
 
 /**
  * Versionado y audit log del agente IA (RF31). Permite al admin revisar
- * el historial de publishes y revertir a una version anterior.
+ * el historial de publishes, revertir a una version anterior y auditar
+ * eventos de lifecycle / governance.
  */
 @RestController
 @RequestMapping("/api/admin/ai-agent")
@@ -38,13 +41,16 @@ public class AdminAiAgentVersioningController {
         this.useCase = useCase;
     }
 
-    @Operation(summary = "Listar versiones publicadas",
-            description = "Devuelve las versiones en orden descendente por numero. Cada publish " +
-                    "exitoso (o rollback) crea una nueva entrada inmutable.")
+    @Operation(summary = "Listar versiones publicadas (paginado)",
+            description = "Devuelve una pagina de versiones en orden descendente por versionNumber. " +
+                    "Cada publish exitoso o rollback crea una nueva entrada inmutable. Defaults: " +
+                    "page=0, size=20. Maximo size=100.")
     @GetMapping("/versions")
-    public ResponseEntity<List<AiAgentConfigurationVersionResponseDTO>> listVersions() {
-        List<AiAgentConfigurationVersion> versions = useCase.listVersions();
-        return ResponseEntity.ok(AiAgentVersioningRestMapper.toVersionResponseList(versions));
+    public ResponseEntity<PageResponseDTO<AiAgentConfigurationVersionResponseDTO>> listVersions(
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size) {
+        PageResult<AiAgentConfigurationVersion> versions = useCase.listVersionsPaged(page, size);
+        return ResponseEntity.ok(PageResponseDTO.of(versions, AiAgentVersioningRestMapper::toResponse));
     }
 
     @Operation(summary = "Rollback a una version anterior",
@@ -57,14 +63,20 @@ public class AdminAiAgentVersioningController {
         return ResponseEntity.ok(AiAgentVersioningRestMapper.toResponse(newVersion));
     }
 
-    @Operation(summary = "Listar eventos de auditoria",
-            description = "Devuelve los eventos de lifecycle del agente IA (publish, rollback, " +
-                    "cambios de la policy de gobernanza) en orden descendente. Limit configurable, " +
-                    "default 100, maximo 500.")
+    @Operation(summary = "Listar eventos de auditoria (paginado + filtros)",
+            description = "Devuelve eventos de lifecycle (publish, publish-failed, rollback) y de " +
+                    "governance (policy update) en orden descendente cronologico. Filtros opcionales: " +
+                    "type (AGENT_PUBLISH | AGENT_PUBLISH_FAILED | AGENT_ROLLBACK | GOVERNANCE_POLICY_UPDATED), " +
+                    "from / to (ISO-8601 timestamps; rango half-open). Defaults: page=0, size=50. " +
+                    "Maximo size=200.")
     @GetMapping("/audit-events")
-    public ResponseEntity<List<AiAdminAuditEventResponseDTO>> listAuditEvents(
-            @RequestParam(name = "limit", defaultValue = "100") int limit) {
-        List<AiAdminAuditEvent> events = useCase.listAuditEvents(limit);
-        return ResponseEntity.ok(AiAgentVersioningRestMapper.toAuditResponseList(events));
+    public ResponseEntity<PageResponseDTO<AiAdminAuditEventResponseDTO>> listAuditEvents(
+            @RequestParam(name = "type", required = false) AiAdminAuditEvent.Type type,
+            @RequestParam(name = "from", required = false) Instant from,
+            @RequestParam(name = "to", required = false) Instant to,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "50") int size) {
+        PageResult<AiAdminAuditEvent> events = useCase.listAuditEventsPaged(type, from, to, page, size);
+        return ResponseEntity.ok(PageResponseDTO.of(events, AiAgentVersioningRestMapper::toResponse));
     }
 }

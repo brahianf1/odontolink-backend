@@ -2,6 +2,7 @@ package site.utnpf.odontolink.domain.repository;
 
 import site.utnpf.odontolink.domain.model.KnowledgeBaseDocument;
 import site.utnpf.odontolink.domain.model.KnowledgeBaseDocumentStatus;
+import site.utnpf.odontolink.domain.model.PageResult;
 
 import java.util.List;
 import java.util.Optional;
@@ -13,6 +14,13 @@ import java.util.Optional;
 public interface KnowledgeBaseDocumentRepository {
 
     List<KnowledgeBaseDocument> findAllOrderByCreatedAtDesc();
+
+    /**
+     * Devuelve una pagina de documentos ordenados por {@code createdAt}
+     * descendente, opcionalmente filtrados por {@code status}. Si
+     * {@code status} es {@code null} no se filtra.
+     */
+    PageResult<KnowledgeBaseDocument> findPaged(KnowledgeBaseDocumentStatus status, int page, int size);
 
     Optional<KnowledgeBaseDocument> findById(Long id);
 

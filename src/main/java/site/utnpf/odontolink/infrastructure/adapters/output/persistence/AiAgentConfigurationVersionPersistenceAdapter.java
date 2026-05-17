@@ -1,8 +1,12 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.AiAgentConfigurationVersion;
+import site.utnpf.odontolink.domain.model.PageResult;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationVersionRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AiAgentConfigurationVersionEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.jpa_repository.JpaAiAgentConfigurationVersionRepository;
@@ -46,5 +50,20 @@ public class AiAgentConfigurationVersionPersistenceAdapter implements AiAgentCon
     @Override
     public int findMaxVersionNumber() {
         return jpa.findMaxVersionNumber();
+    }
+
+    @Override
+    public PageResult<AiAgentConfigurationVersion> findPaged(int page, int size) {
+        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "versionNumber"));
+        Page<AiAgentConfigurationVersionEntity> result = jpa.findAll(pageRequest);
+        List<AiAgentConfigurationVersion> content = result.getContent().stream()
+                .map(AiAgentConfigurationVersionPersistenceMapper::toDomain)
+                .toList();
+        return new PageResult<>(
+                content,
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages());
     }
 }

@@ -35,6 +35,23 @@ public interface IObjectStoragePort {
     void delete(String key);
 
     /**
+     * Resultado de una descarga: el binario y el MIME type que el storage
+     * tiene registrado para ese objeto. El MIME viaja por separado para que
+     * el caller pueda construir respuestas HTTP fieles sin re-inspeccionar
+     * los bytes.
+     */
+    record DownloadedObject(byte[] content, String contentType) {
+    }
+
+    /**
+     * Descarga un objeto del storage.
+     *
+     * @throws StorageException si el objeto no existe o la operacion falla
+     *                          por errores de red / credenciales.
+     */
+    DownloadedObject download(String key);
+
+    /**
      * Construye la URL publica para una clave dada combinando la base
      * publica configurada del bucket con la clave del objeto.
      *
