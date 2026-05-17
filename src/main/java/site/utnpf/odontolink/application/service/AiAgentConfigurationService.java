@@ -10,7 +10,6 @@ import site.utnpf.odontolink.application.port.out.ILlmAgentProviderPort.AgentSna
 import site.utnpf.odontolink.application.port.out.ILlmAgentProviderPort.AgentUpdateSpec;
 import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 import site.utnpf.odontolink.domain.exception.LlmProviderException;
-import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
 import site.utnpf.odontolink.domain.model.AiAdminAuditEvent;
 import site.utnpf.odontolink.domain.model.AiAgentConfiguration;
 import site.utnpf.odontolink.domain.model.AiAgentConfigurationVersion;
@@ -114,7 +113,15 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
 
     @Override
     public AiAgentConfiguration revertToDraft() {
-        AiAgentConfiguration config = requireExistingConfiguration();
+        AiAgentConfiguration config = requireConfiguredAgent();
+        if (config.getLifecycle() != AiAgentLifecycle.PUBLISHED) {
+            // Volver a DRAFT desde DRAFT/UNCONFIGURED no produce transicion real
+            // y confunde al frontend: lo rechazamos con un codigo estable para
+            // que pueda deshabilitar el boton "Revertir" segun el lifecycle.
+            throw new InvalidBusinessRuleException(
+                    "Solo se puede revertir a DRAFT una configuracion publicada.",
+                    AiAgentErrorCodes.AI_AGENT_NOT_PUBLISHED);
+        }
         config.markDraft();
         return configRepository.save(config);
     }
@@ -122,7 +129,7 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
     @Override
     public AiAgentConfiguration publish(boolean override) {
         validateProviderAgentUuid();
-        AiAgentConfiguration config = requireExistingConfiguration();
+        AiAgentConfiguration config = requireConfiguredAgent();
         AiGovernancePolicy policy = loadPolicyOrDefault();
         List<Guardrail> activeGuardrails = guardrailRepository.findAllActiveOrderByCreatedAtAsc();
 
@@ -130,15 +137,21 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
         boolean usedOverride = false;
         if (!missing.isEmpty()) {
             if (!override) {
+                // La lista de requisitos faltantes viaja como details[] (codigos
+                // estables) para que el frontend pueda pintarlos uno por uno
+                // sin parsear el mensaje humano. El message sigue presente para
+                // logs / soporte.
                 throw new InvalidBusinessRuleException(
-                        "No se puede publicar: faltan requisitos -> " + String.join(", ", missing),
-                        AiAgentErrorCodes.AI_AGENT_CONFIG_INVALID);
+                        "No se puede publicar: faltan requisitos. Detalle en 'details'.",
+                        AiAgentErrorCodes.AI_AGENT_CONFIG_INVALID,
+                        missing);
             }
             if (!policy.isAllowOverride()) {
                 throw new InvalidBusinessRuleException(
                         "Override solicitado pero la politica de gobernanza no lo permite. " +
                                 "Habilite allowOverride=true en /governance antes de re-intentar.",
-                        AiAgentErrorCodes.AI_AGENT_CONFIG_INVALID);
+                        AiAgentErrorCodes.AI_AGENT_CONFIG_INVALID,
+                        missing);
             }
             usedOverride = true;
         }
@@ -214,7 +227,7 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
     @Override
     @Transactional(readOnly = true)
     public PreviewResult preview() {
-        AiAgentConfiguration config = requireExistingConfiguration();
+        AiAgentConfiguration config = requireConfiguredAgent();
         List<Guardrail> activeGuardrails = guardrailRepository.findAllActiveOrderByCreatedAtAsc();
         String composed = config.composeInstruction(activeGuardrails);
         List<String> labels = activeGuardrails.stream().map(Guardrail::getLabel).toList();
@@ -286,10 +299,17 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
         return missing;
     }
 
-    private AiAgentConfiguration requireExistingConfiguration() {
+    /**
+     * Resuelve la configuracion vigente o lanza 422 con {@code AI_AGENT_NOT_CONFIGURED}.
+     * Se diferencia de un 404 generico porque el recurso si existe en el
+     * contrato (el endpoint responde): lo que falta es la carga inicial por
+     * parte del admin. El frontend ramifica para redirigir al wizard.
+     */
+    private AiAgentConfiguration requireConfiguredAgent() {
         return configRepository.findSingleton()
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "AiAgentConfiguration", "singleton", "1"));
+                .orElseThrow(() -> new InvalidBusinessRuleException(
+                        "El agente IA aun no tiene configuracion. Cargue una via PUT /configuration antes de operar.",
+                        AiAgentErrorCodes.AI_AGENT_NOT_CONFIGURED));
     }
 
     private AiGovernancePolicy loadPolicyOrDefault() {

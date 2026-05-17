@@ -105,7 +105,10 @@ public class GlobalExceptionHandler {
 
     /**
      * Maneja excepciones de reglas de negocio inválidas. Propaga el {@code errorCode}
-     * si la excepción lo definió, para que el frontend ramifique UX sin parsear el mensaje.
+     * si la excepción lo definió y, si el dominio adjunto una lista de
+     * {@code details} estructurada (codigos estables), tambien la expone en el
+     * body para que el frontend pueda ramificar UX por cada causa concreta
+     * sin parsear el mensaje humano.
      */
     @ExceptionHandler(InvalidBusinessRuleException.class)
     public ResponseEntity<ErrorResponseDTO> handleInvalidBusinessRuleException(
@@ -119,6 +122,9 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
         errorResponse.setErrorCode(ex.getErrorCode());
+        if (ex.getDetails() != null && !ex.getDetails().isEmpty()) {
+            errorResponse.setDetails(ex.getDetails());
+        }
 
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(errorResponse);
     }

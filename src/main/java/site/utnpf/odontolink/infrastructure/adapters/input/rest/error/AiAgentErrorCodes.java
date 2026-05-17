@@ -59,6 +59,21 @@ public final class AiAgentErrorCodes {
      */
     public static final String AI_KB_INDEXING_FAILED = "AI_KB_INDEXING_FAILED";
 
+    /**
+     * Se intento publicar o revertir un agente cuya configuracion todavia no
+     * fue creada (lifecycle virtual UNCONFIGURED). El frontend debe redirigir
+     * al wizard de primera carga.
+     */
+    public static final String AI_AGENT_NOT_CONFIGURED = "AI_AGENT_NOT_CONFIGURED";
+
+    /**
+     * Se intento {@code revert-to-draft} sobre una configuracion que no esta
+     * publicada. Volver a DRAFT desde DRAFT/UNCONFIGURED es un no-op
+     * encubierto: lo rechazamos para que el frontend no pinte una falsa
+     * transicion.
+     */
+    public static final String AI_AGENT_NOT_PUBLISHED = "AI_AGENT_NOT_PUBLISHED";
+
     // --- 404 Not Found --------------------------------------------------
 
     public static final String AI_KB_DOCUMENT_NOT_FOUND = "AI_KB_DOCUMENT_NOT_FOUND";

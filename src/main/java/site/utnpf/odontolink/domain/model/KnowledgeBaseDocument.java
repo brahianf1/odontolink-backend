@@ -153,6 +153,40 @@ public class KnowledgeBaseDocument {
         );
     }
 
+    /**
+     * Cambia el titulo del documento. Es metadata pura: no requiere re-subir
+     * al bucket ni reindexar en el proveedor, porque el titulo no viaja al
+     * data source (DO indexa contenido, no metadata local).
+     */
+    public void renameTo(String newTitle) {
+        validateNonBlank(newTitle, "title");
+        if (newTitle.length() > 200) {
+            throw new InvalidBusinessRuleException("El titulo no puede exceder 200 caracteres.");
+        }
+        this.title = newTitle.trim();
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Reemplaza el contenido inline de una FAQ. Solo aplica a documentos
+     * {@link KnowledgeBaseDocumentKind#FAQ_TEXT}. El service re-sube los
+     * bytes al bucket (mismo {@code storedObjectKey}) y dispara una
+     * reindexacion del data source asociado.
+     */
+    public void updateFaqContent(String newContent) {
+        if (this.kind != KnowledgeBaseDocumentKind.FAQ_TEXT) {
+            throw new InvalidBusinessRuleException(
+                    "Solo los documentos FAQ_TEXT permiten editar el contenido inline. " +
+                            "Para archivos subidos, elimine y vuelva a subir.");
+        }
+        if (newContent == null || newContent.isBlank()) {
+            throw new InvalidBusinessRuleException("El contenido de la FAQ no puede estar vacio.");
+        }
+        this.inlineContent = newContent;
+        this.sizeBytes = newContent.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        this.updatedAt = Instant.now();
+    }
+
     public void markUploaded(String storedObjectKey) {
         if (storedObjectKey == null || storedObjectKey.isBlank()) {
             throw new InvalidBusinessRuleException("storedObjectKey es obligatorio para marcar UPLOADED.");
