@@ -42,6 +42,7 @@ public class AiAgentConfigurationResponseDTO {
     private Integer rateLimitAuthenticatedPerHour;
     private String agentInvocationUrl;
     private String emergencyBannerText;
+    private Boolean provideCitations;
 
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
@@ -108,4 +109,7 @@ public class AiAgentConfigurationResponseDTO {
 
     public String getEmergencyBannerText() { return emergencyBannerText; }
     public void setEmergencyBannerText(String emergencyBannerText) { this.emergencyBannerText = emergencyBannerText; }
+
+    public Boolean getProvideCitations() { return provideCitations; }
+    public void setProvideCitations(Boolean provideCitations) { this.provideCitations = provideCitations; }
 }

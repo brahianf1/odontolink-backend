@@ -55,7 +55,8 @@ public final class AiAgentConfigurationPersistenceMapper {
                 entity.getRateLimitAuthenticatedPerHour() == null ? 60 : entity.getRateLimitAuthenticatedPerHour(),
                 entity.getAgentInvocationUrl(),
                 entity.getEmergencyBannerText() == null
-                        ? AiAgentConfiguration.DEFAULT_EMERGENCY_BANNER : entity.getEmergencyBannerText()
+                        ? AiAgentConfiguration.DEFAULT_EMERGENCY_BANNER : entity.getEmergencyBannerText(),
+                Boolean.TRUE.equals(entity.getProvideCitations())
         );
     }
 
@@ -86,6 +87,7 @@ public final class AiAgentConfigurationPersistenceMapper {
         entity.setRateLimitAuthenticatedPerHour(domain.getRateLimitAuthenticatedPerHour());
         entity.setAgentInvocationUrl(domain.getAgentInvocationUrl());
         entity.setEmergencyBannerText(domain.getEmergencyBannerText());
+        entity.setProvideCitations(domain.isProvideCitations());
         return entity;
     }
 

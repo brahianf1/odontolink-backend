@@ -1,18 +1,18 @@
 package site.utnpf.odontolink.infrastructure.adapters.output.persistence.mapper;
 
-import site.utnpf.odontolink.domain.model.Guardrail;
-import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.GuardrailEntity;
+import site.utnpf.odontolink.domain.model.AgentPolicyRule;
+import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AgentPolicyRuleEntity;
 
-public final class GuardrailPersistenceMapper {
+public final class AgentPolicyRulePersistenceMapper {
 
-    private GuardrailPersistenceMapper() {
+    private AgentPolicyRulePersistenceMapper() {
     }
 
-    public static Guardrail toDomain(GuardrailEntity entity) {
+    public static AgentPolicyRule toDomain(AgentPolicyRuleEntity entity) {
         if (entity == null) {
             return null;
         }
-        return new Guardrail(
+        return new AgentPolicyRule(
                 entity.getId(),
                 entity.getLabel(),
                 entity.getText(),
@@ -22,11 +22,11 @@ public final class GuardrailPersistenceMapper {
         );
     }
 
-    public static GuardrailEntity toEntity(Guardrail domain) {
+    public static AgentPolicyRuleEntity toEntity(AgentPolicyRule domain) {
         if (domain == null) {
             return null;
         }
-        GuardrailEntity entity = new GuardrailEntity();
+        AgentPolicyRuleEntity entity = new AgentPolicyRuleEntity();
         entity.setId(domain.getId());
         entity.setLabel(domain.getLabel());
         entity.setText(domain.getText());

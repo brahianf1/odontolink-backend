@@ -97,6 +97,10 @@ public class AiAgentVersioningService implements IAiAgentVersioningUseCase {
         // version previa: incluye los textos exactos de guardrails que
         // existian al momento del publish original, aunque hoy ya no
         // esten en la tabla.
+        // Nota sobre provideCitations: las versiones snapshotearon sin este
+        // campo. Aplicamos false (default safe del dominio) en rollback. Si
+        // en el futuro necesitamos restaurar fiel, agregamos el campo al
+        // snapshot AiAgentConfigurationVersion y migramos.
         AgentUpdateSpec spec = new AgentUpdateSpec(
                 previous.getDisplayName(),
                 previous.getComposedInstruction(),
@@ -104,7 +108,8 @@ public class AiAgentVersioningService implements IAiAgentVersioningUseCase {
                 previous.getTopP(),
                 previous.getMaxTokens(),
                 previous.getK(),
-                previous.getRetrievalMethod()
+                previous.getRetrievalMethod(),
+                false
         );
 
         Long actorId = resolveActorId();

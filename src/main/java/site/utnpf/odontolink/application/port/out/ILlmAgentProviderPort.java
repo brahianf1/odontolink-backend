@@ -1,14 +1,16 @@
 package site.utnpf.odontolink.application.port.out;
 
 import site.utnpf.odontolink.domain.model.AiRetrievalMethod;
+import site.utnpf.odontolink.domain.model.ProviderGuardrailType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 /**
  * Puerto de salida para el proveedor concreto del LLM (RF31, RF32).
  *
- * <p>Diseñado para ser agnostico al vendor: el dominio solo conoce este
+ * <p>Disenado para ser agnostico al vendor: el dominio solo conoce este
  * contrato. El adapter actual lo implementa contra DigitalOcean Gradient,
  * pero podria reemplazarse por otro (Bedrock, Azure OpenAI, etc.) sin
  * tocar la capa de aplicacion ni el dominio.
@@ -28,6 +30,9 @@ public interface ILlmAgentProviderPort {
      * invocaciones de chat completions. {@code null} si el proveedor no lo
      * reporta o el agente no esta deployado. Se usa para descubrir
      * dinamicamente el endpoint cuando no esta forzado por ENV.
+     *
+     * <p>{@code guardrails} lista los guardrails nativos del proveedor con su
+     * estado (vinculado o no), para reconciliar el espejo local.
      */
     record AgentSnapshot(
             String id,
@@ -38,7 +43,25 @@ public interface ILlmAgentProviderPort {
             int k,
             AiRetrievalMethod retrievalMethod,
             Instant updatedAt,
-            String deploymentEndpoint) {
+            String deploymentEndpoint,
+            boolean provideCitations,
+            List<ProviderGuardrailSnapshot> guardrails) {
+    }
+
+    /**
+     * Metadata de un guardrail del proveedor tal como lo reporta el agente.
+     * Esto es lo que el espejo local de {@code ProviderGuardrail} espeja
+     * (con la salvedad de que {@code priority} se persiste como intencion del
+     * admin, no del proveedor — DO no permite editarla via API).
+     */
+    record ProviderGuardrailSnapshot(
+            String guardrailUuid,
+            ProviderGuardrailType type,
+            String name,
+            String description,
+            String defaultResponse,
+            boolean isAttached,
+            int priority) {
     }
 
     /**
@@ -53,7 +76,8 @@ public interface ILlmAgentProviderPort {
             BigDecimal topP,
             int maxTokens,
             int k,
-            AiRetrievalMethod retrievalMethod) {
+            AiRetrievalMethod retrievalMethod,
+            boolean provideCitations) {
     }
 
     /**
@@ -70,4 +94,18 @@ public interface ILlmAgentProviderPort {
      * traducir los campos del dominio a la representacion del proveedor.
      */
     AgentSnapshot updateAgent(String providerAgentId, AgentUpdateSpec spec);
+
+    /**
+     * Vincula un guardrail al agente con la prioridad indicada. Idempotente
+     * en el sentido de que si el guardrail ya esta vinculado, el proveedor
+     * suele aceptar la llamada y actualizar; el caller debe asumir esa
+     * semantica.
+     */
+    void attachGuardrail(String providerAgentId, String providerGuardrailUuid, int priority);
+
+    /**
+     * Desvincula un guardrail del agente. Idempotente: si ya no esta
+     * vinculado, no se considera error.
+     */
+    void detachGuardrail(String providerAgentId, String providerGuardrailUuid);
 }

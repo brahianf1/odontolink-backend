@@ -14,15 +14,15 @@ import site.utnpf.odontolink.domain.model.AiAdminAuditEvent;
 import site.utnpf.odontolink.domain.model.AiAgentConfiguration;
 import site.utnpf.odontolink.domain.model.AiAgentConfigurationVersion;
 import site.utnpf.odontolink.domain.model.AiAgentLifecycle;
+import site.utnpf.odontolink.domain.model.AgentPolicyRule;
 import site.utnpf.odontolink.domain.model.AiGovernancePolicy;
-import site.utnpf.odontolink.domain.model.Guardrail;
 import site.utnpf.odontolink.domain.model.KnowledgeBaseDocument;
 import site.utnpf.odontolink.domain.model.KnowledgeBaseDocumentStatus;
+import site.utnpf.odontolink.domain.repository.AgentPolicyRuleRepository;
 import site.utnpf.odontolink.domain.repository.AiAdminAuditEventRepository;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationRepository;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationVersionRepository;
 import site.utnpf.odontolink.domain.repository.AiGovernancePolicyRepository;
-import site.utnpf.odontolink.domain.repository.GuardrailRepository;
 import site.utnpf.odontolink.domain.repository.KnowledgeBaseDocumentRepository;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.error.AiAgentErrorCodes;
 import site.utnpf.odontolink.infrastructure.security.AuthenticationFacade;
@@ -56,7 +56,8 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
     private static final Logger log = LoggerFactory.getLogger(AiAgentConfigurationService.class);
 
     private final AiAgentConfigurationRepository configRepository;
-    private final GuardrailRepository guardrailRepository;
+    private final AgentPolicyRuleRepository policyRuleRepository;
+    private final site.utnpf.odontolink.domain.repository.ProviderGuardrailRepository providerGuardrailRepository;
     private final AiGovernancePolicyRepository policyRepository;
     private final AiAgentConfigurationVersionRepository versionRepository;
     private final AiAdminAuditEventRepository auditRepository;
@@ -71,7 +72,8 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
     private final String envAgentInvocationUrl;
 
     public AiAgentConfigurationService(AiAgentConfigurationRepository configRepository,
-                                       GuardrailRepository guardrailRepository,
+                                       AgentPolicyRuleRepository policyRuleRepository,
+                                       site.utnpf.odontolink.domain.repository.ProviderGuardrailRepository providerGuardrailRepository,
                                        AiGovernancePolicyRepository policyRepository,
                                        AiAgentConfigurationVersionRepository versionRepository,
                                        AiAdminAuditEventRepository auditRepository,
@@ -83,7 +85,8 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
                                        String providerAgentUuid,
                                        String envAgentInvocationUrl) {
         this.configRepository = configRepository;
-        this.guardrailRepository = guardrailRepository;
+        this.policyRuleRepository = policyRuleRepository;
+        this.providerGuardrailRepository = providerGuardrailRepository;
         this.policyRepository = policyRepository;
         this.versionRepository = versionRepository;
         this.auditRepository = auditRepository;
@@ -134,7 +137,8 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
                 cmd.conversationBufferSize(),
                 cmd.rateLimitAnonymousPerHour(),
                 cmd.rateLimitAuthenticatedPerHour(),
-                cmd.emergencyBannerText());
+                cmd.emergencyBannerText(),
+                cmd.provideCitations());
         return configRepository.save(config);
     }
 
@@ -169,9 +173,9 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
         validateProviderAgentUuid();
         AiAgentConfiguration config = requireConfiguredAgent();
         AiGovernancePolicy policy = loadPolicyOrDefault();
-        List<Guardrail> activeGuardrails = guardrailRepository.findAllActiveOrderByCreatedAtAsc();
+        List<AgentPolicyRule> activeRules = policyRuleRepository.findAllActiveOrderByCreatedAtAsc();
 
-        List<String> missing = computeMissingRequirements(config, policy, activeGuardrails);
+        List<String> missing = computeMissingRequirements(config, policy, activeRules);
         boolean usedOverride = false;
         if (!missing.isEmpty()) {
             if (!override) {
@@ -194,7 +198,7 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
             usedOverride = true;
         }
 
-        String composedInstruction = config.composeInstruction(activeGuardrails);
+        String composedInstruction = config.composeInstruction(activeRules);
 
         AgentUpdateSpec spec = new AgentUpdateSpec(
                 config.getDisplayName(),
@@ -203,19 +207,28 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
                 config.getTopP(),
                 config.getMaxTokens(),
                 config.getK(),
-                config.getRetrievalMethod()
+                config.getRetrievalMethod(),
+                config.isProvideCitations()
         );
 
         Long actorId = resolveActorId();
         try {
             AgentSnapshot snapshot = llmProvider.updateAgent(providerAgentUuid, spec);
+            // Reconciliar guardrails nativos del proveedor (RF31). Lo hacemos
+            // DESPUES del updateAgent porque el spec no incluye guardrails:
+            // se gestionan con endpoints attach/detach dedicados. Si esto
+            // falla, lo logueamos pero NO marcamos publish failed: el agente
+            // ya tiene la instruction y los parametros actualizados, lo
+            // critico esta hecho. El admin puede reintentar la sincronizacion
+            // de guardrails con otro publish.
+            reconcileProviderGuardrails(snapshot);
             config.markPublished(snapshot.id() != null ? snapshot.id() : providerAgentUuid, Instant.now());
             AiAgentConfiguration saved = configRepository.save(config);
 
             int nextVersion = versionRepository.findMaxVersionNumber() + 1;
             String missingCsv = missing.isEmpty() ? null : String.join(",", missing);
-            String guardrailsLabelsCsv = activeGuardrails.stream()
-                    .map(Guardrail::getLabel)
+            String guardrailsLabelsCsv = activeRules.stream()
+                    .map(AgentPolicyRule::getLabel)
                     .collect(Collectors.joining(","));
             AiAgentConfigurationVersion version = new AiAgentConfigurationVersion(
                     null,
@@ -266,9 +279,9 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
     @Transactional(readOnly = true)
     public PreviewResult preview() {
         AiAgentConfiguration config = requireConfiguredAgent();
-        List<Guardrail> activeGuardrails = guardrailRepository.findAllActiveOrderByCreatedAtAsc();
-        String composed = config.composeInstruction(activeGuardrails);
-        List<String> labels = activeGuardrails.stream().map(Guardrail::getLabel).toList();
+        List<AgentPolicyRule> activeRules = policyRuleRepository.findAllActiveOrderByCreatedAtAsc();
+        String composed = config.composeInstruction(activeRules);
+        List<String> labels = activeRules.stream().map(AgentPolicyRule::getLabel).toList();
         return new PreviewResult(composed, labels);
     }
 
@@ -282,8 +295,8 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
         List<String> missing;
         if (opt.isPresent()) {
             AiGovernancePolicy policy = loadPolicyOrDefault();
-            List<Guardrail> activeGuardrails = guardrailRepository.findAllActiveOrderByCreatedAtAsc();
-            missing = computeMissingRequirements(opt.get(), policy, activeGuardrails);
+            List<AgentPolicyRule> activeRules = policyRuleRepository.findAllActiveOrderByCreatedAtAsc();
+            missing = computeMissingRequirements(opt.get(), policy, activeRules);
         } else {
             missing = List.of("AI_AGENT_NOT_CONFIGURED");
         }
@@ -342,7 +355,7 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
      */
     private List<String> computeMissingRequirements(AiAgentConfiguration config,
                                                     AiGovernancePolicy policy,
-                                                    List<Guardrail> activeGuardrails) {
+                                                    List<AgentPolicyRule> activeRules) {
         List<String> missing = new ArrayList<>();
         if (policy.isRequireSystemPrompt() &&
                 (config.getSystemPromptCore() == null || config.getSystemPromptCore().isBlank())) {
@@ -353,7 +366,7 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
             missing.add("REQUIRES_WELCOME_MESSAGE");
         }
         if (policy.isRequireGuardrails()) {
-            int active = activeGuardrails.size();
+            int active = activeRules.size();
             if (active < policy.getMinActiveGuardrails()) {
                 missing.add("REQUIRES_MIN_ACTIVE_GUARDRAILS:" + policy.getMinActiveGuardrails()
                         + ":have:" + active);
@@ -416,6 +429,71 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
         } catch (Exception ex) {
             // No deberia ocurrir bajo @PreAuthorize, pero defendemos.
             return null;
+        }
+    }
+
+    /**
+     * Reconcilia el estado de los guardrails nativos del proveedor con la
+     * intencion del admin (RF31).
+     *
+     * <p>Estrategia:
+     * <ol>
+     *   <li>Por cada guardrail local marcado {@code attached=true}: si no
+     *       esta attached en el proveedor, hacer attach.</li>
+     *   <li>Por cada guardrail attached en el proveedor cuya intencion local
+     *       es {@code attached=false} (o no existe localmente): hacer detach.</li>
+     *   <li>Si la priority local difiere de la del proveedor para un guardrail
+     *       ya attached, hacer detach+attach (DO no expone PUT para guardrails).</li>
+     * </ol>
+     *
+     * <p>Cualquier fallo individual en attach/detach se loguea con WARN pero
+     * NO interrumpe la cadena: queremos que el publish del agente principal
+     * cuente como exitoso aunque algun guardrail particular falle. Esto deja
+     * el sistema en estado parcialmente sincronizado pero observable.
+     */
+    private void reconcileProviderGuardrails(AgentSnapshot snapshot) {
+        List<site.utnpf.odontolink.domain.model.ProviderGuardrail> local =
+                providerGuardrailRepository.findAllOrderByPriorityAsc();
+        if (local.isEmpty()) {
+            // Nada que reconciliar — el admin no toco el modulo. Conservamos
+            // los attached que el proveedor ya tenia (no detach masivo).
+            return;
+        }
+        java.util.Map<String, ILlmAgentProviderPort.ProviderGuardrailSnapshot> remoteByUuid =
+                new java.util.HashMap<>();
+        if (snapshot.guardrails() != null) {
+            for (ILlmAgentProviderPort.ProviderGuardrailSnapshot r : snapshot.guardrails()) {
+                remoteByUuid.put(r.guardrailUuid(), r);
+            }
+        }
+        for (site.utnpf.odontolink.domain.model.ProviderGuardrail localGr : local) {
+            String uuid = localGr.getProviderGuardrailUuid();
+            ILlmAgentProviderPort.ProviderGuardrailSnapshot remote = remoteByUuid.get(uuid);
+            boolean remoteAttached = remote != null && remote.isAttached();
+            int remotePriority = remote == null ? -1 : remote.priority();
+            try {
+                if (localGr.isAttached() && !remoteAttached) {
+                    llmProvider.attachGuardrail(providerAgentUuid, uuid, localGr.getPriority());
+                    log.info("Reconcilie attach guardrail {} priority={}", uuid, localGr.getPriority());
+                } else if (!localGr.isAttached() && remoteAttached) {
+                    llmProvider.detachGuardrail(providerAgentUuid, uuid);
+                    log.info("Reconcilie detach guardrail {}", uuid);
+                } else if (localGr.isAttached() && remoteAttached
+                        && localGr.getPriority() != remotePriority) {
+                    // DO no tiene PUT para guardrails: detach + attach para
+                    // forzar nuevo priority.
+                    llmProvider.detachGuardrail(providerAgentUuid, uuid);
+                    llmProvider.attachGuardrail(providerAgentUuid, uuid, localGr.getPriority());
+                    log.info("Reconcilie priority del guardrail {}: {} -> {}",
+                            uuid, remotePriority, localGr.getPriority());
+                }
+            } catch (LlmProviderException ex) {
+                // No abortamos: dejamos el agente principal publicado pero
+                // logueamos para que el operador pueda revisar.
+                log.warn("Falla al reconciliar guardrail {}: code={}, message={}. "
+                                + "El admin debe re-publicar para reintentar.",
+                        uuid, ex.getErrorCode(), ex.getMessage());
+            }
         }
     }
 }

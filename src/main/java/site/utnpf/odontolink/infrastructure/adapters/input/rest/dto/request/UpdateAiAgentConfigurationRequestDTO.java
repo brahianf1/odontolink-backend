@@ -84,6 +84,12 @@ public class UpdateAiAgentConfigurationRequestDTO {
     @NotBlank
     private String emergencyBannerText;
 
+    /**
+     * Si true, el agente devuelve citas inline (referencias a documentos KB).
+     * Default false: el caso clinico prefiere respuestas limpias.
+     */
+    private boolean provideCitations = false;
+
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
 
@@ -128,4 +134,7 @@ public class UpdateAiAgentConfigurationRequestDTO {
 
     public String getEmergencyBannerText() { return emergencyBannerText; }
     public void setEmergencyBannerText(String emergencyBannerText) { this.emergencyBannerText = emergencyBannerText; }
+
+    public boolean isProvideCitations() { return provideCitations; }
+    public void setProvideCitations(boolean provideCitations) { this.provideCitations = provideCitations; }
 }

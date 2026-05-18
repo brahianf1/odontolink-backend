@@ -11,16 +11,25 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * Entidad JPA para la tabla {@code ai_guardrails} (RF32).
+ * Entidad JPA para la tabla {@code ai_guardrails} (RF31, RF32).
+ *
+ * <p><b>Nota sobre el nombre de la tabla</b>: la clase se renombro de
+ * {@code GuardrailEntity} a {@code AgentPolicyRuleEntity} para reflejar
+ * que esto NO son guardrails en el sentido de DigitalOcean (procesadores
+ * binarios), sino <strong>politicas de comportamiento</strong> que se
+ * concatenan al system prompt. El nombre fisico de la tabla se mantiene
+ * como {@code ai_guardrails} por compatibilidad con el schema existente —
+ * renombrar requiere una migracion Flyway/Liquibase que se hara en un PR
+ * dedicado cuando se introduzca el sistema de migraciones al proyecto.
  *
  * <p>Indice sobre {@code active} para acelerar la consulta del
- * {@code composeInstruction()} que carga solo los activos.
+ * {@code composeInstruction()} que carga solo las activas.
  */
 @Entity
 @Table(name = "ai_guardrails", indexes = {
         @Index(name = "ix_ai_guardrails_active", columnList = "active")
 })
-public class GuardrailEntity {
+public class AgentPolicyRuleEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -42,7 +51,7 @@ public class GuardrailEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    public GuardrailEntity() {
+    public AgentPolicyRuleEntity() {
     }
 
     public Long getId() {

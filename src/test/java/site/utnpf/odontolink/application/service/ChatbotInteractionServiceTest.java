@@ -195,7 +195,8 @@ class ChatbotInteractionServiceTest {
                 20,
                 60,
                 "https://test.agents.do-ai.run",
-                "*** Emergencia ***"
+                "*** Emergencia ***",
+                false
         );
         cfg.setId(AiAgentConfiguration.SINGLETON_ID);
         // Forzamos EnumSet vacio para evitar Collections.emptySet() en el constructor copy.
@@ -221,7 +222,8 @@ class ChatbotInteractionServiceTest {
                 cfg.getRateLimitAnonymousPerHour(),
                 cfg.getRateLimitAuthenticatedPerHour(),
                 cfg.getAgentInvocationUrl(),
-                cfg.getEmergencyBannerText()
+                cfg.getEmergencyBannerText(),
+                cfg.isProvideCitations()
         );
     }
 }
