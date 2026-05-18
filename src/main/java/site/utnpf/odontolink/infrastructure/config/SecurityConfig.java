@@ -18,6 +18,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import site.utnpf.odontolink.infrastructure.config.ratelimit.ChatbotRateLimitingFilter;
 import site.utnpf.odontolink.infrastructure.config.ratelimit.RateLimitingFilter;
 import site.utnpf.odontolink.infrastructure.config.security.CustomUserDetailsService;
 import site.utnpf.odontolink.infrastructure.config.security.JwtAuthenticationFilter;
@@ -38,16 +39,19 @@ public class SecurityConfig {
     private final CustomUserDetailsService userDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RateLimitingFilter rateLimitingFilter;
+    private final ChatbotRateLimitingFilter chatbotRateLimitingFilter;
 
     @Value("${cors.allowed.origins}")
     private String allowedOrigins;
 
     public SecurityConfig(CustomUserDetailsService userDetailsService,
                          JwtAuthenticationFilter jwtAuthenticationFilter,
-                         RateLimitingFilter rateLimitingFilter) {
+                         RateLimitingFilter rateLimitingFilter,
+                         ChatbotRateLimitingFilter chatbotRateLimitingFilter) {
         this.userDetailsService = userDetailsService;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.rateLimitingFilter = rateLimitingFilter;
+        this.chatbotRateLimitingFilter = chatbotRateLimitingFilter;
     }
 
     @Bean
@@ -63,6 +67,17 @@ public class SecurityConfig {
                         .requestMatchers("/api/supervisors/register").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // RF29: el chatbot institucional acepta requests anonimas o
+                        // autenticadas. El control de acceso real (PUBLIC/PRIVATE/
+                        // DISABLED + role match) lo hace el use case en runtime
+                        // contra AiAgentConfiguration. Permitiendo aqui en la
+                        // cadena evitamos exigir token cuando el admin lo definio
+                        // como publico, sin perder la posibilidad de que llegue
+                        // autenticado (el filtro JWT igual completa el principal
+                        // si hay token valido).
+                        .requestMatchers("/api/chatbot/info").permitAll()
+                        .requestMatchers("/api/chatbot/messages").permitAll()
+                        .requestMatchers("/api/chatbot/sessions/**").permitAll()
                         // RF05 y RF07: todo lo que cuelgue de /api/admin/** queda
                         // reservado al rol ROLE_ADMIN. Esta regla declarativa se
                         // suma a los @PreAuthorize de los controllers como
@@ -72,11 +87,14 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(daoAuthenticationProvider())
-                // El orden importa: rate-limit primero (anonimo, contra IP),
-                // luego JWT (autenticacion). Asi un atacante anonimo no puede
-                // saturar credenciales del filtro mas costoso del JWT.
+                // El orden importa: rate-limit general primero (anonimo, contra
+                // IP), luego JWT (autenticacion), luego rate-limit del chatbot
+                // (que necesita el principal autenticado para diferenciar caps
+                // por usuario vs por IP). Cualquier 429 corta la cadena antes
+                // de tocar el use case o el proveedor remoto.
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(rateLimitingFilter, JwtAuthenticationFilter.class);
+                .addFilterBefore(rateLimitingFilter, JwtAuthenticationFilter.class)
+                .addFilterAfter(chatbotRateLimitingFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

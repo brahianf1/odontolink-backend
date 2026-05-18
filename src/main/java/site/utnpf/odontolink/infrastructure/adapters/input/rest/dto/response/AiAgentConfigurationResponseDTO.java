@@ -1,11 +1,15 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import site.utnpf.odontolink.domain.model.AiAgentAccessMode;
 import site.utnpf.odontolink.domain.model.AiAgentLifecycle;
+import site.utnpf.odontolink.domain.model.AiPiiPolicy;
 import site.utnpf.odontolink.domain.model.AiRetrievalMethod;
+import site.utnpf.odontolink.domain.model.Role;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Set;
 
 /**
  * Vista de respuesta para el agregado
@@ -30,6 +34,14 @@ public class AiAgentConfigurationResponseDTO {
     private Instant providerSyncedAt;
     private String lastSyncError;
     private Instant updatedAt;
+    private AiAgentAccessMode accessMode;
+    private Set<Role> allowedRoles;
+    private AiPiiPolicy piiPolicy;
+    private Integer conversationBufferSize;
+    private Integer rateLimitAnonymousPerHour;
+    private Integer rateLimitAuthenticatedPerHour;
+    private String agentInvocationUrl;
+    private String emergencyBannerText;
 
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
@@ -72,4 +84,28 @@ public class AiAgentConfigurationResponseDTO {
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public AiAgentAccessMode getAccessMode() { return accessMode; }
+    public void setAccessMode(AiAgentAccessMode accessMode) { this.accessMode = accessMode; }
+
+    public Set<Role> getAllowedRoles() { return allowedRoles; }
+    public void setAllowedRoles(Set<Role> allowedRoles) { this.allowedRoles = allowedRoles; }
+
+    public AiPiiPolicy getPiiPolicy() { return piiPolicy; }
+    public void setPiiPolicy(AiPiiPolicy piiPolicy) { this.piiPolicy = piiPolicy; }
+
+    public Integer getConversationBufferSize() { return conversationBufferSize; }
+    public void setConversationBufferSize(Integer conversationBufferSize) { this.conversationBufferSize = conversationBufferSize; }
+
+    public Integer getRateLimitAnonymousPerHour() { return rateLimitAnonymousPerHour; }
+    public void setRateLimitAnonymousPerHour(Integer rateLimitAnonymousPerHour) { this.rateLimitAnonymousPerHour = rateLimitAnonymousPerHour; }
+
+    public Integer getRateLimitAuthenticatedPerHour() { return rateLimitAuthenticatedPerHour; }
+    public void setRateLimitAuthenticatedPerHour(Integer rateLimitAuthenticatedPerHour) { this.rateLimitAuthenticatedPerHour = rateLimitAuthenticatedPerHour; }
+
+    public String getAgentInvocationUrl() { return agentInvocationUrl; }
+    public void setAgentInvocationUrl(String agentInvocationUrl) { this.agentInvocationUrl = agentInvocationUrl; }
+
+    public String getEmergencyBannerText() { return emergencyBannerText; }
+    public void setEmergencyBannerText(String emergencyBannerText) { this.emergencyBannerText = emergencyBannerText; }
 }

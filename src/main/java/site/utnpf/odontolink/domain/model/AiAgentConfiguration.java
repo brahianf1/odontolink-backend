@@ -4,10 +4,13 @@ import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
- * Configuracion del agente IA conversacional (RF31, RF32).
+ * Configuracion del agente IA conversacional (RF29, RF31, RF32, RF34).
  *
  * <p>Singleton: hay a lo sumo una fila en BD. Si no existe, el sistema
  * reporta {@link AiAgentLifecycle#UNCONFIGURED} (estado virtual, no
@@ -20,25 +23,21 @@ import java.util.List;
  * publicaciones incompletas vive en {@link AiGovernancePolicy} y en el
  * flujo {@code POST /publish}.
  *
- * <p>Los guardrails NO son campo de este agregado: viven como entidades
- * propias en {@link Guardrail} (tabla {@code ai_guardrails}). El metodo
- * {@link #composeInstruction(List)} recibe la lista de guardrails activos
- * desde el servicio (cargados de BD) y los antepone al
- * {@code systemPromptCore}.
- *
- * <p>Validaciones en {@link #apply}:
- * <ul>
- *   <li>{@code temperature} y {@code topP} en {@code [0, 1]}.</li>
- *   <li>{@code maxTokens} en {@code [1, 512]} (limite del proveedor).</li>
- *   <li>{@code k} en {@code [1, 50]}.</li>
- *   <li>{@code displayName} y {@code systemPromptCore} no vacios.</li>
- *   <li>{@code retrievalMethod} obligatorio.</li>
- * </ul>
+ * <p>A partir de RF29/RF34 incorpora ademas la configuracion del chatbot
+ * institucional (acceso publico/privado, politica de PII, rolling buffer,
+ * rate limits, URL de invocacion cacheada, banner de emergencia). Cualquier
+ * edicion exitosa pasa lifecycle a DRAFT: los cambios no afectan al paciente
+ * hasta el siguiente publish exitoso.
  */
 public class AiAgentConfiguration {
 
     /** Identificador unico de la fila singleton. */
     public static final Long SINGLETON_ID = 1L;
+
+    /** Banner usado cuando el detector local marca emergencia y el admin no override. */
+    public static final String DEFAULT_EMERGENCY_BANNER =
+            "*** ATENCION: si esto es una emergencia, comunicate inmediatamente con la clinica o " +
+                    "concurri a una guardia odontologica. ***\n\n";
 
     private Long id;
     private String displayName;
@@ -59,6 +58,25 @@ public class AiAgentConfiguration {
     private String lastSyncError;
     private Instant updatedAt;
 
+    // -- Configuracion del chatbot (RF29/RF31/RF32/RF34) ------------------
+
+    /** Modo de acceso publico/privado/desactivado. Default: DISABLED (fail-safe). */
+    private AiAgentAccessMode accessMode;
+    /** Roles permitidos cuando accessMode==PRIVATE. Vacio en PUBLIC/DISABLED. */
+    private Set<Role> allowedRoles;
+    /** Politica al detectar PII en el mensaje del usuario. Default: BLOCK. */
+    private AiPiiPolicy piiPolicy;
+    /** Cap del rolling buffer de mensajes por sesion. Default 20, rango [4, 50]. */
+    private int conversationBufferSize;
+    /** Mensajes/hora permitidos por IP anonima. Default 20, rango [1, 1000]. */
+    private int rateLimitAnonymousPerHour;
+    /** Mensajes/hora permitidos por usuario autenticado. Default 60, rango [1, 5000]. */
+    private int rateLimitAuthenticatedPerHour;
+    /** URL de invocacion del agente (chat completions). Descubierta+cacheada. */
+    private String agentInvocationUrl;
+    /** Texto antepuesto al reply cuando el detector local marca emergencia. */
+    private String emergencyBannerText;
+
     public AiAgentConfiguration() {
     }
 
@@ -75,7 +93,15 @@ public class AiAgentConfiguration {
                                 String providerAgentId,
                                 Instant providerSyncedAt,
                                 String lastSyncError,
-                                Instant updatedAt) {
+                                Instant updatedAt,
+                                AiAgentAccessMode accessMode,
+                                Set<Role> allowedRoles,
+                                AiPiiPolicy piiPolicy,
+                                int conversationBufferSize,
+                                int rateLimitAnonymousPerHour,
+                                int rateLimitAuthenticatedPerHour,
+                                String agentInvocationUrl,
+                                String emergencyBannerText) {
         this.id = id;
         this.displayName = displayName;
         this.systemPromptCore = systemPromptCore;
@@ -90,12 +116,20 @@ public class AiAgentConfiguration {
         this.providerSyncedAt = providerSyncedAt;
         this.lastSyncError = lastSyncError;
         this.updatedAt = updatedAt;
+        this.accessMode = accessMode;
+        this.allowedRoles = allowedRoles == null ? Collections.emptySet() : EnumSet.copyOf(allowedRoles);
+        this.piiPolicy = piiPolicy;
+        this.conversationBufferSize = conversationBufferSize;
+        this.rateLimitAnonymousPerHour = rateLimitAnonymousPerHour;
+        this.rateLimitAuthenticatedPerHour = rateLimitAuthenticatedPerHour;
+        this.agentInvocationUrl = agentInvocationUrl;
+        this.emergencyBannerText = emergencyBannerText;
     }
 
     /**
-     * Factory para el primer alta. La fila arranca en DRAFT con los
-     * valores que el admin envia. No hay defaults: si el admin no provee
-     * algun campo, la validacion falla y la fila no se crea.
+     * Factory para el primer alta. La fila arranca en DRAFT con los valores
+     * que el admin envia, y los campos de chatbot con defaults conservadores
+     * (DISABLED + BLOCK + buffer 20 + rate limits razonables).
      */
     public static AiAgentConfiguration createNew(String displayName,
                                                  String systemPromptCore,
@@ -107,7 +141,9 @@ public class AiAgentConfiguration {
                                                  AiRetrievalMethod retrievalMethod) {
         AiAgentConfiguration config = new AiAgentConfiguration(
                 SINGLETON_ID, null, null, null, null, null, 0, 0, null,
-                AiAgentLifecycle.DRAFT, null, null, null, null
+                AiAgentLifecycle.DRAFT, null, null, null, null,
+                AiAgentAccessMode.DISABLED, EnumSet.noneOf(Role.class), AiPiiPolicy.BLOCK,
+                20, 20, 60, null, DEFAULT_EMERGENCY_BANNER
         );
         config.apply(displayName, systemPromptCore, welcomeMessage,
                 temperature, topP, maxTokens, k, retrievalMethod);
@@ -115,9 +151,8 @@ public class AiAgentConfiguration {
     }
 
     /**
-     * Aplica el comando de actualizacion. Cualquier edicion exitosa
-     * revierte el lifecycle a DRAFT: los cambios no afectan al paciente
-     * hasta el siguiente publish exitoso.
+     * Aplica el comando de actualizacion clasico (campos del agente IA).
+     * Cualquier edicion exitosa revierte el lifecycle a DRAFT.
      */
     public void apply(String displayName,
                       String systemPromptCore,
@@ -145,10 +180,61 @@ public class AiAgentConfiguration {
         this.maxTokens = maxTokens;
         this.k = k;
         this.retrievalMethod = retrievalMethod;
-        // Cualquier edicion exitosa pasa a DRAFT. Si se quiere afectar al
-        // paciente, hay que publicar explicitamente.
         this.lifecycle = AiAgentLifecycle.DRAFT;
         this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Aplica el bloque de configuracion del chatbot. Tambien revierte el
+     * lifecycle a DRAFT para que el cambio se haga visible solo tras un
+     * publish explicito (excepcion: el cache de {@code agentInvocationUrl} se
+     * actualiza por separado con {@link #cacheAgentInvocationUrl(String)}
+     * porque no es una edicion del admin sino un descubrimiento interno).
+     */
+    public void applyChatbotConfig(AiAgentAccessMode accessMode,
+                                   Set<Role> allowedRoles,
+                                   AiPiiPolicy piiPolicy,
+                                   int conversationBufferSize,
+                                   int rateLimitAnonymousPerHour,
+                                   int rateLimitAuthenticatedPerHour,
+                                   String emergencyBannerText) {
+        if (accessMode == null) {
+            throw new InvalidBusinessRuleException("accessMode es obligatorio.");
+        }
+        if (piiPolicy == null) {
+            throw new InvalidBusinessRuleException("piiPolicy es obligatorio.");
+        }
+        validateIntRange(conversationBufferSize, "conversationBufferSize", 4, 50);
+        validateIntRange(rateLimitAnonymousPerHour, "rateLimitAnonymousPerHour", 1, 1000);
+        validateIntRange(rateLimitAuthenticatedPerHour, "rateLimitAuthenticatedPerHour", 1, 5000);
+        // Roles solo aplican en PRIVATE; los aceptamos vacios en PUBLIC/DISABLED
+        // pero exigimos no-vacio en PRIVATE al momento del publish (no aqui).
+        if (emergencyBannerText == null || emergencyBannerText.isBlank()) {
+            throw new InvalidBusinessRuleException("emergencyBannerText no puede ser vacio.");
+        }
+
+        this.accessMode = accessMode;
+        this.allowedRoles = allowedRoles == null ? EnumSet.noneOf(Role.class) : EnumSet.copyOf(allowedRoles);
+        this.piiPolicy = piiPolicy;
+        this.conversationBufferSize = conversationBufferSize;
+        this.rateLimitAnonymousPerHour = rateLimitAnonymousPerHour;
+        this.rateLimitAuthenticatedPerHour = rateLimitAuthenticatedPerHour;
+        this.emergencyBannerText = emergencyBannerText;
+        this.lifecycle = AiAgentLifecycle.DRAFT;
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Persiste la URL de invocacion descubierta por el adapter. NO cambia el
+     * lifecycle: es metadata interna, no una edicion del admin.
+     */
+    public void cacheAgentInvocationUrl(String url) {
+        this.agentInvocationUrl = url;
+    }
+
+    /** Borra el cache de URL (admin endpoint para forzar redescubrimiento). */
+    public void clearAgentInvocationUrlCache() {
+        this.agentInvocationUrl = null;
     }
 
     /**
@@ -156,10 +242,6 @@ public class AiAgentConfiguration {
      * texto de los guardrails activos pasados como parametro al
      * {@code systemPromptCore}. La lista la calcula el servicio leyendo de
      * {@code ai_guardrails where active=true}.
-     *
-     * <p>Si no hay guardrails activos, el prompt se compone solo con el
-     * cuerpo editable. La decision de exigir o no que existan guardrails
-     * vive en {@link AiGovernancePolicy}, no aqui.
      */
     public String composeInstruction(List<Guardrail> activeGuardrails) {
         StringBuilder sb = new StringBuilder();
@@ -177,9 +259,24 @@ public class AiAgentConfiguration {
     }
 
     /**
-     * Marca la configuracion como publicada con exito y persiste el UUID
-     * del agente remoto si todavia no lo teniamos.
+     * Determina si un caller puede usar el chatbot dado el {@code accessMode}
+     * actual. NO valida lifecycle ni rate limit: solo permisos de rol.
+     *
+     * @param authenticatedUserRole rol del caller, o {@code null} si es anonimo.
      */
+    public boolean canBeUsedBy(Role authenticatedUserRole) {
+        if (accessMode == AiAgentAccessMode.DISABLED) {
+            return false;
+        }
+        if (accessMode == AiAgentAccessMode.PUBLIC) {
+            return true;
+        }
+        // PRIVATE: requiere autenticacion + rol permitido
+        return authenticatedUserRole != null
+                && allowedRoles != null
+                && allowedRoles.contains(authenticatedUserRole);
+    }
+
     public void markPublished(String providerAgentId, Instant now) {
         if (providerAgentId != null && !providerAgentId.isBlank()) {
             this.providerAgentId = providerAgentId;
@@ -190,19 +287,10 @@ public class AiAgentConfiguration {
     }
 
     public void markPublishFailed(String reason) {
-        // Lifecycle queda DRAFT: el publish no se concreto. lastSyncError
-        // refleja el motivo para que el admin vea por que.
         this.lifecycle = AiAgentLifecycle.DRAFT;
         this.lastSyncError = reason;
     }
 
-    /**
-     * Reverte el agente a DRAFT manualmente (sin tocar el proveedor). Util
-     * cuando el admin quiere despublicar temporalmente. La sincronizacion
-     * con el proveedor (eliminar el agente o desactivarlo) queda para una
-     * iteracion futura: por ahora, despublicar a nivel local solo evita
-     * que reflejemos cambios al proveedor hasta el proximo publish.
-     */
     public void markDraft() {
         this.lifecycle = AiAgentLifecycle.DRAFT;
     }
@@ -287,5 +375,37 @@ public class AiAgentConfiguration {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public AiAgentAccessMode getAccessMode() {
+        return accessMode;
+    }
+
+    public Set<Role> getAllowedRoles() {
+        return allowedRoles == null ? Collections.emptySet() : Collections.unmodifiableSet(allowedRoles);
+    }
+
+    public AiPiiPolicy getPiiPolicy() {
+        return piiPolicy;
+    }
+
+    public int getConversationBufferSize() {
+        return conversationBufferSize;
+    }
+
+    public int getRateLimitAnonymousPerHour() {
+        return rateLimitAnonymousPerHour;
+    }
+
+    public int getRateLimitAuthenticatedPerHour() {
+        return rateLimitAuthenticatedPerHour;
+    }
+
+    public String getAgentInvocationUrl() {
+        return agentInvocationUrl;
+    }
+
+    public String getEmergencyBannerText() {
+        return emergencyBannerText;
     }
 }

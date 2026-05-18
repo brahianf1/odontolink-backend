@@ -42,6 +42,14 @@ public class DigitalOceanAgentPlatformProperties {
     /** Tamanio maximo permitido para archivos subidos a la KB, en bytes. */
     private long maxUploadBytes = 10_485_760L;
 
+    /**
+     * URL de invocacion del agente (chat completions). Si se setea, gana sobre
+     * el cache local en BD. Si esta vacia, el chatbot intenta descubrirla via
+     * management API ({@code GET /v2/gen-ai/agents/{uuid}}) y cachearla en
+     * BD para sucesivas llamadas. (RF29).
+     */
+    private String agentInvocationUrl = "";
+
     /** Subgrupo de propiedades del bucket Spaces dedicado a la KB. */
     private Storage storage = new Storage();
 
@@ -99,6 +107,14 @@ public class DigitalOceanAgentPlatformProperties {
 
     public void setMaxUploadBytes(long maxUploadBytes) {
         this.maxUploadBytes = maxUploadBytes;
+    }
+
+    public String getAgentInvocationUrl() {
+        return agentInvocationUrl;
+    }
+
+    public void setAgentInvocationUrl(String agentInvocationUrl) {
+        this.agentInvocationUrl = agentInvocationUrl;
     }
 
     public Storage getStorage() {

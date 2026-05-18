@@ -96,7 +96,12 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
     public AiAgentConfiguration saveConfiguration(UpdateAiAgentConfigurationCommand cmd) {
         AiAgentConfiguration config = configRepository.findSingleton().orElse(null);
         if (config == null) {
-            // Primera vez: crear via factory. La fila nace en DRAFT.
+            // Primera vez: crear via factory. La fila nace en DRAFT con los
+            // defaults conservadores del chatbot (DISABLED, BLOCK, etc.) y
+            // luego aplicamos el bloque de chatbot si el admin lo envio en el
+            // mismo PUT. La separacion en dos apply() mantiene cada subdominio
+            // (agente IA core vs chatbot institucional) con su propia
+            // validacion granular.
             config = AiAgentConfiguration.createNew(
                     cmd.displayName(), cmd.systemPromptCore(), cmd.welcomeMessage(),
                     cmd.temperature(), cmd.topP(), cmd.maxTokens(), cmd.k(),
@@ -108,6 +113,29 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
                     cmd.temperature(), cmd.topP(), cmd.maxTokens(), cmd.k(),
                     cmd.retrievalMethod());
         }
+        // Bloque del chatbot institucional. Si el admin no envio estos campos
+        // (caller legado), los validadores del dominio rechazan con 422 y se
+        // aborta toda la transaccion: deliberadamente no permitimos PUTs
+        // "parciales" en este endpoint para evitar inconsistencias.
+        config.applyChatbotConfig(
+                cmd.accessMode(),
+                cmd.allowedRoles(),
+                cmd.piiPolicy(),
+                cmd.conversationBufferSize(),
+                cmd.rateLimitAnonymousPerHour(),
+                cmd.rateLimitAuthenticatedPerHour(),
+                cmd.emergencyBannerText());
+        return configRepository.save(config);
+    }
+
+    /**
+     * Limpia el cache de la URL de invocacion del agente para forzar el
+     * siguiente descubrimiento via management API. Util cuando el operador
+     * cambia el deployment en el dashboard de DigitalOcean.
+     */
+    public AiAgentConfiguration clearAgentInvocationUrlCache() {
+        AiAgentConfiguration config = requireConfiguredAgent();
+        config.clearAgentInvocationUrlCache();
         return configRepository.save(config);
     }
 
@@ -295,6 +323,14 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
             if (indexed.isEmpty()) {
                 missing.add("REQUIRES_INDEXED_DOCUMENTS");
             }
+        }
+        // Chatbot en modo PRIVATE sin roles permitidos queda inaccesible para
+        // todos: lo rechazamos en publish con un codigo estable para que el
+        // FE pueda pintarlo como requisito explicito al lado del selector de
+        // roles permitidos (RF29).
+        if (config.getAccessMode() == site.utnpf.odontolink.domain.model.AiAgentAccessMode.PRIVATE
+                && (config.getAllowedRoles() == null || config.getAllowedRoles().isEmpty())) {
+            missing.add("REQUIRES_ALLOWED_ROLES_FOR_PRIVATE");
         }
         return missing;
     }

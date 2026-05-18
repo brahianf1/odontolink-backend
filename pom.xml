@@ -160,6 +160,41 @@
             <artifactId>bucket4j-core</artifactId>
             <version>8.10.1</version>
         </dependency>
+        <!--
+            Resilience4j: estandar de industria para circuit breaker + retry
+            + fallback sobre llamadas a servicios externos. Lo usamos para
+            envolver la invocacion al endpoint de chat completions de
+            DigitalOcean Gradient: si el proveedor cae o se ralentiza, el
+            circuito abre y devolvemos un fallback amigable en lugar de
+            propagar timeouts al usuario final. Compatible con metodos
+            sincronos (RestClient blocking) via anotacion @CircuitBreaker.
+        -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+            <version>2.4.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-circuitbreaker</artifactId>
+            <version>2.4.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-retry</artifactId>
+            <version>2.4.0</version>
+        </dependency>
+        <!--
+            spring-boot-starter-aop: declarado explicito porque Resilience4j
+            necesita AOP para que las anotaciones @CircuitBreaker / @Retry
+            sean interceptadas en runtime. Spring Boot lo trae transitivo
+            pero explicitarlo evita sorpresas si en el futuro alguna
+            dependencia lo excluye.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

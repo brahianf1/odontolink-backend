@@ -50,9 +50,10 @@ public class DigitalOceanLlmAgentAdapter implements ILlmAgentProviderPort {
             // Si el proveedor responde 200 con body vacio (poco probable),
             // devolvemos un snapshot con valores neutros para que el caller
             // pueda decidir sin romperse.
-            return new AgentSnapshot(null, null, null, null, 0, 0, AiRetrievalMethod.NONE, null);
+            return new AgentSnapshot(null, null, null, null, 0, 0, AiRetrievalMethod.NONE, null, null);
         }
         DoAgentResponse.AgentBody body = response.agent();
+        String deploymentUrl = body.deployment() == null ? null : body.deployment().url();
         return new AgentSnapshot(
                 body.uuid(),
                 body.instruction(),
@@ -61,7 +62,8 @@ public class DigitalOceanLlmAgentAdapter implements ILlmAgentProviderPort {
                 body.maxTokens() == null ? 0 : body.maxTokens(),
                 body.k() == null ? 0 : body.k(),
                 fromProviderRetrievalMethod(body.retrievalMethod()),
-                body.updatedAt()
+                body.updatedAt(),
+                deploymentUrl
         );
     }
 

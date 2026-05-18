@@ -10,22 +10,33 @@ import org.springframework.web.client.RestClient;
 import site.utnpf.odontolink.application.port.in.IAiAgentConfigurationUseCase;
 import site.utnpf.odontolink.application.port.in.IAiAgentVersioningUseCase;
 import site.utnpf.odontolink.application.port.in.IAiGovernancePolicyUseCase;
+import site.utnpf.odontolink.application.port.in.IChatbotInteractionUseCase;
+import site.utnpf.odontolink.application.port.in.IEmergencyKeywordAdminUseCase;
 import site.utnpf.odontolink.application.port.in.IGuardrailAdminUseCase;
 import site.utnpf.odontolink.application.port.in.IKnowledgeBaseAdminUseCase;
 import site.utnpf.odontolink.application.port.out.IKnowledgeBaseProviderPort;
+import site.utnpf.odontolink.application.port.out.ILlmAgentInvokerPort;
 import site.utnpf.odontolink.application.port.out.ILlmAgentProviderPort;
 import site.utnpf.odontolink.application.port.out.IObjectStoragePort;
 import site.utnpf.odontolink.application.service.AiAgentConfigurationService;
 import site.utnpf.odontolink.application.service.AiAgentVersioningService;
 import site.utnpf.odontolink.application.service.AiGovernancePolicyService;
+import site.utnpf.odontolink.application.service.ChatbotInteractionService;
+import site.utnpf.odontolink.application.service.EmergencyKeywordAdminService;
 import site.utnpf.odontolink.application.service.GuardrailAdminService;
 import site.utnpf.odontolink.application.service.KnowledgeBaseAdminService;
+import site.utnpf.odontolink.application.service.security.EmergencyDetector;
+import site.utnpf.odontolink.application.service.security.PiiSanitizer;
 import site.utnpf.odontolink.domain.repository.AiAdminAuditEventRepository;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationRepository;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationVersionRepository;
 import site.utnpf.odontolink.domain.repository.AiGovernancePolicyRepository;
+import site.utnpf.odontolink.domain.repository.ChatbotMessageRepository;
+import site.utnpf.odontolink.domain.repository.ChatbotSessionRepository;
+import site.utnpf.odontolink.domain.repository.EmergencyKeywordRepository;
 import site.utnpf.odontolink.domain.repository.GuardrailRepository;
 import site.utnpf.odontolink.domain.repository.KnowledgeBaseDocumentRepository;
+import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.DigitalOceanAgentInvokerAdapter;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.DigitalOceanAgentPlatformProperties;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.DigitalOceanGradientClient;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.DigitalOceanKnowledgeBaseAdapter;
@@ -205,5 +216,61 @@ public class AiAgentBeanConfiguration {
                 props.getStorage().getKeyPrefix(),
                 props.getMaxUploadBytes()
         );
+    }
+
+    // -- Beans del chatbot institucional (RF29/RF31/RF32/RF34) -----------
+
+    @Bean
+    public PiiSanitizer piiSanitizer() {
+        return new PiiSanitizer();
+    }
+
+    @Bean
+    public EmergencyDetector emergencyDetector() {
+        return new EmergencyDetector();
+    }
+
+    /**
+     * Adapter de invocacion del agente. Reutiliza el {@link DigitalOceanGradientClient}
+     * existente (mismo bearer interceptor) pero llama a un endpoint absoluto
+     * distinto (el AGENT_URL deployado). Resilience4j envuelve las
+     * invocaciones gracias a sus anotaciones.
+     */
+    @Bean
+    public ILlmAgentInvokerPort llmAgentInvokerPort(DigitalOceanGradientClient client) {
+        return new DigitalOceanAgentInvokerAdapter(client);
+    }
+
+    @Bean
+    public IChatbotInteractionUseCase chatbotInteractionUseCase(
+            AiAgentConfigurationRepository configRepository,
+            GuardrailRepository guardrailRepository,
+            ChatbotSessionRepository sessionRepository,
+            ChatbotMessageRepository messageRepository,
+            EmergencyKeywordRepository emergencyKeywordRepository,
+            PiiSanitizer piiSanitizer,
+            EmergencyDetector emergencyDetector,
+            ILlmAgentInvokerPort invokerPort,
+            ILlmAgentProviderPort providerPort,
+            DigitalOceanAgentPlatformProperties props) {
+        return new ChatbotInteractionService(
+                configRepository,
+                guardrailRepository,
+                sessionRepository,
+                messageRepository,
+                emergencyKeywordRepository,
+                piiSanitizer,
+                emergencyDetector,
+                invokerPort,
+                providerPort,
+                props.getAgentInvocationUrl(),
+                props.getAgentUuid()
+        );
+    }
+
+    @Bean
+    public IEmergencyKeywordAdminUseCase emergencyKeywordAdminUseCase(
+            EmergencyKeywordRepository repository) {
+        return new EmergencyKeywordAdminService(repository);
     }
 }

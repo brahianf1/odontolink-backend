@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.stereotype.Component;
 import site.utnpf.odontolink.domain.exception.RateLimitExceededException;
 
+import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -32,6 +33,9 @@ public class RateLimitRegistry {
     public static final String RESET_PASSWORD_IP = "reset-password-ip";
     public static final String LOGIN_IP = "login-ip";
     public static final String CHANGE_PASSWORD_USER = "change-password-user";
+    /** Buckets dinamicos del chatbot (capacidad la fija el admin desde panel). */
+    public static final String CHATBOT_ANONYMOUS_IP = "chatbot-anon-ip";
+    public static final String CHATBOT_AUTHENTICATED_USER = "chatbot-auth-user";
 
     private final RateLimitProperties props;
     private final ConcurrentMap<String, ConcurrentMap<String, Bucket>> bucketsByPolicy = new ConcurrentHashMap<>();
@@ -75,11 +79,34 @@ public class RateLimitRegistry {
         return resolve(policyName, key).tryConsume(1);
     }
 
+    /**
+     * Variante dinamica para politicas cuya capacidad la define el admin en
+     * runtime (chatbot). La capacidad por hora se evalua solo al construir el
+     * bucket por primera vez para esta {@code key}; cambios posteriores del
+     * admin no rebuild el bucket existente (caro y propenso a inconsistencia).
+     * En la practica los cambios propagan cuando el bucket es purgado por
+     * restart o cuando la clave es nueva (otra IP, otro usuario).
+     */
+    public Bucket resolveDynamic(String policyName, String key, long capacityPerHour) {
+        ConcurrentMap<String, Bucket> buckets = bucketsByPolicy.computeIfAbsent(
+                policyName, k -> new ConcurrentHashMap<>());
+        return buckets.computeIfAbsent(key, k -> buildDynamicBucket(capacityPerHour));
+    }
+
     private Bucket buildBucket(String policyName) {
         RateLimitProperties.Policy policy = lookupPolicy(policyName);
         Bandwidth limit = Bandwidth.builder()
                 .capacity(policy.getCapacity())
                 .refillIntervally(policy.getCapacity(), policy.getPeriod())
+                .build();
+        return Bucket.builder().addLimit(limit).build();
+    }
+
+    private Bucket buildDynamicBucket(long capacityPerHour) {
+        long capacity = Math.max(1L, capacityPerHour);
+        Bandwidth limit = Bandwidth.builder()
+                .capacity(capacity)
+                .refillIntervally(capacity, Duration.ofHours(1))
                 .build();
         return Bucket.builder().addLimit(limit).build();
     }
