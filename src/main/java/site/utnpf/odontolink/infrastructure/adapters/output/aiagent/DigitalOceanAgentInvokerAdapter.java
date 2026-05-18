@@ -4,6 +4,7 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.client.ResourceAccessException;
 import site.utnpf.odontolink.application.port.out.ILlmAgentInvokerPort;
 import site.utnpf.odontolink.domain.exception.LlmProviderException;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.error.AiAgentErrorCodes;
@@ -14,6 +15,7 @@ import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.dto.DoMessag
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.dto.DoRetrievalBlock;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.dto.DoRetrievalDocument;
 
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,8 +28,22 @@ import java.util.List;
  * (propiedad {@code odontolink.ai-agent.agent-invocation-access-key}). Es
  * critico que NO se use el mismo cliente que el management API: cada agente
  * deployado en DO Gradient genera una key propia en su seccion "Endpoint Keys"
- * del dashboard, distinta del Personal Access Token. Enviar el PAT al endpoint
- * del agente devuelve 401 sin body — el bug original que motivo este adapter.
+ * del dashboard, distinta del Personal Access Token.
+ *
+ * <p>Detalles del wire format documentados oficialmente:
+ * <ul>
+ *   <li>Path: {@code /api/v1/chat/completions}.</li>
+ *   <li><strong>Query string {@code ?agent=true} OBLIGATORIO.</strong> Sin el
+ *       flag el endpoint no enruta al agente y queda esperando una request
+ *       en formato distinto, lo que produce timeouts (incidente reproducido
+ *       en produccion).</li>
+ *   <li>Authorization: {@code Bearer <agent_access_key>}.</li>
+ *   <li>Body minimo: {@code messages[]}. El campo {@code model} es opcional
+ *       cuando se usa {@code agent=true}: el modelo lo provee el agente
+ *       deployado. Soportamos override por property por si en algun entorno
+ *       se necesita forzar uno.</li>
+ *   <li>{@code stream:false} para modo sincronico (default nuestro).</li>
+ * </ul>
  *
  * <p>La resiliencia se modela con Resilience4j:
  * <ul>
@@ -52,11 +68,27 @@ public class DigitalOceanAgentInvokerAdapter implements ILlmAgentInvokerPort {
 
     private static final Logger log = LoggerFactory.getLogger(DigitalOceanAgentInvokerAdapter.class);
     private static final String COMPLETIONS_PATH = "/api/v1/chat/completions";
+    /** Query string obligatorio para enrutar al agente deployado en DO. */
+    private static final String AGENT_FLAG = "agent=true";
 
     private final DigitalOceanGradientClient invocationClient;
+    /**
+     * Cliente dedicado al probe con read-timeout mas corto que el normal:
+     * el {@code /health} no puede colgar 20s cuando el agente esta caido.
+     */
+    private final DigitalOceanGradientClient probeClient;
+    /**
+     * Nombre del modelo a forzar en el request. Si esta vacio, se omite del
+     * body y el agente usa el modelo configurado en su dashboard.
+     */
+    private final String modelOverride;
 
-    public DigitalOceanAgentInvokerAdapter(DigitalOceanGradientClient invocationClient) {
+    public DigitalOceanAgentInvokerAdapter(DigitalOceanGradientClient invocationClient,
+                                           DigitalOceanGradientClient probeClient,
+                                           String modelOverride) {
         this.invocationClient = invocationClient;
+        this.probeClient = probeClient;
+        this.modelOverride = modelOverride;
     }
 
     @Override
@@ -72,12 +104,13 @@ public class DigitalOceanAgentInvokerAdapter implements ILlmAgentInvokerPort {
         for (ChatMessage m : messages) {
             wire.add(new DoMessage(m.role(), m.content()));
         }
-        DoChatCompletionRequest body = new DoChatCompletionRequest(wire, false, Boolean.TRUE);
+        DoChatCompletionRequest body = buildRequest(wire);
         long startedAt = System.currentTimeMillis();
         // INFO en cada invocacion: ayuda a correlacionar la request del FE con
         // la llamada externa cuando algo no anda. No incluye contenido del
         // mensaje (privacidad) ni el bearer (seguridad); solo metadata.
-        log.info("Invocando agente DO: url={}, system+turns={}", fullUrl, wire.size());
+        log.info("Invocando agente DO: url={}, system+turns={}, model={}",
+                fullUrl, wire.size(), modelOverride == null || modelOverride.isBlank() ? "<agent-default>" : modelOverride);
         try {
             DoChatCompletionResponse response = invocationClient.postAbsolute(
                     fullUrl, body, DoChatCompletionResponse.class);
@@ -94,6 +127,18 @@ public class DigitalOceanAgentInvokerAdapter implements ILlmAgentInvokerPort {
             log.warn("Falla invocando agente DO: latencyMs={}, code={}, message={}",
                     elapsed, ex.getErrorCode(), ex.getMessage());
             throw ex;
+        } catch (ResourceAccessException ex) {
+            // Errores de red (timeouts, conexion rechazada, DNS). El cause
+            // tipico es SocketTimeoutException. Lo logueamos por separado del
+            // 4xx/5xx del proveedor para que el operador distinga rapido entre
+            // "DO me rechazo" vs "DO no respondio a tiempo".
+            long elapsed = System.currentTimeMillis() - startedAt;
+            log.warn("Timeout/red invocando agente DO: latencyMs={}, cause={}: {}",
+                    elapsed, ex.getCause() == null ? "?" : ex.getCause().getClass().getSimpleName(),
+                    ex.getMessage());
+            throw new LlmProviderException(
+                    "Timeout o falla de red invocando al agente IA.",
+                    null, AiAgentErrorCodes.AI_PROVIDER_UNAVAILABLE, ex);
         }
     }
 
@@ -122,8 +167,8 @@ public class DigitalOceanAgentInvokerAdapter implements ILlmAgentInvokerPort {
     /**
      * Invocacion minima para health-check. NO se anota con {@code @CircuitBreaker}
      * a proposito: el health debe ver el estado real del proveedor, no el
-     * cached del circuito. Captura {@link LlmProviderException} para
-     * convertirla en un {@link ProbeResult} estructurado.
+     * cached del circuito. Captura {@link LlmProviderException} y errores de
+     * red para devolver un {@link ProbeResult} estructurado.
      */
     @Override
     public ProbeResult probe(String agentInvocationUrl) {
@@ -131,35 +176,52 @@ public class DigitalOceanAgentInvokerAdapter implements ILlmAgentInvokerPort {
             return new ProbeResult(false, "URL del agente no configurada.");
         }
         String fullUrl = buildCompletionsUrl(agentInvocationUrl);
-        DoChatCompletionRequest body = new DoChatCompletionRequest(
-                List.of(new DoMessage("user", "ping")),
-                false,
-                Boolean.FALSE
-        );
+        DoChatCompletionRequest body = buildRequest(List.of(new DoMessage("user", "ping")));
         try {
-            invocationClient.postAbsolute(fullUrl, body, DoChatCompletionResponse.class);
+            probeClient.postAbsolute(fullUrl, body, DoChatCompletionResponse.class);
             return new ProbeResult(true, null);
         } catch (LlmProviderException ex) {
             String detail = "status=" + ex.getStatusCode() + " code=" + ex.getErrorCode()
                     + " message=" + ex.getMessage();
             log.warn("Probe del agente DO fallo: {}", detail);
             return new ProbeResult(false, detail);
+        } catch (ResourceAccessException ex) {
+            // Distinguimos timeout/red de error de parsing/aplicacion para que
+            // el operador no se confunda — son problemas distintos.
+            String causeName = ex.getCause() == null ? ex.getClass().getSimpleName()
+                    : ex.getCause().getClass().getSimpleName();
+            String detail = ex.getCause() instanceof SocketTimeoutException
+                    ? "Timeout: el agente no respondio dentro del read-timeout. "
+                            + "Verificar que la URL incluya ?agent=true (lo hace el adapter) y "
+                            + "que la access key sea valida."
+                    : "Falla de red: " + causeName + ": " + ex.getMessage();
+            log.warn("Probe del agente DO fallo por red/timeout: {}", detail);
+            return new ProbeResult(false, detail);
         } catch (RuntimeException ex) {
-            // Capturamos red/timeout/cualquier otra falla para no propagar a
-            // /health (debe ser un endpoint tolerante).
-            log.warn("Probe del agente DO fallo con excepcion no-LLM: {}",
+            // Cualquier otra falla (parsing, framework, etc). Mantenemos el
+            // catch para que /health sea tolerante.
+            log.warn("Probe del agente DO fallo con excepcion inesperada: {}",
                     ex.getMessage(), ex);
             return new ProbeResult(false, ex.getClass().getSimpleName() + ": " + ex.getMessage());
         }
     }
 
     /**
-     * Compone la URL final concatenando el path estable al base URL del agente.
-     * Manejamos el trailing slash para evitar dobles barras.
+     * Compone la URL final agregando el path y el query string {@code agent=true}.
+     * Manejamos el trailing slash y un eventual query string previo en la base
+     * para evitar dobles {@code &} o {@code ?}.
      */
     private static String buildCompletionsUrl(String base) {
         String trimmed = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
-        return trimmed + COMPLETIONS_PATH;
+        String url = trimmed + COMPLETIONS_PATH;
+        // Solo agregamos ?agent=true si el path todavia no lleva query.
+        return url.contains("?") ? url + "&" + AGENT_FLAG : url + "?" + AGENT_FLAG;
+    }
+
+    /** Builder unico del body para que invoke y probe compartan exactamente la misma forma. */
+    private DoChatCompletionRequest buildRequest(List<DoMessage> messages) {
+        String model = (modelOverride == null || modelOverride.isBlank()) ? null : modelOverride;
+        return new DoChatCompletionRequest(messages, false, model);
     }
 
     private static AgentInvocationResult toResult(DoChatCompletionResponse response) {
