@@ -54,4 +54,24 @@ public interface ILlmAgentInvokerPort {
      *         el proveedor responde con error o falla la red.
      */
     AgentInvocationResult invoke(String agentInvocationUrl, List<ChatMessage> messages);
+
+    /**
+     * Resultado de la prueba de alcanzabilidad al endpoint del agente.
+     * {@code errorDetail} es null cuando {@code reachable=true}.
+     */
+    record ProbeResult(boolean reachable, String errorDetail) {
+    }
+
+    /**
+     * Realiza una invocacion minima ({@code "ping"} con {@code max_tokens=1})
+     * al endpoint del agente para verificar conectividad + autenticacion. A
+     * diferencia de {@link #invoke}, esta llamada <strong>NO</strong> pasa
+     * por el circuit breaker: el health-check necesita ver el estado real
+     * del proveedor, no el cached del circuito. Costo aproximado: ~5 tokens
+     * por probe.
+     *
+     * @return reachable=true si el proveedor respondio 2xx; reachable=false
+     *         con el motivo en errorDetail (status code, mensaje, etc.).
+     */
+    ProbeResult probe(String agentInvocationUrl);
 }

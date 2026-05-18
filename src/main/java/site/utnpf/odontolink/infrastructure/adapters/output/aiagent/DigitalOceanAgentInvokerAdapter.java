@@ -21,12 +21,13 @@ import java.util.List;
  * Adaptador de invocacion del agente IA (chat completions) contra DigitalOcean
  * Gradient (RF29/RF34).
  *
- * <p>Se separa del {@link DigitalOceanLlmAgentAdapter} de management porque
- * son endpoints distintos en infraestructuras distintas: management vive en
- * {@code api.digitalocean.com} y la invocacion del agente en
- * {@code <id>.agents.do-ai.run}. Ademas necesitamos cablear resiliencia
- * especifica para esta ruta (no queremos que un fallo en chat completions
- * abra el circuito de management o viceversa).
+ * <p>Usa un {@link DigitalOceanGradientClient} <strong>dedicado al endpoint del
+ * agente</strong>, cableado con la access key especifica del agente
+ * (propiedad {@code odontolink.ai-agent.agent-invocation-access-key}). Es
+ * critico que NO se use el mismo cliente que el management API: cada agente
+ * deployado en DO Gradient genera una key propia en su seccion "Endpoint Keys"
+ * del dashboard, distinta del Personal Access Token. Enviar el PAT al endpoint
+ * del agente devuelve 401 sin body — el bug original que motivo este adapter.
  *
  * <p>La resiliencia se modela con Resilience4j:
  * <ul>
@@ -52,10 +53,10 @@ public class DigitalOceanAgentInvokerAdapter implements ILlmAgentInvokerPort {
     private static final Logger log = LoggerFactory.getLogger(DigitalOceanAgentInvokerAdapter.class);
     private static final String COMPLETIONS_PATH = "/api/v1/chat/completions";
 
-    private final DigitalOceanGradientClient client;
+    private final DigitalOceanGradientClient invocationClient;
 
-    public DigitalOceanAgentInvokerAdapter(DigitalOceanGradientClient client) {
-        this.client = client;
+    public DigitalOceanAgentInvokerAdapter(DigitalOceanGradientClient invocationClient) {
+        this.invocationClient = invocationClient;
     }
 
     @Override
@@ -72,8 +73,28 @@ public class DigitalOceanAgentInvokerAdapter implements ILlmAgentInvokerPort {
             wire.add(new DoMessage(m.role(), m.content()));
         }
         DoChatCompletionRequest body = new DoChatCompletionRequest(wire, false, Boolean.TRUE);
-        DoChatCompletionResponse response = client.postExternal(fullUrl, body, DoChatCompletionResponse.class);
-        return toResult(response);
+        long startedAt = System.currentTimeMillis();
+        // INFO en cada invocacion: ayuda a correlacionar la request del FE con
+        // la llamada externa cuando algo no anda. No incluye contenido del
+        // mensaje (privacidad) ni el bearer (seguridad); solo metadata.
+        log.info("Invocando agente DO: url={}, system+turns={}", fullUrl, wire.size());
+        try {
+            DoChatCompletionResponse response = invocationClient.postAbsolute(
+                    fullUrl, body, DoChatCompletionResponse.class);
+            long elapsed = System.currentTimeMillis() - startedAt;
+            int choices = response == null || response.choices() == null ? 0 : response.choices().size();
+            int retrieved = response == null || response.retrieval() == null
+                    || response.retrieval().retrievedData() == null
+                    ? 0 : response.retrieval().retrievedData().size();
+            log.info("Respuesta agente DO: latencyMs={}, choices={}, retrieved={}",
+                    elapsed, choices, retrieved);
+            return toResult(response);
+        } catch (LlmProviderException ex) {
+            long elapsed = System.currentTimeMillis() - startedAt;
+            log.warn("Falla invocando agente DO: latencyMs={}, code={}, message={}",
+                    elapsed, ex.getErrorCode(), ex.getMessage());
+            throw ex;
+        }
     }
 
     /**
@@ -87,7 +108,8 @@ public class DigitalOceanAgentInvokerAdapter implements ILlmAgentInvokerPort {
     public AgentInvocationResult invokeFallback(String agentInvocationUrl,
                                                 List<ChatMessage> messages,
                                                 Throwable cause) {
-        log.warn("Fallback de Resilience4j en invocacion del agente: {} ({})",
+        log.warn("Fallback de Resilience4j en invocacion del agente (url={}, msgs={}): {} ({})",
+                agentInvocationUrl, messages == null ? 0 : messages.size(),
                 cause.getMessage(), cause.getClass().getSimpleName());
         if (cause instanceof LlmProviderException llmEx) {
             throw llmEx;
@@ -95,6 +117,40 @@ public class DigitalOceanAgentInvokerAdapter implements ILlmAgentInvokerPort {
         throw new LlmProviderException(
                 "Servicio de IA no disponible.", null,
                 AiAgentErrorCodes.AI_PROVIDER_UNAVAILABLE, cause);
+    }
+
+    /**
+     * Invocacion minima para health-check. NO se anota con {@code @CircuitBreaker}
+     * a proposito: el health debe ver el estado real del proveedor, no el
+     * cached del circuito. Captura {@link LlmProviderException} para
+     * convertirla en un {@link ProbeResult} estructurado.
+     */
+    @Override
+    public ProbeResult probe(String agentInvocationUrl) {
+        if (agentInvocationUrl == null || agentInvocationUrl.isBlank()) {
+            return new ProbeResult(false, "URL del agente no configurada.");
+        }
+        String fullUrl = buildCompletionsUrl(agentInvocationUrl);
+        DoChatCompletionRequest body = new DoChatCompletionRequest(
+                List.of(new DoMessage("user", "ping")),
+                false,
+                Boolean.FALSE
+        );
+        try {
+            invocationClient.postAbsolute(fullUrl, body, DoChatCompletionResponse.class);
+            return new ProbeResult(true, null);
+        } catch (LlmProviderException ex) {
+            String detail = "status=" + ex.getStatusCode() + " code=" + ex.getErrorCode()
+                    + " message=" + ex.getMessage();
+            log.warn("Probe del agente DO fallo: {}", detail);
+            return new ProbeResult(false, detail);
+        } catch (RuntimeException ex) {
+            // Capturamos red/timeout/cualquier otra falla para no propagar a
+            // /health (debe ser un endpoint tolerante).
+            log.warn("Probe del agente DO fallo con excepcion no-LLM: {}",
+                    ex.getMessage(), ex);
+            return new ProbeResult(false, ex.getClass().getSimpleName() + ": " + ex.getMessage());
+        }
     }
 
     /**

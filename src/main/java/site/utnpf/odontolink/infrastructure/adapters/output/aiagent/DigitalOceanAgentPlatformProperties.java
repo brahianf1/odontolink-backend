@@ -50,6 +50,20 @@ public class DigitalOceanAgentPlatformProperties {
      */
     private String agentInvocationUrl = "";
 
+    /**
+     * Access key del endpoint del agente (chat completions). Es DISTINTA del
+     * {@link #accessToken} (Personal Access Token) que usamos contra el
+     * management API: cada agente deployado en DigitalOcean Gradient genera
+     * una key dedicada en su seccion "Endpoint Keys" del dashboard, y solo
+     * esa key autentica contra {@code /api/v1/chat/completions}.
+     *
+     * <p>Sin esta variable, el endpoint del agente responde 401 sin body. El
+     * sintoma original fue: el management API funciona (PAT valido), pero el
+     * chatbot devuelve siempre el reply de fallback porque el invoker recibe
+     * 401. (RF29).
+     */
+    private String agentInvocationAccessKey = "";
+
     /** Subgrupo de propiedades del bucket Spaces dedicado a la KB. */
     private Storage storage = new Storage();
 
@@ -115,6 +129,14 @@ public class DigitalOceanAgentPlatformProperties {
 
     public void setAgentInvocationUrl(String agentInvocationUrl) {
         this.agentInvocationUrl = agentInvocationUrl;
+    }
+
+    public String getAgentInvocationAccessKey() {
+        return agentInvocationAccessKey;
+    }
+
+    public void setAgentInvocationAccessKey(String agentInvocationAccessKey) {
+        this.agentInvocationAccessKey = agentInvocationAccessKey;
     }
 
     public Storage getStorage() {

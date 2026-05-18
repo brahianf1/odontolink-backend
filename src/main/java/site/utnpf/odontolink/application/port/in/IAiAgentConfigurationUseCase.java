@@ -58,13 +58,22 @@ public interface IAiAgentConfigurationUseCase {
 
     /**
      * Resultado del health-check: lifecycle vigente + lista de requisitos
-     * faltantes para publicar segun la policy actual.
+     * faltantes para publicar segun la policy actual + reachability separada
+     * para management API y endpoint del agente.
+     *
+     * <p>{@code agentInvocationReachable} es {@code null} cuando no se pudo
+     * probar (URL del agente desconocida porque la config esta vacia o el
+     * agente no esta deployado). Cuando es {@code false},
+     * {@code agentInvocationErrorDetail} explica la causa (tipicamente "401"
+     * cuando la access key no es la correcta).
      */
     record HealthResult(
             AiAgentLifecycle lifecycle,
             List<String> missingRequirements,
             boolean providerReachable,
-            String providerErrorDetail) {
+            String providerErrorDetail,
+            Boolean agentInvocationReachable,
+            String agentInvocationErrorDetail) {
     }
 
     HealthResult health();
