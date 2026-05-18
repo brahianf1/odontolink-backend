@@ -62,10 +62,13 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
     private final AiAdminAuditEventRepository auditRepository;
     private final KnowledgeBaseDocumentRepository kbDocumentRepository;
     private final ILlmAgentProviderPort llmProvider;
+    private final site.utnpf.odontolink.application.port.out.ILlmAgentInvokerPort invokerPort;
     private final AuthenticationFacade authFacade;
     private final site.utnpf.odontolink.application.service.support.SingletonRowBootstrap singletonBootstrap;
     /** UUID del agente pre-provisto en el dashboard del proveedor. */
     private final String providerAgentUuid;
+    /** ENV {@code DIGITALOCEAN_AGENT_INVOCATION_URL}; gana sobre el cache de BD. */
+    private final String envAgentInvocationUrl;
 
     public AiAgentConfigurationService(AiAgentConfigurationRepository configRepository,
                                        GuardrailRepository guardrailRepository,
@@ -74,9 +77,11 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
                                        AiAdminAuditEventRepository auditRepository,
                                        KnowledgeBaseDocumentRepository kbDocumentRepository,
                                        ILlmAgentProviderPort llmProvider,
+                                       site.utnpf.odontolink.application.port.out.ILlmAgentInvokerPort invokerPort,
                                        AuthenticationFacade authFacade,
                                        site.utnpf.odontolink.application.service.support.SingletonRowBootstrap singletonBootstrap,
-                                       String providerAgentUuid) {
+                                       String providerAgentUuid,
+                                       String envAgentInvocationUrl) {
         this.configRepository = configRepository;
         this.guardrailRepository = guardrailRepository;
         this.policyRepository = policyRepository;
@@ -84,9 +89,11 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
         this.auditRepository = auditRepository;
         this.kbDocumentRepository = kbDocumentRepository;
         this.llmProvider = llmProvider;
+        this.invokerPort = invokerPort;
         this.authFacade = authFacade;
         this.singletonBootstrap = singletonBootstrap;
         this.providerAgentUuid = providerAgentUuid;
+        this.envAgentInvocationUrl = envAgentInvocationUrl;
     }
 
     @Override
@@ -294,7 +301,39 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
             providerError = "DIGITALOCEAN_AGENT_UUID no configurado.";
         }
 
-        return new HealthResult(lifecycle, missing, reachable, providerError);
+        // Probe del endpoint del agente (chat completions). NO usa el circuit
+        // breaker porque queremos el estado real, no el cached. Solo se prueba
+        // si tenemos una URL conocida (ENV o cache); si no, dejamos los campos
+        // null para que el FE muestre "no probado" en vez de "no alcanzable".
+        Boolean agentReachable = null;
+        String agentError = null;
+        String invocationUrl = resolveAgentInvocationUrlForProbe(opt);
+        if (invocationUrl != null) {
+            site.utnpf.odontolink.application.port.out.ILlmAgentInvokerPort.ProbeResult probe =
+                    invokerPort.probe(invocationUrl);
+            agentReachable = probe.reachable();
+            agentError = probe.errorDetail();
+        } else {
+            agentError = "URL del agente desconocida (ENV vacia y cache de BD vacio).";
+        }
+
+        return new HealthResult(lifecycle, missing, reachable, providerError, agentReachable, agentError);
+    }
+
+    /**
+     * Resuelve la URL del agente para el probe siguiendo la estrategia hibrida
+     * (ENV gana, sino cache de BD). NO dispara descubrimiento via management API
+     * para mantener {@code /health} barato: si la URL no esta resuelta el health
+     * lo reporta y el admin la genera explicitamente con un PUT o limpiando el
+     * cache.
+     */
+    private String resolveAgentInvocationUrlForProbe(Optional<AiAgentConfiguration> cfgOpt) {
+        if (envAgentInvocationUrl != null && !envAgentInvocationUrl.isBlank()) {
+            return envAgentInvocationUrl;
+        }
+        return cfgOpt.map(AiAgentConfiguration::getAgentInvocationUrl)
+                .filter(s -> s != null && !s.isBlank())
+                .orElse(null);
     }
 
     /**

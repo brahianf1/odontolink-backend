@@ -151,7 +151,9 @@ public class AdminAiAgentConfigurationController {
                 result.lifecycle() == null ? AiAgentLifecycle.UNCONFIGURED : result.lifecycle(),
                 result.missingRequirements(),
                 result.providerReachable(),
-                result.providerErrorDetail()
+                result.providerErrorDetail(),
+                result.agentInvocationReachable(),
+                result.agentInvocationErrorDetail()
         ));
     }
 }

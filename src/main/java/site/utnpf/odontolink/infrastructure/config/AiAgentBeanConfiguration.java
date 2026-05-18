@@ -67,8 +67,15 @@ import java.net.URI;
 @EnableConfigurationProperties(DigitalOceanAgentPlatformProperties.class)
 public class AiAgentBeanConfiguration {
 
-    @Bean
-    public RestClient digitalOceanGradientRestClient(DigitalOceanAgentPlatformProperties props,
+    /**
+     * RestClient para el <strong>management API</strong> de DigitalOcean
+     * Gradient ({@code api.digitalocean.com/v2/gen-ai/*}). Usa el Personal
+     * Access Token (PAT) como bearer; este token autoriza operaciones
+     * administrativas: leer/actualizar agentes, manejar la Knowledge Base,
+     * disparar indexing jobs.
+     */
+    @Bean(name = "doGradientManagementRestClient")
+    public RestClient doGradientManagementRestClient(DigitalOceanAgentPlatformProperties props,
                                                      RestClient.Builder builder) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(props.getConnectTimeoutMs());
@@ -81,19 +88,58 @@ public class AiAgentBeanConfiguration {
                 .build();
     }
 
-    @Bean
-    public DigitalOceanGradientClient digitalOceanGradientClient(
-            RestClient digitalOceanGradientRestClient) {
-        return new DigitalOceanGradientClient(digitalOceanGradientRestClient);
+    /**
+     * RestClient para la <strong>invocacion del agente</strong> (chat
+     * completions) en {@code <id>.agents.do-ai.run}. Usa la access key del
+     * endpoint del agente, NO el PAT — cada agente genera su propia key en
+     * el dashboard "Endpoint Keys". Confundir tokens devuelve 401 sin body
+     * (el bug original de produccion).
+     *
+     * <p>Sin baseUrl: la URL del agente se pasa absoluta en cada llamada
+     * ({@code postAbsolute}) porque puede ser descubierta dinamicamente o
+     * cambiar entre deploys.
+     */
+    @Bean(name = "doGradientInvocationRestClient")
+    public RestClient doGradientInvocationRestClient(DigitalOceanAgentPlatformProperties props,
+                                                     RestClient.Builder builder) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(props.getConnectTimeoutMs());
+        factory.setReadTimeout(props.getReadTimeoutMs());
+
+        return builder
+                .requestFactory(factory)
+                .defaultHeader(HttpHeaders.AUTHORIZATION,
+                        "Bearer " + props.getAgentInvocationAccessKey())
+                .build();
+    }
+
+    /**
+     * Cliente de management. Reemplazo del bean unico que existia antes; el
+     * nombre del bean lo mantenemos calificado para no chocar con el de
+     * invocacion.
+     */
+    @Bean(name = "doGradientManagementClient")
+    public DigitalOceanGradientClient doGradientManagementClient(
+            @Qualifier("doGradientManagementRestClient") RestClient restClient) {
+        return new DigitalOceanGradientClient(restClient, "management");
+    }
+
+    /** Cliente dedicado al endpoint del agente. */
+    @Bean(name = "doGradientInvocationClient")
+    public DigitalOceanGradientClient doGradientInvocationClient(
+            @Qualifier("doGradientInvocationRestClient") RestClient restClient) {
+        return new DigitalOceanGradientClient(restClient, "invocation");
     }
 
     @Bean
-    public ILlmAgentProviderPort llmAgentProviderPort(DigitalOceanGradientClient client) {
+    public ILlmAgentProviderPort llmAgentProviderPort(
+            @Qualifier("doGradientManagementClient") DigitalOceanGradientClient client) {
         return new DigitalOceanLlmAgentAdapter(client);
     }
 
     @Bean
-    public IKnowledgeBaseProviderPort knowledgeBaseProviderPort(DigitalOceanGradientClient client) {
+    public IKnowledgeBaseProviderPort knowledgeBaseProviderPort(
+            @Qualifier("doGradientManagementClient") DigitalOceanGradientClient client) {
         return new DigitalOceanKnowledgeBaseAdapter(client);
     }
 
@@ -153,6 +199,7 @@ public class AiAgentBeanConfiguration {
             AiAdminAuditEventRepository auditRepository,
             KnowledgeBaseDocumentRepository kbDocumentRepository,
             ILlmAgentProviderPort llmProvider,
+            ILlmAgentInvokerPort invokerPort,
             AuthenticationFacade authFacade,
             SingletonRowBootstrap singletonBootstrap,
             DigitalOceanAgentPlatformProperties props) {
@@ -164,9 +211,11 @@ public class AiAgentBeanConfiguration {
                 auditRepository,
                 kbDocumentRepository,
                 llmProvider,
+                invokerPort,
                 authFacade,
                 singletonBootstrap,
-                props.getAgentUuid()
+                props.getAgentUuid(),
+                props.getAgentInvocationUrl()
         );
     }
 
@@ -236,13 +285,14 @@ public class AiAgentBeanConfiguration {
 
     /**
      * Adapter de invocacion del agente. Reutiliza el {@link DigitalOceanGradientClient}
-     * existente (mismo bearer interceptor) pero llama a un endpoint absoluto
-     * distinto (el AGENT_URL deployado). Resilience4j envuelve las
-     * invocaciones gracias a sus anotaciones.
+     * dedicado al endpoint del agente, NO el del management API: el agente
+     * usa una access key propia que se genera en su seccion "Endpoint Keys".
+     * Resilience4j envuelve las invocaciones gracias a sus anotaciones.
      */
     @Bean
-    public ILlmAgentInvokerPort llmAgentInvokerPort(DigitalOceanGradientClient client) {
-        return new DigitalOceanAgentInvokerAdapter(client);
+    public ILlmAgentInvokerPort llmAgentInvokerPort(
+            @Qualifier("doGradientInvocationClient") DigitalOceanGradientClient invocationClient) {
+        return new DigitalOceanAgentInvokerAdapter(invocationClient);
     }
 
     @Bean
