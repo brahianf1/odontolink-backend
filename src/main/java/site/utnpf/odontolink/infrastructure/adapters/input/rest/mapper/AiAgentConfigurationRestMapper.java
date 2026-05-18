@@ -26,7 +26,14 @@ public final class AiAgentConfigurationRestMapper {
                 dto.getTopP(),
                 dto.getMaxTokens(),
                 dto.getK(),
-                dto.getRetrievalMethod()
+                dto.getRetrievalMethod(),
+                dto.getAccessMode(),
+                dto.getAllowedRoles(),
+                dto.getPiiPolicy(),
+                dto.getConversationBufferSize(),
+                dto.getRateLimitAnonymousPerHour(),
+                dto.getRateLimitAuthenticatedPerHour(),
+                dto.getEmergencyBannerText()
         );
     }
 
@@ -53,6 +60,14 @@ public final class AiAgentConfigurationRestMapper {
         dto.setProviderSyncedAt(domain.getProviderSyncedAt());
         dto.setLastSyncError(domain.getLastSyncError());
         dto.setUpdatedAt(domain.getUpdatedAt());
+        dto.setAccessMode(domain.getAccessMode());
+        dto.setAllowedRoles(domain.getAllowedRoles());
+        dto.setPiiPolicy(domain.getPiiPolicy());
+        dto.setConversationBufferSize(domain.getConversationBufferSize());
+        dto.setRateLimitAnonymousPerHour(domain.getRateLimitAnonymousPerHour());
+        dto.setRateLimitAuthenticatedPerHour(domain.getRateLimitAuthenticatedPerHour());
+        dto.setAgentInvocationUrl(domain.getAgentInvocationUrl());
+        dto.setEmergencyBannerText(domain.getEmergencyBannerText());
         return dto;
     }
 }

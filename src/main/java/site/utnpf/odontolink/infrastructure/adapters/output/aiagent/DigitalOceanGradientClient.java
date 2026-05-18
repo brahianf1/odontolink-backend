@@ -82,6 +82,25 @@ public class DigitalOceanGradientClient {
     }
 
     /**
+     * Invoca un endpoint en una URL absoluta distinta del baseUrl del cliente,
+     * reutilizando el manejador de errores y el bearer interceptor. Lo usa el
+     * adapter de invocacion del agente (chat completions): el AGENT_ENDPOINT
+     * de DigitalOcean Gradient vive en {@code https://<id>.agents.do-ai.run},
+     * que NO es el mismo host que el management API. Pasamos la URL completa
+     * y dejamos que RestClient haga el override del base.
+     */
+    public <R> R postExternal(String absoluteUrl, Object body, Class<R> responseType) {
+        return restClient.post()
+                .uri(java.net.URI.create(absoluteUrl))
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, this::translateError)
+                .body(responseType);
+    }
+
+    /**
      * Traduce cualquier respuesta 4xx/5xx del proveedor en una
      * {@link LlmProviderException} tipada. Es invocado por el contrato
      * {@code onStatus(...)} de {@link RestClient}, asi que debe respetar la

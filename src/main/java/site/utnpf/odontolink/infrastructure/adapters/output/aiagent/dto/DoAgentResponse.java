@@ -28,7 +28,19 @@ public record DoAgentResponse(@JsonProperty("agent") AgentBody agent) {
             @JsonProperty("max_tokens") Integer maxTokens,
             @JsonProperty("k") Integer k,
             @JsonProperty("retrieval_method") String retrievalMethod,
-            @JsonProperty("updated_at") Instant updatedAt
+            @JsonProperty("updated_at") Instant updatedAt,
+            /**
+             * Bloque opcional con la URL de invocacion del agente. Solo
+             * aparece cuando el agente esta deployado en el dashboard de DO.
+             */
+            @JsonProperty("deployment") AgentDeployment deployment
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record AgentDeployment(
+            @JsonProperty("url") String url,
+            @JsonProperty("status") String status
     ) {
     }
 }

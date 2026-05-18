@@ -18,6 +18,7 @@ import site.utnpf.odontolink.application.port.in.IAiAgentConfigurationUseCase;
 import site.utnpf.odontolink.application.port.in.IAiAgentConfigurationUseCase.HealthResult;
 import site.utnpf.odontolink.application.port.in.IAiAgentConfigurationUseCase.PreviewResult;
 import site.utnpf.odontolink.application.port.in.IGuardrailAdminUseCase;
+import site.utnpf.odontolink.application.service.AiAgentConfigurationService;
 import site.utnpf.odontolink.domain.model.AiAgentConfiguration;
 import site.utnpf.odontolink.domain.model.AiAgentLifecycle;
 import site.utnpf.odontolink.domain.model.Guardrail;
@@ -45,11 +46,16 @@ public class AdminAiAgentConfigurationController {
 
     private final IAiAgentConfigurationUseCase configUseCase;
     private final IGuardrailAdminUseCase guardrailUseCase;
+    private final AiAgentConfigurationService configService;
 
     public AdminAiAgentConfigurationController(IAiAgentConfigurationUseCase configUseCase,
-                                               IGuardrailAdminUseCase guardrailUseCase) {
+                                               IGuardrailAdminUseCase guardrailUseCase,
+                                               AiAgentConfigurationService configService) {
         this.configUseCase = configUseCase;
         this.guardrailUseCase = guardrailUseCase;
+        // Inyectamos la implementacion concreta solo para acceder a la
+        // operacion administrativa "clear cache" que no esta en el puerto.
+        this.configService = configService;
     }
 
     @Operation(summary = "Obtener configuracion vigente",
@@ -119,6 +125,19 @@ public class AdminAiAgentConfigurationController {
                 result.composedInstruction(),
                 result.activeGuardrailLabels()
         ));
+    }
+
+    @Operation(summary = "Limpiar cache de URL de invocacion del agente",
+            description = "Borra la URL de invocacion cacheada en BD. La proxima request al chatbot " +
+                    "fuerza un re-descubrimiento via management API. Util cuando el operador cambio " +
+                    "el deployment en el dashboard de DigitalOcean.")
+    @PostMapping("/clear-invocation-url-cache")
+    public ResponseEntity<AiAgentConfigurationResponseDTO> clearInvocationUrlCache() {
+        AiAgentConfiguration updated = configService.clearAgentInvocationUrlCache();
+        List<Guardrail> activeGuardrails = guardrailUseCase.listGuardrails().stream()
+                .filter(Guardrail::isActive)
+                .toList();
+        return ResponseEntity.ok(AiAgentConfigurationRestMapper.toResponse(updated, activeGuardrails));
     }
 
     @Operation(summary = "Health-check del modulo",

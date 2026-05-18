@@ -248,17 +248,41 @@ public class GlobalExceptionHandler {
             LlmProviderException ex,
             HttpServletRequest request) {
 
-        log.warn("Falla del proveedor de IA al servir {} {} (status={}): {}",
-                request.getMethod(), request.getRequestURI(), ex.getStatusCode(), ex.getMessage());
+        log.warn("Falla del subsistema de IA al servir {} {} (status={}, code={}): {}",
+                request.getMethod(), request.getRequestURI(),
+                ex.getStatusCode(), ex.getErrorCode(), ex.getMessage());
+
+        // El statusCode de LlmProviderException puede mapear a HTTP distintos
+        // segun el errorCode: la clase la usamos tambien para flujos del
+        // chatbot (disabled/forbidden/not-published) que no son "el proveedor
+        // esta caido", asi que el mapeo tiene que considerar el code.
+        String code = ex.getErrorCode();
+        HttpStatus status;
+        String title;
+        String message;
+        if (site.utnpf.odontolink.infrastructure.adapters.input.rest.error.AiAgentErrorCodes.AI_AGENT_DISABLED.equals(code)
+                || site.utnpf.odontolink.infrastructure.adapters.input.rest.error.AiAgentErrorCodes.AI_AGENT_ACCESS_DENIED.equals(code)) {
+            status = HttpStatus.FORBIDDEN;
+            title = "Access Denied";
+            message = ex.getMessage();
+        } else if (site.utnpf.odontolink.infrastructure.adapters.input.rest.error.AiAgentErrorCodes.AI_AGENT_ANONYMOUS_FORBIDDEN.equals(code)) {
+            status = HttpStatus.UNAUTHORIZED;
+            title = "Authentication Required";
+            message = ex.getMessage();
+        } else {
+            status = HttpStatus.SERVICE_UNAVAILABLE;
+            title = "AI Provider Unavailable";
+            message = "El servicio de IA no esta disponible temporalmente. Intente nuevamente.";
+        }
 
         ErrorResponseDTO errorResponse = new ErrorResponseDTO(
-                HttpStatus.SERVICE_UNAVAILABLE.value(),
-                "AI Provider Unavailable",
-                "El proveedor de IA no esta disponible temporalmente. Intente nuevamente.",
+                status.value(),
+                title,
+                message,
                 request.getRequestURI()
         );
         errorResponse.setErrorCode(ex.getErrorCode());
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse);
+        return ResponseEntity.status(status).body(errorResponse);
     }
 
     /**

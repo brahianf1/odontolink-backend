@@ -77,4 +77,42 @@ public final class AiAgentErrorCodes {
     // --- 404 Not Found --------------------------------------------------
 
     public static final String AI_KB_DOCUMENT_NOT_FOUND = "AI_KB_DOCUMENT_NOT_FOUND";
+
+    // --- Chatbot institucional (RF29/RF31/RF32/RF34) --------------------
+
+    /**
+     * El admin definio accessMode=DISABLED. El chatbot rechaza requests
+     * (403) hasta que se vuelva a habilitar.
+     */
+    public static final String AI_AGENT_DISABLED = "AI_AGENT_DISABLED";
+
+    /**
+     * El admin definio accessMode=PRIVATE pero el caller autenticado no
+     * tiene un rol incluido en {@code allowedRoles}. 403.
+     */
+    public static final String AI_AGENT_ACCESS_DENIED = "AI_AGENT_ACCESS_DENIED";
+
+    /**
+     * El admin definio accessMode=PRIVATE y el caller llego sin autenticarse.
+     * 401: el FE debe llevar al login antes de reintentar.
+     */
+    public static final String AI_AGENT_ANONYMOUS_FORBIDDEN = "AI_AGENT_ANONYMOUS_FORBIDDEN";
+
+    /**
+     * Se excedio el cap por hora del chatbot (anonimo por IP o autenticado
+     * por usuario). 429 con header {@code Retry-After}.
+     */
+    public static final String AI_RATE_LIMIT_EXCEEDED = "AI_RATE_LIMIT_EXCEEDED";
+
+    /**
+     * El mensaje excede el cap de 2000 caracteres del DTO. 422.
+     */
+    public static final String AI_MESSAGE_TOO_LONG = "AI_MESSAGE_TOO_LONG";
+
+    /**
+     * No se puede resolver la URL de invocacion del agente: ni la ENV esta
+     * seteada ni el cache local existe ni el descubrimiento via management
+     * API devolvio un deployment.url. 503.
+     */
+    public static final String AI_AGENT_INVOCATION_URL_UNAVAILABLE = "AI_AGENT_INVOCATION_URL_UNAVAILABLE";
 }

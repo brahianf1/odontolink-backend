@@ -23,6 +23,11 @@ public interface ILlmAgentProviderPort {
      * Snapshot inmutable del estado del agente segun lo reporta el proveedor.
      * Se usa principalmente en {@code forceResync} para reconciliar el
      * estado local con el remoto y al cablear health checks futuros.
+     *
+     * <p>{@code deploymentEndpoint} es la URL base del agente desplegado para
+     * invocaciones de chat completions. {@code null} si el proveedor no lo
+     * reporta o el agente no esta deployado. Se usa para descubrir
+     * dinamicamente el endpoint cuando no esta forzado por ENV.
      */
     record AgentSnapshot(
             String id,
@@ -32,7 +37,8 @@ public interface ILlmAgentProviderPort {
             int maxTokens,
             int k,
             AiRetrievalMethod retrievalMethod,
-            Instant updatedAt) {
+            Instant updatedAt,
+            String deploymentEndpoint) {
     }
 
     /**

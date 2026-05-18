@@ -70,6 +70,40 @@ public class AiAgentConfigurationEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    // -- Chatbot institucional (RF29/RF31/RF32/RF34) ---------------------
+    // Nullable a nivel JPA para que ddl-auto=update no falle al agregar las
+    // columnas a la fila singleton existente. La capa de aplicacion aplica
+    // defaults al cargar (ver mapper) y valida no-null al guardar.
+
+    @Column(name = "access_mode", length = 20)
+    private String accessMode;
+
+    /**
+     * CSV de nombres del enum {@code Role}. Vacio o null cuando accessMode no
+     * es PRIVATE. Persistido en VARCHAR para evitar tablas de join: el set
+     * raramente supera 4 elementos y cambia con poca frecuencia.
+     */
+    @Column(name = "allowed_roles", length = 200)
+    private String allowedRolesCsv;
+
+    @Column(name = "pii_policy", length = 20)
+    private String piiPolicy;
+
+    @Column(name = "conversation_buffer_size")
+    private Integer conversationBufferSize;
+
+    @Column(name = "rate_limit_anon_per_hour")
+    private Integer rateLimitAnonymousPerHour;
+
+    @Column(name = "rate_limit_auth_per_hour")
+    private Integer rateLimitAuthenticatedPerHour;
+
+    @Column(name = "agent_invocation_url", length = 500)
+    private String agentInvocationUrl;
+
+    @Column(name = "emergency_banner_text", columnDefinition = "TEXT")
+    private String emergencyBannerText;
+
     public AiAgentConfigurationEntity() {
     }
 
@@ -183,5 +217,69 @@ public class AiAgentConfigurationEntity {
 
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getAccessMode() {
+        return accessMode;
+    }
+
+    public void setAccessMode(String accessMode) {
+        this.accessMode = accessMode;
+    }
+
+    public String getAllowedRolesCsv() {
+        return allowedRolesCsv;
+    }
+
+    public void setAllowedRolesCsv(String allowedRolesCsv) {
+        this.allowedRolesCsv = allowedRolesCsv;
+    }
+
+    public String getPiiPolicy() {
+        return piiPolicy;
+    }
+
+    public void setPiiPolicy(String piiPolicy) {
+        this.piiPolicy = piiPolicy;
+    }
+
+    public Integer getConversationBufferSize() {
+        return conversationBufferSize;
+    }
+
+    public void setConversationBufferSize(Integer conversationBufferSize) {
+        this.conversationBufferSize = conversationBufferSize;
+    }
+
+    public Integer getRateLimitAnonymousPerHour() {
+        return rateLimitAnonymousPerHour;
+    }
+
+    public void setRateLimitAnonymousPerHour(Integer rateLimitAnonymousPerHour) {
+        this.rateLimitAnonymousPerHour = rateLimitAnonymousPerHour;
+    }
+
+    public Integer getRateLimitAuthenticatedPerHour() {
+        return rateLimitAuthenticatedPerHour;
+    }
+
+    public void setRateLimitAuthenticatedPerHour(Integer rateLimitAuthenticatedPerHour) {
+        this.rateLimitAuthenticatedPerHour = rateLimitAuthenticatedPerHour;
+    }
+
+    public String getAgentInvocationUrl() {
+        return agentInvocationUrl;
+    }
+
+    public void setAgentInvocationUrl(String agentInvocationUrl) {
+        this.agentInvocationUrl = agentInvocationUrl;
+    }
+
+    public String getEmergencyBannerText() {
+        return emergencyBannerText;
+    }
+
+    public void setEmergencyBannerText(String emergencyBannerText) {
+        this.emergencyBannerText = emergencyBannerText;
     }
 }
