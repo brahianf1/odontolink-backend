@@ -17,11 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 import site.utnpf.odontolink.application.port.in.IAiAgentConfigurationUseCase;
 import site.utnpf.odontolink.application.port.in.IAiAgentConfigurationUseCase.HealthResult;
 import site.utnpf.odontolink.application.port.in.IAiAgentConfigurationUseCase.PreviewResult;
-import site.utnpf.odontolink.application.port.in.IGuardrailAdminUseCase;
+import site.utnpf.odontolink.application.port.in.IAgentPolicyRuleAdminUseCase;
 import site.utnpf.odontolink.application.service.AiAgentConfigurationService;
 import site.utnpf.odontolink.domain.model.AiAgentConfiguration;
 import site.utnpf.odontolink.domain.model.AiAgentLifecycle;
-import site.utnpf.odontolink.domain.model.Guardrail;
+import site.utnpf.odontolink.domain.model.AgentPolicyRule;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.UpdateAiAgentConfigurationRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AiAgentConfigurationResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AiAgentHealthResponseDTO;
@@ -45,14 +45,14 @@ import java.util.Optional;
 public class AdminAiAgentConfigurationController {
 
     private final IAiAgentConfigurationUseCase configUseCase;
-    private final IGuardrailAdminUseCase guardrailUseCase;
+    private final IAgentPolicyRuleAdminUseCase policyRuleUseCase;
     private final AiAgentConfigurationService configService;
 
     public AdminAiAgentConfigurationController(IAiAgentConfigurationUseCase configUseCase,
-                                               IGuardrailAdminUseCase guardrailUseCase,
+                                               IAgentPolicyRuleAdminUseCase policyRuleUseCase,
                                                AiAgentConfigurationService configService) {
         this.configUseCase = configUseCase;
-        this.guardrailUseCase = guardrailUseCase;
+        this.policyRuleUseCase = policyRuleUseCase;
         // Inyectamos la implementacion concreta solo para acceder a la
         // operacion administrativa "clear cache" que no esta en el puerto.
         this.configService = configService;
@@ -68,10 +68,10 @@ public class AdminAiAgentConfigurationController {
         if (opt.isEmpty()) {
             return ResponseEntity.noContent().build();
         }
-        List<Guardrail> activeGuardrails = guardrailUseCase.listGuardrails().stream()
-                .filter(Guardrail::isActive)
+        List<AgentPolicyRule> activeRules = policyRuleUseCase.listRules().stream()
+                .filter(AgentPolicyRule::isActive)
                 .toList();
-        return ResponseEntity.ok(AiAgentConfigurationRestMapper.toResponse(opt.get(), activeGuardrails));
+        return ResponseEntity.ok(AiAgentConfigurationRestMapper.toResponse(opt.get(), activeRules));
     }
 
     @Operation(summary = "Crear o actualizar configuracion",
@@ -82,10 +82,10 @@ public class AdminAiAgentConfigurationController {
             @Valid @RequestBody UpdateAiAgentConfigurationRequestDTO request) {
         AiAgentConfiguration saved = configUseCase.saveConfiguration(
                 AiAgentConfigurationRestMapper.toCommand(request));
-        List<Guardrail> activeGuardrails = guardrailUseCase.listGuardrails().stream()
-                .filter(Guardrail::isActive)
+        List<AgentPolicyRule> activeRules = policyRuleUseCase.listRules().stream()
+                .filter(AgentPolicyRule::isActive)
                 .toList();
-        return ResponseEntity.ok(AiAgentConfigurationRestMapper.toResponse(saved, activeGuardrails));
+        return ResponseEntity.ok(AiAgentConfigurationRestMapper.toResponse(saved, activeRules));
     }
 
     @Operation(summary = "Publicar el agente al proveedor",
@@ -97,10 +97,10 @@ public class AdminAiAgentConfigurationController {
     public ResponseEntity<AiAgentConfigurationResponseDTO> publish(
             @RequestParam(name = "override", defaultValue = "false") boolean override) {
         AiAgentConfiguration published = configUseCase.publish(override);
-        List<Guardrail> activeGuardrails = guardrailUseCase.listGuardrails().stream()
-                .filter(Guardrail::isActive)
+        List<AgentPolicyRule> activeRules = policyRuleUseCase.listRules().stream()
+                .filter(AgentPolicyRule::isActive)
                 .toList();
-        return ResponseEntity.ok(AiAgentConfigurationRestMapper.toResponse(published, activeGuardrails));
+        return ResponseEntity.ok(AiAgentConfigurationRestMapper.toResponse(published, activeRules));
     }
 
     @Operation(summary = "Revertir a DRAFT sin tocar al proveedor",
@@ -109,10 +109,10 @@ public class AdminAiAgentConfigurationController {
     @PostMapping("/revert-to-draft")
     public ResponseEntity<AiAgentConfigurationResponseDTO> revertToDraft() {
         AiAgentConfiguration reverted = configUseCase.revertToDraft();
-        List<Guardrail> activeGuardrails = guardrailUseCase.listGuardrails().stream()
-                .filter(Guardrail::isActive)
+        List<AgentPolicyRule> activeRules = policyRuleUseCase.listRules().stream()
+                .filter(AgentPolicyRule::isActive)
                 .toList();
-        return ResponseEntity.ok(AiAgentConfigurationRestMapper.toResponse(reverted, activeGuardrails));
+        return ResponseEntity.ok(AiAgentConfigurationRestMapper.toResponse(reverted, activeRules));
     }
 
     @Operation(summary = "Preview de la instruccion final",
@@ -134,10 +134,10 @@ public class AdminAiAgentConfigurationController {
     @PostMapping("/clear-invocation-url-cache")
     public ResponseEntity<AiAgentConfigurationResponseDTO> clearInvocationUrlCache() {
         AiAgentConfiguration updated = configService.clearAgentInvocationUrlCache();
-        List<Guardrail> activeGuardrails = guardrailUseCase.listGuardrails().stream()
-                .filter(Guardrail::isActive)
+        List<AgentPolicyRule> activeRules = policyRuleUseCase.listRules().stream()
+                .filter(AgentPolicyRule::isActive)
                 .toList();
-        return ResponseEntity.ok(AiAgentConfigurationRestMapper.toResponse(updated, activeGuardrails));
+        return ResponseEntity.ok(AiAgentConfigurationRestMapper.toResponse(updated, activeRules));
     }
 
     @Operation(summary = "Health-check del modulo",

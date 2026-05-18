@@ -104,6 +104,14 @@ public class AiAgentConfigurationEntity {
     @Column(name = "emergency_banner_text", columnDefinition = "TEXT")
     private String emergencyBannerText;
 
+    /**
+     * Nullable a nivel JPA para que ddl-auto=update no rompa la fila singleton
+     * existente al agregar la columna. El mapper aplica false como default si
+     * la fila viene sin el campo.
+     */
+    @Column(name = "provide_citations")
+    private Boolean provideCitations;
+
     public AiAgentConfigurationEntity() {
     }
 
@@ -281,5 +289,13 @@ public class AiAgentConfigurationEntity {
 
     public void setEmergencyBannerText(String emergencyBannerText) {
         this.emergencyBannerText = emergencyBannerText;
+    }
+
+    public Boolean getProvideCitations() {
+        return provideCitations;
+    }
+
+    public void setProvideCitations(Boolean provideCitations) {
+        this.provideCitations = provideCitations;
     }
 }

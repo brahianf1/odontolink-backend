@@ -4,9 +4,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * Payload para crear o actualizar un {@link site.utnpf.odontolink.domain.model.Guardrail}.
+ * Payload para crear o actualizar un {@link site.utnpf.odontolink.domain.model.AgentPolicyRule}.
  */
-public class GuardrailRequestDTO {
+public class AgentPolicyRuleRequestDTO {
 
     @NotBlank
     @Size(max = 100)

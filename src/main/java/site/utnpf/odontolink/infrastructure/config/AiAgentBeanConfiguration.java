@@ -12,7 +12,7 @@ import site.utnpf.odontolink.application.port.in.IAiAgentVersioningUseCase;
 import site.utnpf.odontolink.application.port.in.IAiGovernancePolicyUseCase;
 import site.utnpf.odontolink.application.port.in.IChatbotInteractionUseCase;
 import site.utnpf.odontolink.application.port.in.IEmergencyKeywordAdminUseCase;
-import site.utnpf.odontolink.application.port.in.IGuardrailAdminUseCase;
+import site.utnpf.odontolink.application.port.in.IAgentPolicyRuleAdminUseCase;
 import site.utnpf.odontolink.application.port.in.IKnowledgeBaseAdminUseCase;
 import site.utnpf.odontolink.application.port.out.IKnowledgeBaseProviderPort;
 import site.utnpf.odontolink.application.port.out.ILlmAgentInvokerPort;
@@ -23,7 +23,7 @@ import site.utnpf.odontolink.application.service.AiAgentVersioningService;
 import site.utnpf.odontolink.application.service.AiGovernancePolicyService;
 import site.utnpf.odontolink.application.service.ChatbotInteractionService;
 import site.utnpf.odontolink.application.service.EmergencyKeywordAdminService;
-import site.utnpf.odontolink.application.service.GuardrailAdminService;
+import site.utnpf.odontolink.application.service.AgentPolicyRuleAdminService;
 import site.utnpf.odontolink.application.service.KnowledgeBaseAdminService;
 import site.utnpf.odontolink.application.service.security.EmergencyDetector;
 import site.utnpf.odontolink.application.service.security.PiiSanitizer;
@@ -35,7 +35,7 @@ import site.utnpf.odontolink.domain.repository.AiGovernancePolicyRepository;
 import site.utnpf.odontolink.domain.repository.ChatbotMessageRepository;
 import site.utnpf.odontolink.domain.repository.ChatbotSessionRepository;
 import site.utnpf.odontolink.domain.repository.EmergencyKeywordRepository;
-import site.utnpf.odontolink.domain.repository.GuardrailRepository;
+import site.utnpf.odontolink.domain.repository.AgentPolicyRuleRepository;
 import site.utnpf.odontolink.domain.repository.KnowledgeBaseDocumentRepository;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.DigitalOceanAgentInvokerAdapter;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.DigitalOceanAgentPlatformProperties;
@@ -222,7 +222,8 @@ public class AiAgentBeanConfiguration {
     @Bean
     public IAiAgentConfigurationUseCase aiAgentConfigurationUseCase(
             AiAgentConfigurationRepository configRepository,
-            GuardrailRepository guardrailRepository,
+            AgentPolicyRuleRepository policyRuleRepository,
+            site.utnpf.odontolink.domain.repository.ProviderGuardrailRepository providerGuardrailRepository,
             AiGovernancePolicyRepository policyRepository,
             AiAgentConfigurationVersionRepository versionRepository,
             AiAdminAuditEventRepository auditRepository,
@@ -234,7 +235,8 @@ public class AiAgentBeanConfiguration {
             DigitalOceanAgentPlatformProperties props) {
         return new AiAgentConfigurationService(
                 configRepository,
-                guardrailRepository,
+                policyRuleRepository,
+                providerGuardrailRepository,
                 policyRepository,
                 versionRepository,
                 auditRepository,
@@ -249,10 +251,20 @@ public class AiAgentBeanConfiguration {
     }
 
     @Bean
-    public IGuardrailAdminUseCase guardrailAdminUseCase(
-            GuardrailRepository guardrailRepository,
+    public IAgentPolicyRuleAdminUseCase agentPolicyRuleAdminUseCase(
+            AgentPolicyRuleRepository policyRuleRepository,
             AiAgentConfigurationRepository configRepository) {
-        return new GuardrailAdminService(guardrailRepository, configRepository);
+        return new AgentPolicyRuleAdminService(policyRuleRepository, configRepository);
+    }
+
+    @Bean
+    public site.utnpf.odontolink.application.port.in.IProviderGuardrailAdminUseCase providerGuardrailAdminUseCase(
+            site.utnpf.odontolink.domain.repository.ProviderGuardrailRepository guardrailRepository,
+            AiAgentConfigurationRepository configRepository,
+            ILlmAgentProviderPort llmProvider,
+            DigitalOceanAgentPlatformProperties props) {
+        return new site.utnpf.odontolink.application.service.ProviderGuardrailAdminService(
+                guardrailRepository, configRepository, llmProvider, props.getAgentUuid());
     }
 
     @Bean

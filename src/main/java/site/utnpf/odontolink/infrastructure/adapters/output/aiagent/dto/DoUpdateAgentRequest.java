@@ -12,8 +12,8 @@ import java.math.BigDecimal;
  *
  * <p>Todos los campos son opcionales segun la spec de DigitalOcean, pero
  * mandamos siempre todos los que el dominio gestiona (instruction,
- * temperatura, top_p, max_tokens, k, retrieval_method) para que la
- * operacion sea idempotente.
+ * temperatura, top_p, max_tokens, k, retrieval_method, provide_citations)
+ * para que la operacion sea idempotente.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record DoUpdateAgentRequest(
@@ -23,6 +23,7 @@ public record DoUpdateAgentRequest(
         @JsonProperty("top_p") BigDecimal topP,
         @JsonProperty("max_tokens") Integer maxTokens,
         @JsonProperty("k") Integer k,
-        @JsonProperty("retrieval_method") String retrievalMethod
+        @JsonProperty("retrieval_method") String retrievalMethod,
+        @JsonProperty("provide_citations") Boolean provideCitations
 ) {
 }

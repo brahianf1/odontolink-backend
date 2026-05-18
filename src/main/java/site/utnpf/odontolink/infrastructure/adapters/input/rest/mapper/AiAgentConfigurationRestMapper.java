@@ -33,7 +33,8 @@ public final class AiAgentConfigurationRestMapper {
                 dto.getConversationBufferSize(),
                 dto.getRateLimitAnonymousPerHour(),
                 dto.getRateLimitAuthenticatedPerHour(),
-                dto.getEmergencyBannerText()
+                dto.getEmergencyBannerText(),
+                dto.isProvideCitations()
         );
     }
 
@@ -44,7 +45,7 @@ public final class AiAgentConfigurationRestMapper {
      * mantener el mapper sin dependencias de infraestructura.
      */
     public static AiAgentConfigurationResponseDTO toResponse(AiAgentConfiguration domain,
-                                                             List<site.utnpf.odontolink.domain.model.Guardrail> activeGuardrails) {
+                                                             List<site.utnpf.odontolink.domain.model.AgentPolicyRule> activeRules) {
         AiAgentConfigurationResponseDTO dto = new AiAgentConfigurationResponseDTO();
         dto.setDisplayName(domain.getDisplayName());
         dto.setSystemPromptCore(domain.getSystemPromptCore());
@@ -55,7 +56,7 @@ public final class AiAgentConfigurationRestMapper {
         dto.setK(domain.getK());
         dto.setRetrievalMethod(domain.getRetrievalMethod());
         dto.setLifecycle(domain.getLifecycle());
-        dto.setFinalInstructionPreview(domain.composeInstruction(activeGuardrails));
+        dto.setFinalInstructionPreview(domain.composeInstruction(activeRules));
         dto.setProviderAgentId(domain.getProviderAgentId());
         dto.setProviderSyncedAt(domain.getProviderSyncedAt());
         dto.setLastSyncError(domain.getLastSyncError());
@@ -68,6 +69,7 @@ public final class AiAgentConfigurationRestMapper {
         dto.setRateLimitAuthenticatedPerHour(domain.getRateLimitAuthenticatedPerHour());
         dto.setAgentInvocationUrl(domain.getAgentInvocationUrl());
         dto.setEmergencyBannerText(domain.getEmergencyBannerText());
+        dto.setProvideCitations(domain.isProvideCitations());
         return dto;
     }
 }

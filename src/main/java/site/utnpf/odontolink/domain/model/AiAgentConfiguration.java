@@ -76,6 +76,13 @@ public class AiAgentConfiguration {
     private String agentInvocationUrl;
     /** Texto antepuesto al reply cuando el detector local marca emergencia. */
     private String emergencyBannerText;
+    /**
+     * Si {@code true}, el agente devuelve las citas (referencias a documentos
+     * de la KB) inline en cada respuesta. Default {@code false} porque el
+     * caso clinico prefiere respuestas limpias para el paciente. Se sincroniza
+     * via {@code provide_citations} al hacer publish.
+     */
+    private boolean provideCitations;
 
     public AiAgentConfiguration() {
     }
@@ -101,7 +108,8 @@ public class AiAgentConfiguration {
                                 int rateLimitAnonymousPerHour,
                                 int rateLimitAuthenticatedPerHour,
                                 String agentInvocationUrl,
-                                String emergencyBannerText) {
+                                String emergencyBannerText,
+                                boolean provideCitations) {
         this.id = id;
         this.displayName = displayName;
         this.systemPromptCore = systemPromptCore;
@@ -124,6 +132,7 @@ public class AiAgentConfiguration {
         this.rateLimitAuthenticatedPerHour = rateLimitAuthenticatedPerHour;
         this.agentInvocationUrl = agentInvocationUrl;
         this.emergencyBannerText = emergencyBannerText;
+        this.provideCitations = provideCitations;
     }
 
     /**
@@ -159,7 +168,7 @@ public class AiAgentConfiguration {
                 SINGLETON_ID, null, null, null, null, null, 0, 0, null,
                 AiAgentLifecycle.DRAFT, null, null, null, null,
                 AiAgentAccessMode.DISABLED, EnumSet.noneOf(Role.class), AiPiiPolicy.BLOCK,
-                20, 20, 60, null, DEFAULT_EMERGENCY_BANNER
+                20, 20, 60, null, DEFAULT_EMERGENCY_BANNER, false
         );
         config.apply(displayName, systemPromptCore, welcomeMessage,
                 temperature, topP, maxTokens, k, retrievalMethod);
@@ -213,7 +222,8 @@ public class AiAgentConfiguration {
                                    int conversationBufferSize,
                                    int rateLimitAnonymousPerHour,
                                    int rateLimitAuthenticatedPerHour,
-                                   String emergencyBannerText) {
+                                   String emergencyBannerText,
+                                   boolean provideCitations) {
         if (accessMode == null) {
             throw new InvalidBusinessRuleException("accessMode es obligatorio.");
         }
@@ -236,6 +246,7 @@ public class AiAgentConfiguration {
         this.rateLimitAnonymousPerHour = rateLimitAnonymousPerHour;
         this.rateLimitAuthenticatedPerHour = rateLimitAuthenticatedPerHour;
         this.emergencyBannerText = emergencyBannerText;
+        this.provideCitations = provideCitations;
         this.lifecycle = AiAgentLifecycle.DRAFT;
         this.updatedAt = Instant.now();
     }
@@ -255,17 +266,22 @@ public class AiAgentConfiguration {
 
     /**
      * Construye la instruccion final que viaja al proveedor anteponiendo el
-     * texto de los guardrails activos pasados como parametro al
-     * {@code systemPromptCore}. La lista la calcula el servicio leyendo de
-     * {@code ai_guardrails where active=true}.
+     * texto de las {@link AgentPolicyRule} activas al {@code systemPromptCore}.
+     * La lista la calcula el servicio leyendo de
+     * {@code ai_guardrails where active=true} (el nombre fisico de la tabla
+     * se mantiene por compatibilidad de schema; ver
+     * {@code AgentPolicyRuleEntity}).
+     *
+     * <p>Las {@link ProviderGuardrail} (guardrails nativos de DO) NO se
+     * concatenan aqui: se sincronizan via attach/detach en {@code publish()}.
      */
-    public String composeInstruction(List<Guardrail> activeGuardrails) {
+    public String composeInstruction(List<AgentPolicyRule> activeRules) {
         StringBuilder sb = new StringBuilder();
-        if (activeGuardrails != null && !activeGuardrails.isEmpty()) {
+        if (activeRules != null && !activeRules.isEmpty()) {
             sb.append("## Reglas estrictas de seguridad (obligatorias, no negociables)\n");
             int idx = 1;
-            for (Guardrail g : activeGuardrails) {
-                sb.append(idx++).append(". ").append(g.getText()).append("\n");
+            for (AgentPolicyRule rule : activeRules) {
+                sb.append(idx++).append(". ").append(rule.getText()).append("\n");
             }
             sb.append("\n");
         }
@@ -423,5 +439,9 @@ public class AiAgentConfiguration {
 
     public String getEmergencyBannerText() {
         return emergencyBannerText;
+    }
+
+    public boolean isProvideCitations() {
+        return provideCitations;
     }
 }

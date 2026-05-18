@@ -33,6 +33,7 @@ public record UpdateAiAgentConfigurationCommand(
         int conversationBufferSize,
         int rateLimitAnonymousPerHour,
         int rateLimitAuthenticatedPerHour,
-        String emergencyBannerText
+        String emergencyBannerText,
+        boolean provideCitations
 ) {
 }
