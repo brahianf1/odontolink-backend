@@ -699,7 +699,8 @@ public class BeanConfiguration {
      */
     @Bean
     public IInstitutionalSettingsUseCase institutionalSettingsUseCase(
-            InstitutionalSettingsRepository institutionalSettingsRepository) {
-        return new InstitutionalSettingsService(institutionalSettingsRepository);
+            InstitutionalSettingsRepository institutionalSettingsRepository,
+            site.utnpf.odontolink.application.service.support.SingletonRowBootstrap singletonBootstrap) {
+        return new InstitutionalSettingsService(institutionalSettingsRepository, singletonBootstrap);
     }
 }

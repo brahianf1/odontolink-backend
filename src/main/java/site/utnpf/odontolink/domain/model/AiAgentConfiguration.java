@@ -117,13 +117,29 @@ public class AiAgentConfiguration {
         this.lastSyncError = lastSyncError;
         this.updatedAt = updatedAt;
         this.accessMode = accessMode;
-        this.allowedRoles = allowedRoles == null ? Collections.emptySet() : EnumSet.copyOf(allowedRoles);
+        this.allowedRoles = copyRolesSafely(allowedRoles);
         this.piiPolicy = piiPolicy;
         this.conversationBufferSize = conversationBufferSize;
         this.rateLimitAnonymousPerHour = rateLimitAnonymousPerHour;
         this.rateLimitAuthenticatedPerHour = rateLimitAuthenticatedPerHour;
         this.agentInvocationUrl = agentInvocationUrl;
         this.emergencyBannerText = emergencyBannerText;
+    }
+
+    /**
+     * Copia segura de roles a un {@link EnumSet}. Centralizamos el chequeo
+     * porque {@link EnumSet#copyOf(java.util.Collection)} lanza
+     * {@link IllegalArgumentException} cuando recibe una coleccion vacia
+     * (no puede inferir el tipo del enum sin elementos). El contrato del
+     * dominio acepta listas vacias para accessMode != PRIVATE; sin este
+     * helper, el frontend que envia {@code allowedRoles: []} explicitamente
+     * rompe el flujo con un 500.
+     */
+    private static EnumSet<Role> copyRolesSafely(Set<Role> input) {
+        if (input == null || input.isEmpty()) {
+            return EnumSet.noneOf(Role.class);
+        }
+        return EnumSet.copyOf(input);
     }
 
     /**
@@ -214,7 +230,7 @@ public class AiAgentConfiguration {
         }
 
         this.accessMode = accessMode;
-        this.allowedRoles = allowedRoles == null ? EnumSet.noneOf(Role.class) : EnumSet.copyOf(allowedRoles);
+        this.allowedRoles = copyRolesSafely(allowedRoles);
         this.piiPolicy = piiPolicy;
         this.conversationBufferSize = conversationBufferSize;
         this.rateLimitAnonymousPerHour = rateLimitAnonymousPerHour;

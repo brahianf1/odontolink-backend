@@ -63,6 +63,7 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
     private final KnowledgeBaseDocumentRepository kbDocumentRepository;
     private final ILlmAgentProviderPort llmProvider;
     private final AuthenticationFacade authFacade;
+    private final site.utnpf.odontolink.application.service.support.SingletonRowBootstrap singletonBootstrap;
     /** UUID del agente pre-provisto en el dashboard del proveedor. */
     private final String providerAgentUuid;
 
@@ -74,6 +75,7 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
                                        KnowledgeBaseDocumentRepository kbDocumentRepository,
                                        ILlmAgentProviderPort llmProvider,
                                        AuthenticationFacade authFacade,
+                                       site.utnpf.odontolink.application.service.support.SingletonRowBootstrap singletonBootstrap,
                                        String providerAgentUuid) {
         this.configRepository = configRepository;
         this.guardrailRepository = guardrailRepository;
@@ -83,6 +85,7 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
         this.kbDocumentRepository = kbDocumentRepository;
         this.llmProvider = llmProvider;
         this.authFacade = authFacade;
+        this.singletonBootstrap = singletonBootstrap;
         this.providerAgentUuid = providerAgentUuid;
     }
 
@@ -349,12 +352,16 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
     }
 
     private AiGovernancePolicy loadPolicyOrDefault() {
-        // Bootstrap perezoso del singleton de governance: si el admin
-        // todavia no edito la policy, persistimos la version estricta por
-        // defecto para que cualquier check use valores consistentes y la
-        // pantalla del admin muestre la fila editable de entrada.
-        return policyRepository.findSingleton()
-                .orElseGet(() -> policyRepository.save(AiGovernancePolicy.defaultStrict()));
+        // El AiAgentSingletonBootstrapper siembra la fila al arranque, asi que
+        // en operacion normal este metodo solo lee. Delegamos en el helper
+        // para sobrevivir al caso degradado de borrado manual concurrente
+        // (REQUIRES_NEW + catch duplicate-key + refetch).
+        return singletonBootstrap.getOrCreate(
+                policyRepository::findSingleton,
+                AiGovernancePolicy::defaultStrict,
+                policyRepository::save,
+                "AiGovernancePolicy"
+        );
     }
 
     private void validateProviderAgentUuid() {

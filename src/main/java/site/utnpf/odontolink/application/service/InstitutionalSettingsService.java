@@ -2,6 +2,7 @@ package site.utnpf.odontolink.application.service;
 
 import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.application.port.in.IInstitutionalSettingsUseCase;
+import site.utnpf.odontolink.application.service.support.SingletonRowBootstrap;
 import site.utnpf.odontolink.domain.model.InstitutionalSettings;
 import site.utnpf.odontolink.domain.repository.InstitutionalSettingsRepository;
 
@@ -15,6 +16,11 @@ import site.utnpf.odontolink.domain.repository.InstitutionalSettingsRepository;
  * migración SQL inicial y mantiene la semántica de "siempre existe una
  * configuración" para el resto del sistema.
  *
+ * <p>El bootstrap eager ({@code AiAgentSingletonBootstrapper}) siembra la fila
+ * al arranque, asi que en operacion normal nunca se entra al path lazy. Pero
+ * delegamos al helper {@link SingletonRowBootstrap} para sobrevivir a borrado
+ * manual + race entre requests concurrentes (defensa en profundidad).
+ *
  * Todas las operaciones son transaccionales: la lectura usa una
  * transacción de sólo lectura para liberar bloqueos rápidamente, y la
  * actualización ejecuta lectura + escritura dentro de la misma
@@ -24,18 +30,23 @@ import site.utnpf.odontolink.domain.repository.InstitutionalSettingsRepository;
 public class InstitutionalSettingsService implements IInstitutionalSettingsUseCase {
 
     private final InstitutionalSettingsRepository repository;
+    private final SingletonRowBootstrap bootstrap;
 
-    public InstitutionalSettingsService(InstitutionalSettingsRepository repository) {
+    public InstitutionalSettingsService(InstitutionalSettingsRepository repository,
+                                        SingletonRowBootstrap bootstrap) {
         this.repository = repository;
+        this.bootstrap = bootstrap;
     }
 
     @Override
+    @Transactional(readOnly = true)
     public InstitutionalSettings getSettings() {
-        // Lazy bootstrap: si nadie inicializó la configuración aún, persistimos
-        // un singleton con valores por defecto. Mantiene el contrato "siempre
-        // hay configuración" sin depender de scripts externos de seed.
-        return repository.findSingleton()
-                .orElseGet(() -> repository.save(InstitutionalSettings.defaults()));
+        return bootstrap.getOrCreate(
+                repository::findSingleton,
+                InstitutionalSettings::defaults,
+                repository::save,
+                "InstitutionalSettings"
+        );
     }
 
     @Override
