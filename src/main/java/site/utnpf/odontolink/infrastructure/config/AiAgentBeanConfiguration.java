@@ -114,6 +114,28 @@ public class AiAgentBeanConfiguration {
     }
 
     /**
+     * RestClient identico al de invocacion pero con un read timeout
+     * <strong>mas corto</strong> ({@code probeReadTimeoutMs}, default 5s vs
+     * 20s del normal). Lo usa el adapter para el {@code probe()} del
+     * health-check: si el agente esta caido queremos que el endpoint
+     * {@code /health} responda en pocos segundos, no que tarde 20s mientras
+     * el RestClient bloquea esperando bytes.
+     */
+    @Bean(name = "doGradientInvocationProbeRestClient")
+    public RestClient doGradientInvocationProbeRestClient(DigitalOceanAgentPlatformProperties props,
+                                                          RestClient.Builder builder) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(props.getConnectTimeoutMs());
+        factory.setReadTimeout(props.getProbeReadTimeoutMs());
+
+        return builder
+                .requestFactory(factory)
+                .defaultHeader(HttpHeaders.AUTHORIZATION,
+                        "Bearer " + props.getAgentInvocationAccessKey())
+                .build();
+    }
+
+    /**
      * Cliente de management. Reemplazo del bean unico que existia antes; el
      * nombre del bean lo mantenemos calificado para no chocar con el de
      * invocacion.
@@ -124,11 +146,18 @@ public class AiAgentBeanConfiguration {
         return new DigitalOceanGradientClient(restClient, "management");
     }
 
-    /** Cliente dedicado al endpoint del agente. */
+    /** Cliente dedicado al endpoint del agente para invocaciones normales. */
     @Bean(name = "doGradientInvocationClient")
     public DigitalOceanGradientClient doGradientInvocationClient(
             @Qualifier("doGradientInvocationRestClient") RestClient restClient) {
         return new DigitalOceanGradientClient(restClient, "invocation");
+    }
+
+    /** Cliente para el probe del health-check (timeout corto). */
+    @Bean(name = "doGradientInvocationProbeClient")
+    public DigitalOceanGradientClient doGradientInvocationProbeClient(
+            @Qualifier("doGradientInvocationProbeRestClient") RestClient restClient) {
+        return new DigitalOceanGradientClient(restClient, "invocation-probe");
     }
 
     @Bean
@@ -291,8 +320,10 @@ public class AiAgentBeanConfiguration {
      */
     @Bean
     public ILlmAgentInvokerPort llmAgentInvokerPort(
-            @Qualifier("doGradientInvocationClient") DigitalOceanGradientClient invocationClient) {
-        return new DigitalOceanAgentInvokerAdapter(invocationClient);
+            @Qualifier("doGradientInvocationClient") DigitalOceanGradientClient invocationClient,
+            @Qualifier("doGradientInvocationProbeClient") DigitalOceanGradientClient probeClient,
+            DigitalOceanAgentPlatformProperties props) {
+        return new DigitalOceanAgentInvokerAdapter(invocationClient, probeClient, props.getInvocationModel());
     }
 
     @Bean

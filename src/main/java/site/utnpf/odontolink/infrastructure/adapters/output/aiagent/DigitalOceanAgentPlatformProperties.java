@@ -64,6 +64,23 @@ public class DigitalOceanAgentPlatformProperties {
      */
     private String agentInvocationAccessKey = "";
 
+    /**
+     * Nombre del modelo a forzar en cada invocacion al agente. Si esta vacio
+     * (default) el campo se omite del body y el agente usa el modelo
+     * configurado en su dashboard. Util para override puntual en
+     * tests/staging sin tocar el agente.
+     */
+    private String invocationModel = "";
+
+    /**
+     * Read timeout especifico para el probe de health-check, en milisegundos.
+     * Se elige mas corto que {@link #readTimeoutMs} (default 5s vs 20s) para
+     * que el endpoint {@code /health} no tarde 40s+ cuando el agente esta
+     * lento o caido. El probe es una invocacion minima ("ping") asi que un
+     * limite corto refleja mejor un agente sano.
+     */
+    private int probeReadTimeoutMs = 5000;
+
     /** Subgrupo de propiedades del bucket Spaces dedicado a la KB. */
     private Storage storage = new Storage();
 
@@ -137,6 +154,22 @@ public class DigitalOceanAgentPlatformProperties {
 
     public void setAgentInvocationAccessKey(String agentInvocationAccessKey) {
         this.agentInvocationAccessKey = agentInvocationAccessKey;
+    }
+
+    public String getInvocationModel() {
+        return invocationModel;
+    }
+
+    public void setInvocationModel(String invocationModel) {
+        this.invocationModel = invocationModel;
+    }
+
+    public int getProbeReadTimeoutMs() {
+        return probeReadTimeoutMs;
+    }
+
+    public void setProbeReadTimeoutMs(int probeReadTimeoutMs) {
+        this.probeReadTimeoutMs = probeReadTimeoutMs;
     }
 
     public Storage getStorage() {
