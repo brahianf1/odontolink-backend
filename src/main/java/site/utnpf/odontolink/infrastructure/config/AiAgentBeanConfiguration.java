@@ -329,7 +329,6 @@ public class AiAgentBeanConfiguration {
     @Bean
     public IChatbotInteractionUseCase chatbotInteractionUseCase(
             AiAgentConfigurationRepository configRepository,
-            GuardrailRepository guardrailRepository,
             ChatbotSessionRepository sessionRepository,
             ChatbotMessageRepository messageRepository,
             EmergencyKeywordRepository emergencyKeywordRepository,
@@ -338,9 +337,15 @@ public class AiAgentBeanConfiguration {
             ILlmAgentInvokerPort invokerPort,
             ILlmAgentProviderPort providerPort,
             DigitalOceanAgentPlatformProperties props) {
+        // Nota: el GuardrailRepository se quito a proposito. Los guardrails se
+        // componen al system prompt SOLO en el flujo de publish() (lo hace
+        // AiAgentConfigurationService); DigitalOcean Gradient los aplica
+        // server-side en cada invocacion porque vienen del agent.instruction
+        // ya sincronizado. Inyectarlos aqui era duplicacion y, peor, hacia
+        // que el wire enviara role=system que DO rechaza con 400 cuando se
+        // invoca con ?agent=true.
         return new ChatbotInteractionService(
                 configRepository,
-                guardrailRepository,
                 sessionRepository,
                 messageRepository,
                 emergencyKeywordRepository,

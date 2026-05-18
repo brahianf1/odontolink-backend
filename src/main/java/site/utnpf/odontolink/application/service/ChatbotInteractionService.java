@@ -26,13 +26,11 @@ import site.utnpf.odontolink.domain.model.ChatbotMessage;
 import site.utnpf.odontolink.domain.model.ChatbotMessageRole;
 import site.utnpf.odontolink.domain.model.ChatbotSession;
 import site.utnpf.odontolink.domain.model.EmergencyKeyword;
-import site.utnpf.odontolink.domain.model.Guardrail;
 import site.utnpf.odontolink.domain.model.Role;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationRepository;
 import site.utnpf.odontolink.domain.repository.ChatbotMessageRepository;
 import site.utnpf.odontolink.domain.repository.ChatbotSessionRepository;
 import site.utnpf.odontolink.domain.repository.EmergencyKeywordRepository;
-import site.utnpf.odontolink.domain.repository.GuardrailRepository;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.error.AiAgentErrorCodes;
 
 import java.util.ArrayList;
@@ -77,7 +75,6 @@ public class ChatbotInteractionService implements IChatbotInteractionUseCase {
                     "Si tu consulta es urgente, por favor contactate con la clinica.";
 
     private final AiAgentConfigurationRepository configRepository;
-    private final GuardrailRepository guardrailRepository;
     private final ChatbotSessionRepository sessionRepository;
     private final ChatbotMessageRepository messageRepository;
     private final EmergencyKeywordRepository emergencyKeywordRepository;
@@ -89,7 +86,6 @@ public class ChatbotInteractionService implements IChatbotInteractionUseCase {
     private final String providerAgentUuid;
 
     public ChatbotInteractionService(AiAgentConfigurationRepository configRepository,
-                                     GuardrailRepository guardrailRepository,
                                      ChatbotSessionRepository sessionRepository,
                                      ChatbotMessageRepository messageRepository,
                                      EmergencyKeywordRepository emergencyKeywordRepository,
@@ -100,7 +96,6 @@ public class ChatbotInteractionService implements IChatbotInteractionUseCase {
                                      String envAgentInvocationUrl,
                                      String providerAgentUuid) {
         this.configRepository = configRepository;
-        this.guardrailRepository = guardrailRepository;
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
         this.emergencyKeywordRepository = emergencyKeywordRepository;
@@ -288,22 +283,42 @@ public class ChatbotInteractionService implements IChatbotInteractionUseCase {
     }
 
     /**
-     * Compone el wire-format que viaja al proveedor: instruccion (system) +
-     * ultimos N mensajes en orden cronologico ASC. El system se compone con
-     * los guardrails activos para garantizar las protecciones clinicas en
-     * cada turno (no son sticky desde el punto de vista del LLM).
+     * Compone el wire-format que viaja al proveedor: <strong>solo</strong> el
+     * historial conversacional (user/assistant) en orden cronologico ASC.
+     *
+     * <p><b>Importante decision arquitectonica</b>: cuando invocamos el
+     * endpoint del agente con {@code ?agent=true}, DigitalOcean Gradient
+     * rechaza con 400 cualquier mensaje con role {@code system} o
+     * {@code developer}. Las instrucciones del agente (system prompt +
+     * guardrails) viven server-side en DO; se sincronizan al hacer
+     * {@code POST /publish} via {@code llmProvider.updateAgent(...)} y DO las
+     * aplica automaticamente en cada invocacion. NUNCA las re-inyectamos
+     * inline aqui.
+     *
+     * <p>Beneficios de respetar este contrato:
+     * <ul>
+     *   <li>Single source of truth para el system prompt: vive en DO.</li>
+     *   <li>El lifecycle DRAFT/PUBLISHED del backend queda con semantica
+     *       coherente: una edicion de guardrails sin {@code publish} NO se
+     *       aplica al chatbot — exactamente lo que el modelo de gobernanza
+     *       (RF31/RF32) busca garantizar.</li>
+     *   <li>Menos bytes en cada turno (system prompt suele ser KB).</li>
+     * </ul>
+     *
+     * <p>El metodo {@code AiAgentConfiguration.composeInstruction(...)} sigue
+     * usado solo en el flujo de {@code publish()} y en {@code preview()} (que
+     * el admin usa para revisar antes de publicar).
      */
     private List<ChatMessage> buildWireMessages(AiAgentConfiguration config, UUID sessionId) {
-        List<Guardrail> activeGuardrails = guardrailRepository.findAllActiveOrderByCreatedAtAsc();
-        String composedInstruction = config.composeInstruction(activeGuardrails);
-
-        List<ChatbotMessage> recent = messageRepository.findLastNBySessionId(
-                sessionId, config.getConversationBufferSize());
+        // Copia mutable para poder ordenar: el contrato del puerto no exige
+        // que la lista devuelta sea mutable y algunos tests/mock pueden pasar
+        // {@code List.of(...)} inmutable. Defensa baratisima.
+        List<ChatbotMessage> recent = new ArrayList<>(
+                messageRepository.findLastNBySessionId(sessionId, config.getConversationBufferSize()));
         // Garantizamos orden cronologico ASC defensivamente.
         recent.sort(Comparator.comparing(ChatbotMessage::getCreatedAt));
 
-        List<ChatMessage> wire = new ArrayList<>(recent.size() + 1);
-        wire.add(new ChatMessage("system", composedInstruction));
+        List<ChatMessage> wire = new ArrayList<>(recent.size());
         for (ChatbotMessage m : recent) {
             String role = m.getRole() == ChatbotMessageRole.USER ? "user" : "assistant";
             wire.add(new ChatMessage(role, m.getContent()));
