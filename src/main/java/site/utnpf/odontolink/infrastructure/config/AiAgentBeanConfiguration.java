@@ -27,6 +27,7 @@ import site.utnpf.odontolink.application.service.GuardrailAdminService;
 import site.utnpf.odontolink.application.service.KnowledgeBaseAdminService;
 import site.utnpf.odontolink.application.service.security.EmergencyDetector;
 import site.utnpf.odontolink.application.service.security.PiiSanitizer;
+import site.utnpf.odontolink.application.service.support.SingletonRowBootstrap;
 import site.utnpf.odontolink.domain.repository.AiAdminAuditEventRepository;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationRepository;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationVersionRepository;
@@ -153,6 +154,7 @@ public class AiAgentBeanConfiguration {
             KnowledgeBaseDocumentRepository kbDocumentRepository,
             ILlmAgentProviderPort llmProvider,
             AuthenticationFacade authFacade,
+            SingletonRowBootstrap singletonBootstrap,
             DigitalOceanAgentPlatformProperties props) {
         return new AiAgentConfigurationService(
                 configRepository,
@@ -163,6 +165,7 @@ public class AiAgentBeanConfiguration {
                 kbDocumentRepository,
                 llmProvider,
                 authFacade,
+                singletonBootstrap,
                 props.getAgentUuid()
         );
     }
@@ -178,8 +181,9 @@ public class AiAgentBeanConfiguration {
     public IAiGovernancePolicyUseCase aiGovernancePolicyUseCase(
             AiGovernancePolicyRepository policyRepository,
             AiAdminAuditEventRepository auditRepository,
-            AuthenticationFacade authFacade) {
-        return new AiGovernancePolicyService(policyRepository, auditRepository, authFacade);
+            AuthenticationFacade authFacade,
+            SingletonRowBootstrap singletonBootstrap) {
+        return new AiGovernancePolicyService(policyRepository, auditRepository, authFacade, singletonBootstrap);
     }
 
     @Bean

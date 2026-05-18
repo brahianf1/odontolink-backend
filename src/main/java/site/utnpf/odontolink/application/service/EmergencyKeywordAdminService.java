@@ -60,6 +60,15 @@ public class EmergencyKeywordAdminService implements IEmergencyKeywordAdminUseCa
      * Rechaza si ya existe otra keyword con el mismo termino normalizado.
      * Cuando {@code excludeId != null} permite editar la misma fila sin
      * disparar el conflicto consigo misma.
+     *
+     * <p>La unicidad es <strong>normalizada</strong> en el dominio (lowercase
+     * + sin acentos via {@link EmergencyKeyword#normalize}), no solo
+     * case-insensitive en SQL: dos terminos como {@code "Infección"} e
+     * {@code "infeccion"} se consideran duplicados, aunque el collation de
+     * MySQL los compare distinto. Comparamos en memoria contra
+     * {@code findAllOrderByTermAsc()} porque la lista es chica (<= ~30 en
+     * produccion) y nos garantiza el resultado correcto independiente del
+     * collation de la BD.
      */
     private void rejectIfDuplicate(String term, Long excludeId) {
         if (term == null || term.isBlank()) {
@@ -67,11 +76,15 @@ public class EmergencyKeywordAdminService implements IEmergencyKeywordAdminUseCa
             // anticipamos para no pegar a BD con un texto invalido.
             throw new InvalidBusinessRuleException("El campo 'term' es obligatorio.");
         }
-        repository.findByTermIgnoreCase(term.trim()).ifPresent(existing -> {
-            if (excludeId == null || !excludeId.equals(existing.getId())) {
-                throw new InvalidBusinessRuleException(
-                        "Ya existe una keyword de emergencia con ese termino.");
-            }
-        });
+        String normalized = EmergencyKeyword.normalize(term);
+        repository.findAllOrderByTermAsc().stream()
+                .filter(kw -> kw.getNormalizedTerm().equals(normalized))
+                .findFirst()
+                .ifPresent(existing -> {
+                    if (excludeId == null || !excludeId.equals(existing.getId())) {
+                        throw new InvalidBusinessRuleException(
+                                "Ya existe una keyword de emergencia con ese termino.");
+                    }
+                });
     }
 }
