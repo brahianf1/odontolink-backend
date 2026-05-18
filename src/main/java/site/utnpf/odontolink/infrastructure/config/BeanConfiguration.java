@@ -703,4 +703,23 @@ public class BeanConfiguration {
             site.utnpf.odontolink.application.service.support.SingletonRowBootstrap singletonBootstrap) {
         return new InstitutionalSettingsService(institutionalSettingsRepository, singletonBootstrap);
     }
+
+    /**
+     * Helper de bootstrap de filas singleton (id fijo) usado por los servicios
+     * que cargan {@link site.utnpf.odontolink.domain.model.InstitutionalSettings},
+     * {@link site.utnpf.odontolink.domain.model.AiGovernancePolicy} y la
+     * configuracion del agente IA.
+     *
+     * <p>Se registra como {@code @Bean} explicito porque el component scan del
+     * {@code @SpringBootApplication} (que vive en
+     * {@code site.utnpf.odontolink.infrastructure}) no alcanza al paquete
+     * {@code site.utnpf.odontolink.application.service.support}. Mantenemos
+     * el helper alli por coherencia semantica (es application logic) y
+     * registramos el bean a mano siguiendo el patron del resto del proyecto.
+     */
+    @Bean
+    public site.utnpf.odontolink.application.service.support.SingletonRowBootstrap singletonRowBootstrap(
+            org.springframework.transaction.PlatformTransactionManager transactionManager) {
+        return new site.utnpf.odontolink.application.service.support.SingletonRowBootstrap(transactionManager);
+    }
 }

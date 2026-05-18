@@ -3,7 +3,6 @@ package site.utnpf.odontolink.application.service.support;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -39,8 +38,13 @@ import java.util.function.Supplier;
  *
  * <p>Es defensivo: en operacion normal nunca se invoca porque el row ya
  * existe. Si se invoca, garantiza idempotencia.
+ *
+ * <p><b>Registro</b>: el {@code @SpringBootApplication} del proyecto vive en
+ * {@code site.utnpf.odontolink.infrastructure}, asi que el component scan
+ * solo cubre ese paquete. Esta clase queda en {@code application.service.support}
+ * (donde semanticamente pertenece) y se expone como {@code @Bean} explicito
+ * en {@code BeanConfiguration}, alineada al patron del resto del proyecto.
  */
-@Component
 public class SingletonRowBootstrap {
 
     private static final Logger log = LoggerFactory.getLogger(SingletonRowBootstrap.class);
