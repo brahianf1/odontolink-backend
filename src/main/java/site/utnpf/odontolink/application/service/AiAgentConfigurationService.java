@@ -214,18 +214,23 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
         Long actorId = resolveActorId();
         try {
             AgentSnapshot snapshot = llmProvider.updateAgent(providerAgentUuid, spec);
+            // Calculamos el numero de version ANTES del reconcile para poder
+            // referenciarlo en el evento de auditoria de fallo parcial si
+            // alguna llamada attach/detach falla. El INSERT real de la version
+            // ocurre mas abajo; este calculo solo predice el numero.
+            int nextVersion = versionRepository.findMaxVersionNumber() + 1;
+
             // Reconciliar guardrails nativos del proveedor (RF31). Lo hacemos
             // DESPUES del updateAgent porque el spec no incluye guardrails:
             // se gestionan con endpoints attach/detach dedicados. Si esto
-            // falla, lo logueamos pero NO marcamos publish failed: el agente
-            // ya tiene la instruction y los parametros actualizados, lo
-            // critico esta hecho. El admin puede reintentar la sincronizacion
-            // de guardrails con otro publish.
-            reconcileProviderGuardrails(snapshot);
+            // falla, lo logueamos en audit (PROVIDER_GUARDRAIL_SYNC_PARTIAL_FAILURE)
+            // pero NO marcamos publish failed: el agente ya tiene la
+            // instruction y los parametros actualizados, lo critico esta hecho.
+            // El admin puede reintentar la sincronizacion con otro publish.
+            reconcileProviderGuardrails(snapshot, actorId, nextVersion);
             config.markPublished(snapshot.id() != null ? snapshot.id() : providerAgentUuid, Instant.now());
             AiAgentConfiguration saved = configRepository.save(config);
 
-            int nextVersion = versionRepository.findMaxVersionNumber() + 1;
             String missingCsv = missing.isEmpty() ? null : String.join(",", missing);
             String guardrailsLabelsCsv = activeRules.stream()
                     .map(AgentPolicyRule::getLabel)
@@ -436,22 +441,30 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
      * Reconcilia el estado de los guardrails nativos del proveedor con la
      * intencion del admin (RF31).
      *
-     * <p>Estrategia:
+     * <p>Estrategia (alineada con la API real de DO Gradient, que es batch
+     * para attach y singular para detach):
      * <ol>
-     *   <li>Por cada guardrail local marcado {@code attached=true}: si no
-     *       esta attached en el proveedor, hacer attach.</li>
-     *   <li>Por cada guardrail attached en el proveedor cuya intencion local
-     *       es {@code attached=false} (o no existe localmente): hacer detach.</li>
-     *   <li>Si la priority local difiere de la del proveedor para un guardrail
-     *       ya attached, hacer detach+attach (DO no expone PUT para guardrails).</li>
+     *   <li>Detach individual: para cada uuid attached en el proveedor que
+     *       NO esta en el conjunto deseado del admin, hacer DELETE.</li>
+     *   <li>Attach batch: si hay {@code >= 1} guardrail deseado, hacer UN
+     *       POST con la lista completa. DO acepta re-attach idempotente, lo
+     *       que aprovechamos tambien para actualizar priorities sin tener
+     *       que detach+attach uno por uno.</li>
+     *   <li>Re-leer el agente para confirmar el estado efectivo y persistir
+     *       el espejo local con la realidad. Esto cierra el ciclo: si una
+     *       operacion fallo silenciosamente, la BD refleja la verdad.</li>
      * </ol>
      *
-     * <p>Cualquier fallo individual en attach/detach se loguea con WARN pero
-     * NO interrumpe la cadena: queremos que el publish del agente principal
-     * cuente como exitoso aunque algun guardrail particular falle. Esto deja
-     * el sistema en estado parcialmente sincronizado pero observable.
+     * <p>Fallos individuales (detach) o el batch (attach) se loguean a nivel
+     * ERROR (no WARN) y se acumulan en una lista. Al final, si hubo fallos,
+     * se registra un {@link AiAdminAuditEvent.Type#PROVIDER_GUARDRAIL_SYNC_PARTIAL_FAILURE}
+     * con los UUIDs fallidos en {@code details}, para que el admin pueda
+     * auditar via {@code GET /audit-events}. El publish principal NO se
+     * aborta: instruction y parametros ya estan en DO; solo los guardrails
+     * pueden quedar desincronizados (recuperable con otro publish o un
+     * refresh).
      */
-    private void reconcileProviderGuardrails(AgentSnapshot snapshot) {
+    private void reconcileProviderGuardrails(AgentSnapshot snapshot, Long actorUserId, int versionNumber) {
         List<site.utnpf.odontolink.domain.model.ProviderGuardrail> local =
                 providerGuardrailRepository.findAllOrderByPriorityAsc();
         if (local.isEmpty()) {
@@ -459,41 +472,104 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
             // los attached que el proveedor ya tenia (no detach masivo).
             return;
         }
-        java.util.Map<String, ILlmAgentProviderPort.ProviderGuardrailSnapshot> remoteByUuid =
-                new java.util.HashMap<>();
-        if (snapshot.guardrails() != null) {
-            for (ILlmAgentProviderPort.ProviderGuardrailSnapshot r : snapshot.guardrails()) {
-                remoteByUuid.put(r.guardrailUuid(), r);
+
+        // Construimos el conjunto deseado (intent local) y el remoto attached.
+        List<ILlmAgentProviderPort.GuardrailAttachment> desired = new ArrayList<>();
+        java.util.Set<String> desiredUuids = new java.util.HashSet<>();
+        for (site.utnpf.odontolink.domain.model.ProviderGuardrail g : local) {
+            if (g.isAttached()) {
+                desired.add(new ILlmAgentProviderPort.GuardrailAttachment(
+                        g.getProviderGuardrailUuid(), g.getPriority()));
+                desiredUuids.add(g.getProviderGuardrailUuid());
             }
         }
-        for (site.utnpf.odontolink.domain.model.ProviderGuardrail localGr : local) {
-            String uuid = localGr.getProviderGuardrailUuid();
-            ILlmAgentProviderPort.ProviderGuardrailSnapshot remote = remoteByUuid.get(uuid);
-            boolean remoteAttached = remote != null && remote.isAttached();
-            int remotePriority = remote == null ? -1 : remote.priority();
-            try {
-                if (localGr.isAttached() && !remoteAttached) {
-                    llmProvider.attachGuardrail(providerAgentUuid, uuid, localGr.getPriority());
-                    log.info("Reconcilie attach guardrail {} priority={}", uuid, localGr.getPriority());
-                } else if (!localGr.isAttached() && remoteAttached) {
-                    llmProvider.detachGuardrail(providerAgentUuid, uuid);
-                    log.info("Reconcilie detach guardrail {}", uuid);
-                } else if (localGr.isAttached() && remoteAttached
-                        && localGr.getPriority() != remotePriority) {
-                    // DO no tiene PUT para guardrails: detach + attach para
-                    // forzar nuevo priority.
-                    llmProvider.detachGuardrail(providerAgentUuid, uuid);
-                    llmProvider.attachGuardrail(providerAgentUuid, uuid, localGr.getPriority());
-                    log.info("Reconcilie priority del guardrail {}: {} -> {}",
-                            uuid, remotePriority, localGr.getPriority());
+        java.util.Set<String> remoteAttachedUuids = new java.util.HashSet<>();
+        if (snapshot.guardrails() != null) {
+            for (ILlmAgentProviderPort.ProviderGuardrailSnapshot r : snapshot.guardrails()) {
+                if (r.isAttached() && r.guardrailUuid() != null) {
+                    remoteAttachedUuids.add(r.guardrailUuid());
                 }
-            } catch (LlmProviderException ex) {
-                // No abortamos: dejamos el agente principal publicado pero
-                // logueamos para que el operador pueda revisar.
-                log.warn("Falla al reconciliar guardrail {}: code={}, message={}. "
-                                + "El admin debe re-publicar para reintentar.",
-                        uuid, ex.getErrorCode(), ex.getMessage());
             }
+        }
+
+        List<String> failures = new ArrayList<>();
+
+        // 1) Detach individual de los que estan attached en DO pero no en el deseado.
+        for (String remoteUuid : remoteAttachedUuids) {
+            if (!desiredUuids.contains(remoteUuid)) {
+                try {
+                    llmProvider.detachGuardrail(providerAgentUuid, remoteUuid);
+                    log.info("Detach guardrail {} (intent local: no attached).", remoteUuid);
+                } catch (LlmProviderException ex) {
+                    failures.add(remoteUuid + " (detach)");
+                    log.error("Falla al detach guardrail {} en reconcile: code={}, message={}",
+                            remoteUuid, ex.getErrorCode(), ex.getMessage());
+                }
+            }
+        }
+
+        // 2) Attach batch con TODO el conjunto deseado. La operacion es
+        // idempotente del lado del proveedor para los que ya estaban
+        // attached, asi nos ahorramos comparar priorities uno por uno.
+        if (!desired.isEmpty()) {
+            try {
+                llmProvider.attachGuardrails(providerAgentUuid, desired);
+                log.info("Attach batch enviado al proveedor: {} guardrails.", desired.size());
+            } catch (LlmProviderException ex) {
+                // No sabemos cual del batch fallo: marcamos todos como sospechosos.
+                for (ILlmAgentProviderPort.GuardrailAttachment a : desired) {
+                    failures.add(a.providerGuardrailUuid() + " (attach)");
+                }
+                log.error("Falla al attach batch ({} items): code={}, message={}",
+                        desired.size(), ex.getErrorCode(), ex.getMessage());
+            }
+        }
+
+        // 3) Re-leer la realidad de DO y persistir en el espejo local.
+        // Esto cierra cualquier drift (incluso si las llamadas anteriores
+        // fallaron silenciosamente o el proveedor mutó por su cuenta).
+        try {
+            AgentSnapshot post = llmProvider.getAgent(providerAgentUuid);
+            java.util.Map<String, ILlmAgentProviderPort.ProviderGuardrailSnapshot> postByUuid =
+                    new java.util.HashMap<>();
+            if (post.guardrails() != null) {
+                for (ILlmAgentProviderPort.ProviderGuardrailSnapshot s : post.guardrails()) {
+                    if (s.guardrailUuid() != null) {
+                        postByUuid.put(s.guardrailUuid(), s);
+                    }
+                }
+            }
+            for (site.utnpf.odontolink.domain.model.ProviderGuardrail g : local) {
+                ILlmAgentProviderPort.ProviderGuardrailSnapshot s =
+                        postByUuid.get(g.getProviderGuardrailUuid());
+                if (s != null) {
+                    g.setAttachmentIntent(s.isAttached(), s.priority());
+                } else {
+                    // DO ya no reporta el guardrail para este agente: lo
+                    // tratamos como no attached (preservando la priority
+                    // local por si vuelve a aparecer en un refresh futuro).
+                    g.setAttachmentIntent(false, g.getPriority());
+                }
+                providerGuardrailRepository.save(g);
+            }
+        } catch (LlmProviderException ex) {
+            log.error("Falla al re-leer el agente para confirmar reconcile: code={}, message={}. "
+                            + "El espejo local puede quedar desactualizado hasta el proximo refresh.",
+                    ex.getErrorCode(), ex.getMessage());
+            failures.add("(post-fetch failed: " + ex.getErrorCode() + ")");
+        }
+
+        // 4) Si hubo fallos, registrar el evento de auditoria para que el admin
+        // tenga rastro accionable. El publish sigue contado como exitoso.
+        if (!failures.isEmpty()) {
+            String detailsText = "Publish v" + versionNumber
+                    + " — guardrails con falla de sync: " + String.join(", ", failures);
+            auditRepository.save(AiAdminAuditEvent.of(
+                    AiAdminAuditEvent.Type.PROVIDER_GUARDRAIL_SYNC_PARTIAL_FAILURE,
+                    actorUserId,
+                    versionNumber,
+                    false,
+                    detailsText));
         }
     }
 }

@@ -60,6 +60,22 @@ public class ProviderGuardrailAdminService implements IProviderGuardrailAdminUse
         return guardrailRepository.findAllOrderByPriorityAsc();
     }
 
+    /**
+     * Refresca el espejo local con lo que reporta el proveedor.
+     *
+     * <p><b>Semantica autoritativa</b>: la fuente de verdad de "que esta
+     * attached y con que priority" es el proveedor. Si el admin tenia cambios
+     * DRAFT pendientes en el espejo local que no llego a publicar, se pisan
+     * con la realidad del proveedor. Es la decision correcta: cuando el admin
+     * pide "refresh" lo que esta diciendo es "muestrame la verdad de DO". La
+     * UI deberia advertir al admin antes de disparar refresh si la config
+     * esta en DRAFT.
+     *
+     * <p>Si el proveedor responde sin guardrails (raro pero posible cuando el
+     * agente nunca tuvo default attachments), interpretamos que ningun
+     * guardrail conocido localmente esta attached y actualizamos el espejo
+     * en consecuencia.
+     */
     @Override
     public List<ProviderGuardrail> refreshFromProvider() {
         if (providerAgentUuid == null || providerAgentUuid.isBlank()) {
@@ -68,32 +84,49 @@ public class ProviderGuardrailAdminService implements IProviderGuardrailAdminUse
                     null, AiAgentErrorCodes.AI_AGENT_NOT_CONFIGURED);
         }
         AgentSnapshot snapshot = llmProvider.getAgent(providerAgentUuid);
-        List<ProviderGuardrailSnapshot> remote = snapshot.guardrails();
-        if (remote == null || remote.isEmpty()) {
-            // El proveedor no reporta ninguno (puede pasar si el agente no
-            // tiene guardrails default). Devolvemos lo local sin tocar.
-            return guardrailRepository.findAllOrderByPriorityAsc();
+        List<ProviderGuardrailSnapshot> remote = snapshot.guardrails() == null
+                ? List.of() : snapshot.guardrails();
+
+        // Indexamos lo remoto por uuid para resolver en O(1) al recorrer locales.
+        java.util.Map<String, ProviderGuardrailSnapshot> remoteByUuid = new java.util.HashMap<>();
+        for (ProviderGuardrailSnapshot s : remote) {
+            if (s.guardrailUuid() != null) {
+                remoteByUuid.put(s.guardrailUuid(), s);
+            }
         }
-        // Por cada guardrail del proveedor: si existe localmente, refresh
-        // metadata descriptiva y preserva intencion. Si no existe, agregar
-        // un espejo con intencion=el estado attached que reporta DO (asi
-        // arrancamos con la realidad del proveedor).
+
+        // Paso 1: agregar al espejo local los guardrails del proveedor que aun
+        // no existen localmente, copiando metadata + intencion (attached/priority)
+        // exactamente como los reporta DO.
         for (ProviderGuardrailSnapshot s : remote) {
             Optional<ProviderGuardrail> existing = guardrailRepository
                     .findByProviderGuardrailUuid(s.guardrailUuid());
-            if (existing.isPresent()) {
-                ProviderGuardrail local = existing.get();
-                local.refreshMetadataFromProvider(s.name(), s.description(), s.defaultResponse());
-                guardrailRepository.save(local);
-            } else {
+            if (existing.isEmpty()) {
                 ProviderGuardrail fresh = ProviderGuardrail.fromProviderMetadata(
                         s.guardrailUuid(), s.type(), s.name(), s.description(), s.defaultResponse());
-                // Inicializamos la intencion con lo que DO reporta para no
-                // re-vincular/desvincular ciegamente en el proximo publish.
                 fresh.setAttachmentIntent(s.isAttached(), s.priority());
                 guardrailRepository.save(fresh);
             }
         }
+
+        // Paso 2: para cada guardrail local, alinear con lo que reporta DO.
+        // - Si DO lo reporta: usar attached/priority de DO.
+        // - Si DO NO lo reporta: el guardrail dejo de estar disponible para
+        //   este agente; lo marcamos attached=false para reflejar la realidad.
+        //   No lo borramos del espejo: preservamos historico de UI.
+        for (ProviderGuardrail local : guardrailRepository.findAllOrderByPriorityAsc()) {
+            ProviderGuardrailSnapshot s = remoteByUuid.get(local.getProviderGuardrailUuid());
+            if (s != null) {
+                local.refreshMetadataFromProvider(s.name(), s.description(), s.defaultResponse());
+                local.setAttachmentIntent(s.isAttached(), s.priority());
+            } else {
+                // Conservamos la priority anterior por si DO lo vuelve a exponer
+                // en un refresh futuro; solo apagamos el toggle attached.
+                local.setAttachmentIntent(false, local.getPriority());
+            }
+            guardrailRepository.save(local);
+        }
+
         return guardrailRepository.findAllOrderByPriorityAsc();
     }
 
