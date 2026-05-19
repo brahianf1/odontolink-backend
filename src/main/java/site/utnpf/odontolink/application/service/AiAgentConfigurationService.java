@@ -213,6 +213,15 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
 
         Long actorId = resolveActorId();
         try {
+            // El reconcile necesita conocer que guardrails estan REALMENTE
+            // attached al agente en DO para calcular el diff con el intent
+            // local. NO podemos usar el snapshot que devuelve updateAgent()
+            // porque verificamos empiricamente que el response del PUT
+            // /v2/gen-ai/agents/{uuid} NO incluye el campo "guardrails" (solo
+            // viene en el GET). Sin este getAgent() previo, el detach se
+            // quedaba con remoteAttachedUuids vacio y nunca se ejecutaba.
+            AgentSnapshot preUpdateSnapshot = llmProvider.getAgent(providerAgentUuid);
+
             AgentSnapshot snapshot = llmProvider.updateAgent(providerAgentUuid, spec);
             // Calculamos el numero de version ANTES del reconcile para poder
             // referenciarlo en el evento de auditoria de fallo parcial si
@@ -222,12 +231,14 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
 
             // Reconciliar guardrails nativos del proveedor (RF31). Lo hacemos
             // DESPUES del updateAgent porque el spec no incluye guardrails:
-            // se gestionan con endpoints attach/detach dedicados. Si esto
-            // falla, lo logueamos en audit (PROVIDER_GUARDRAIL_SYNC_PARTIAL_FAILURE)
-            // pero NO marcamos publish failed: el agente ya tiene la
-            // instruction y los parametros actualizados, lo critico esta hecho.
-            // El admin puede reintentar la sincronizacion con otro publish.
-            reconcileProviderGuardrails(snapshot, actorId, nextVersion);
+            // se gestionan con endpoints attach/detach dedicados. Pasamos el
+            // preUpdateSnapshot (que SI tiene el array guardrails poblado)
+            // para calcular el diff correctamente. Si esto falla, lo logueamos
+            // en audit (PROVIDER_GUARDRAIL_SYNC_PARTIAL_FAILURE) pero NO
+            // marcamos publish failed: el agente ya tiene la instruction y
+            // los parametros actualizados, lo critico esta hecho. El admin
+            // puede reintentar la sincronizacion con otro publish.
+            reconcileProviderGuardrails(preUpdateSnapshot, actorId, nextVersion);
             config.markPublished(snapshot.id() != null ? snapshot.id() : providerAgentUuid, Instant.now());
             AiAgentConfiguration saved = configRepository.save(config);
 
@@ -440,6 +451,12 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
     /**
      * Reconcilia el estado de los guardrails nativos del proveedor con la
      * intencion del admin (RF31).
+     *
+     * <p>El parametro {@code snapshot} debe ser el resultado de un
+     * {@code getAgent()} (NO el de un {@code updateAgent()}): el PUT al
+     * agente NO retorna el campo {@code guardrails} en su response — solo
+     * el GET lo trae. Si pasamos el snapshot del PUT,
+     * {@code remoteAttachedUuids} queda vacio y los detaches no se ejecutan.
      *
      * <p>Estrategia (alineada con la API real de DO Gradient, que es batch
      * para attach y singular para detach):
