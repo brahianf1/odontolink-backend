@@ -31,11 +31,13 @@ public final class SiteAppearanceRestMapper {
         dto.setDefaultMode(snapshot.appearance().getDefaultMode());
         dto.setAllowUserOverride(snapshot.appearance().isAllowUserOverride());
         dto.setVersion(snapshot.appearance().getVersion());
-        // Embedded del custom theme cuando el slug singleton apunta a uno.
-        // Aprovechamos el mismo mapper para tener exactamente el mismo shape
-        // que devuelve el endpoint admin de detalle.
+        dto.setUpdatedAt(snapshot.appearance().getUpdatedAt());
+        // Embedded del custom theme: usamos la variante "summary" (sin
+        // sourceCss) porque el endpoint publico lo sirve a TODOS los
+        // visitantes anonimos y el CSS crudo puede pesar varios KB. El
+        // detalle con sourceCss vive en el endpoint admin.
         snapshot.activeCustomTheme()
-                .map(CustomThemeRestMapper::toResponse)
+                .map(CustomThemeRestMapper::toSummary)
                 .ifPresent(dto::setActiveCustomTheme);
         return dto;
     }
