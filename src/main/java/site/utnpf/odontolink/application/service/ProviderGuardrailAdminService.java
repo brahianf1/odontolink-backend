@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.application.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.application.port.in.IProviderGuardrailAdminUseCase;
 import site.utnpf.odontolink.application.port.out.ILlmAgentProviderPort;
@@ -38,6 +40,27 @@ import java.util.Optional;
  */
 @Transactional
 public class ProviderGuardrailAdminService implements IProviderGuardrailAdminUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(ProviderGuardrailAdminService.class);
+
+    /**
+     * Plantilla de URL al dashboard del proveedor (DigitalOcean Gradient). El
+     * admin entra aca para attach guardrails la primera vez (bootstrap manual),
+     * porque la API publica no expone un endpoint para listar el catalogo
+     * standalone.
+     */
+    private static final String DO_DASHBOARD_AGENT_URL_TEMPLATE =
+            "https://cloud.digitalocean.com/gen-ai/agents/%s/resources";
+
+    private static final String PROVIDER_DISPLAY_NAME = "DigitalOcean Gradient";
+
+    private static final String BOOTSTRAP_INSTRUCTIONS_ES =
+            "El proveedor (DigitalOcean Gradient) no expone publicamente un catalogo " +
+                    "standalone de guardrails. Para que aparezcan en este panel: " +
+                    "1) Abri el dashboard del agente en DO. " +
+                    "2) En la pestana \"Resources\", click en \"Add guardrails\" y vincula al menos uno. " +
+                    "3) Volve aca y pulsa \"Refrescar\". " +
+                    "Una vez registrados localmente, podras gestionar attach/detach/prioridad desde este panel sin volver al dashboard de DO.";
 
     private final ProviderGuardrailRepository guardrailRepository;
     private final AiAgentConfigurationRepository configRepository;
@@ -127,7 +150,34 @@ public class ProviderGuardrailAdminService implements IProviderGuardrailAdminUse
             guardrailRepository.save(local);
         }
 
-        return guardrailRepository.findAllOrderByPriorityAsc();
+        List<ProviderGuardrail> result = guardrailRepository.findAllOrderByPriorityAsc();
+        if (result.isEmpty()) {
+            // Caso bootstrap inicial: la API publica de DO NO permite listar el
+            // catalogo standalone de guardrails. La unica forma de descubrirlos
+            // es que el admin haga attach manual al menos una vez desde el
+            // dashboard de DO; ahi el agente body los reporta y nuestro refresh
+            // los persiste. Logueamos WARN para que el operador entienda el
+            // estado vacio sin pensar que hubo un error.
+            log.warn("Catalogo de provider guardrails vacio tras refresh contra agente {}. "
+                            + "Bootstrap manual requerido: el admin debe vincular al menos uno "
+                            + "desde el dashboard de DigitalOcean para que aparezcan aca.",
+                    providerAgentUuid);
+        }
+        return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BootstrapInfo getBootstrapInfo() {
+        boolean empty = guardrailRepository.findAllOrderByPriorityAsc().isEmpty();
+        String dashboardUrl = (providerAgentUuid == null || providerAgentUuid.isBlank())
+                ? null
+                : String.format(DO_DASHBOARD_AGENT_URL_TEMPLATE, providerAgentUuid);
+        return new BootstrapInfo(
+                empty,
+                PROVIDER_DISPLAY_NAME,
+                dashboardUrl,
+                BOOTSTRAP_INSTRUCTIONS_ES);
     }
 
     @Override
