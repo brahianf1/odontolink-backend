@@ -128,6 +128,37 @@ class ProviderGuardrailAdminServiceTest {
         assertEquals(50, nuevo.getPriority());
     }
 
+    @Test
+    void bootstrapInfoMarcaCatalogEmptyTrueCuandoEspejoVacio() {
+        when(repo.findAllOrderByPriorityAsc()).thenReturn(List.of());
+
+        var info = service.getBootstrapInfo();
+
+        assertTrue(info.catalogEmpty(),
+                "Si no hay locales, el FE necesita saberlo para renderizar el banner");
+        assertEquals("DigitalOcean Gradient", info.providerName());
+        // El URL del dashboard debe construirse con el agentUuid configurado.
+        assertTrue(info.providerDashboardUrl().contains(AGENT_UUID),
+                "El URL del dashboard debe apuntar al agente real");
+        assertTrue(info.providerDashboardUrl().startsWith("https://cloud.digitalocean.com/"),
+                "URL del proveedor mal armado: " + info.providerDashboardUrl());
+        assertTrue(info.instructionsText() != null && !info.instructionsText().isBlank(),
+                "Las instrucciones deben venir armadas en espanol desde el backend");
+    }
+
+    @Test
+    void bootstrapInfoMarcaCatalogEmptyFalseCuandoYaHayLocales() {
+        ProviderGuardrail local = new ProviderGuardrail(
+                1L, "uuid-1", ProviderGuardrailType.JAILBREAK, "Jailbreak", "desc",
+                true, 1, "default", Instant.now(), Instant.now());
+        when(repo.findAllOrderByPriorityAsc()).thenReturn(List.of(local));
+
+        var info = service.getBootstrapInfo();
+
+        assertFalse(info.catalogEmpty(),
+                "Si hay al menos un guardrail local registrado, no se necesita bootstrap");
+    }
+
     private AgentSnapshot snapshotWith(List<ProviderGuardrailSnapshot> guardrails) {
         return new AgentSnapshot(
                 AGENT_UUID, "instr", null, null, 256, 5,

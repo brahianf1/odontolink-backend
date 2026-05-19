@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import site.utnpf.odontolink.application.port.in.IProviderGuardrailAdminUseCase;
 import site.utnpf.odontolink.domain.model.ProviderGuardrail;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.ProviderGuardrailAttachmentRequestDTO;
+import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ProviderGuardrailBootstrapInfoResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ProviderGuardrailResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.ProviderGuardrailRestMapper;
 
@@ -88,5 +89,26 @@ public class AdminProviderGuardrailController {
             @Valid @RequestBody ProviderGuardrailAttachmentRequestDTO request) {
         ProviderGuardrail saved = useCase.updateAttachment(id, request.isAttached(), request.getPriority());
         return ResponseEntity.ok(ProviderGuardrailRestMapper.toResponse(saved));
+    }
+
+    @Operation(summary = "Info de bootstrap del catalogo del proveedor",
+            description = "Devuelve metadata para guiar al admin cuando el espejo " +
+                    "local esta vacio (catalogEmpty=true). Existe porque la API " +
+                    "publica de DigitalOcean Gradient NO expone un endpoint para " +
+                    "listar el catalogo standalone de guardrails: la unica forma " +
+                    "de descubrirlos es que el admin haga attach manual al menos " +
+                    "una vez desde el dashboard de DO. Despues, los UUIDs quedan " +
+                    "registrados localmente y todo se gestiona desde este panel. " +
+                    "La UI deberia consumir este endpoint cuando GET / venga vacio " +
+                    "para renderizar el banner accionable con link al dashboard.")
+    @GetMapping("/bootstrap-info")
+    public ResponseEntity<ProviderGuardrailBootstrapInfoResponseDTO> bootstrapInfo() {
+        IProviderGuardrailAdminUseCase.BootstrapInfo info = useCase.getBootstrapInfo();
+        ProviderGuardrailBootstrapInfoResponseDTO dto = new ProviderGuardrailBootstrapInfoResponseDTO();
+        dto.setCatalogEmpty(info.catalogEmpty());
+        dto.setProviderName(info.providerName());
+        dto.setProviderDashboardUrl(info.providerDashboardUrl());
+        dto.setInstructionsText(info.instructionsText());
+        return ResponseEntity.ok(dto);
     }
 }

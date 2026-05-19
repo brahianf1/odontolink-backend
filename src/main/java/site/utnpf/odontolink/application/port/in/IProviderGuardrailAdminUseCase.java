@@ -38,4 +38,24 @@ public interface IProviderGuardrailAdminUseCase {
      * agente.
      */
     ProviderGuardrail updateAttachment(Long id, boolean attached, int priority);
+
+    /**
+     * Snapshot inmutable que orienta al admin cuando el espejo local de
+     * guardrails esta vacio. Existe porque la API publica del proveedor no
+     * expone un endpoint para listar el catalogo standalone (solo
+     * attach/detach contra un agente).
+     */
+    record BootstrapInfo(
+            boolean catalogEmpty,
+            String providerName,
+            String providerDashboardUrl,
+            String instructionsText) {
+    }
+
+    /**
+     * Devuelve info para guiar el bootstrap manual desde el dashboard del
+     * proveedor. La UI la consume cuando {@link #listGuardrails()} viene
+     * vacio para renderizar un banner accionable con link directo.
+     */
+    BootstrapInfo getBootstrapInfo();
 }
