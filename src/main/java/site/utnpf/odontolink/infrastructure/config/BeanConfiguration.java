@@ -705,6 +705,31 @@ public class BeanConfiguration {
     }
 
     /**
+     * Beans del modulo de site appearance (RF-site-appearance).
+     *
+     * <p>Igual que el resto de servicios de aplicacion: no usan @Service y se
+     * exponen aca. {@code SiteAppearanceConfigService} depende de
+     * {@code CustomThemeRepository} solo para validar la existencia del slug
+     * cuando el admin apunta el singleton a un theme custom.
+     */
+    @Bean
+    public site.utnpf.odontolink.application.port.in.ISiteAppearanceConfigUseCase siteAppearanceConfigUseCase(
+            site.utnpf.odontolink.domain.repository.SiteAppearanceConfigRepository siteAppearanceRepository,
+            site.utnpf.odontolink.domain.repository.CustomThemeRepository customThemeRepository,
+            site.utnpf.odontolink.application.service.support.SingletonRowBootstrap singletonBootstrap) {
+        return new site.utnpf.odontolink.application.service.SiteAppearanceConfigService(
+                siteAppearanceRepository, customThemeRepository, singletonBootstrap);
+    }
+
+    @Bean
+    public site.utnpf.odontolink.application.port.in.ICustomThemeAdminUseCase customThemeAdminUseCase(
+            site.utnpf.odontolink.domain.repository.CustomThemeRepository customThemeRepository,
+            site.utnpf.odontolink.domain.repository.SiteAppearanceConfigRepository siteAppearanceRepository) {
+        return new site.utnpf.odontolink.application.service.CustomThemeAdminService(
+                customThemeRepository, siteAppearanceRepository);
+    }
+
+    /**
      * Helper de bootstrap de filas singleton (id fijo) usado por los servicios
      * que cargan {@link site.utnpf.odontolink.domain.model.InstitutionalSettings},
      * {@link site.utnpf.odontolink.domain.model.AiGovernancePolicy} y la

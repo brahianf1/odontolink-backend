@@ -10,6 +10,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -78,6 +79,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/chatbot/info").permitAll()
                         .requestMatchers("/api/chatbot/messages").permitAll()
                         .requestMatchers("/api/chatbot/sessions/**").permitAll()
+                        // RF-site-appearance: el landing publico consulta este
+                        // endpoint sin sesion para aplicar el theme/font/mode
+                        // antes de ofrecer login. Solo el GET es publico; los
+                        // endpoints de gestion viven bajo /api/admin/site-config/**
+                        // y caen en el catch-all de admin de abajo.
+                        .requestMatchers(HttpMethod.GET, "/api/site-config/appearance").permitAll()
                         // RF05 y RF07: todo lo que cuelgue de /api/admin/** queda
                         // reservado al rol ROLE_ADMIN. Esta regla declarativa se
                         // suma a los @PreAuthorize de los controllers como

@@ -21,7 +21,9 @@ import site.utnpf.odontolink.domain.exception.InvalidPasswordResetTokenException
 import site.utnpf.odontolink.domain.exception.LlmProviderException;
 import site.utnpf.odontolink.domain.exception.RateLimitExceededException;
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
+import site.utnpf.odontolink.domain.exception.ThemeInUseException;
 import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
+import site.utnpf.odontolink.domain.exception.VersionConflictException;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ErrorResponseDTO;
 
 import java.util.List;
@@ -345,6 +347,51 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+    }
+
+    /**
+     * Maneja {@link VersionConflictException}: el cliente envio un PUT con
+     * version desactualizada (header {@code If-Match} stale o ausente).
+     * Devuelve 409 con {@code errorCode=VERSION_CONFLICT} y la version
+     * actual del recurso en {@code details[]} para que el FE pueda recargar
+     * y reintentar sin un GET extra.
+     */
+    @ExceptionHandler(VersionConflictException.class)
+    public ResponseEntity<ErrorResponseDTO> handleVersionConflictException(
+            VersionConflictException ex,
+            HttpServletRequest request) {
+
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                HttpStatus.CONFLICT.value(),
+                "Version Conflict",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        errorResponse.setErrorCode(ex.getErrorCode());
+        errorResponse.setDetails(List.of("currentVersion: " + ex.getCurrentVersion()));
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+    }
+
+    /**
+     * Maneja {@link ThemeInUseException}: se intento borrar un custom theme
+     * que esta seteado como appearance activa. Devuelve 409 con
+     * {@code errorCode=THEME_IN_USE} y el slug en {@code details[]} para que
+     * el FE pueda decirle al admin que cambie el theme global primero.
+     */
+    @ExceptionHandler(ThemeInUseException.class)
+    public ResponseEntity<ErrorResponseDTO> handleThemeInUseException(
+            ThemeInUseException ex,
+            HttpServletRequest request) {
+
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                HttpStatus.CONFLICT.value(),
+                "Theme In Use",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        errorResponse.setErrorCode(ex.getErrorCode());
+        errorResponse.setDetails(List.of("slug: " + ex.getSlug()));
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
     }
 
     /**
