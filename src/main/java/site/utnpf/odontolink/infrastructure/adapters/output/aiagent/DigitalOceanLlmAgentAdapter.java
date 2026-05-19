@@ -4,7 +4,7 @@ import site.utnpf.odontolink.application.port.out.ILlmAgentProviderPort;
 import site.utnpf.odontolink.domain.model.AiRetrievalMethod;
 import site.utnpf.odontolink.domain.model.ProviderGuardrailType;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.dto.DoAgentResponse;
-import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.dto.DoAttachGuardrailRequest;
+import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.dto.DoAttachGuardrailsRequest;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.dto.DoUpdateAgentRequest;
 
 import java.util.ArrayList;
@@ -20,11 +20,11 @@ import java.util.List;
  * del proveedor vive aqui.
  *
  * <p>Implementa tambien el manejo de guardrails nativos:
- * {@link #attachGuardrail} y {@link #detachGuardrail} mapean a los endpoints
- * {@code POST /agents/{uuid}/guardrails} y
- * {@code DELETE /agents/{uuid}/guardrails/{guardrail_uuid}}. La lista de
- * guardrails vinculados/disponibles viaja como parte del agent body en
- * {@code getAgent()}.
+ * {@link #attachGuardrails} y {@link #detachGuardrail} mapean a los endpoints
+ * {@code POST /agents/{uuid}/guardrails} (batch) y
+ * {@code DELETE /agents/{uuid}/guardrails/{guardrail_uuid}} (singular). La
+ * lista de guardrails vinculados/disponibles viaja como parte del agent body
+ * en {@code getAgent()}.
  */
 public class DigitalOceanLlmAgentAdapter implements ILlmAgentProviderPort {
 
@@ -60,8 +60,18 @@ public class DigitalOceanLlmAgentAdapter implements ILlmAgentProviderPort {
     }
 
     @Override
-    public void attachGuardrail(String providerAgentId, String providerGuardrailUuid, int priority) {
-        DoAttachGuardrailRequest body = new DoAttachGuardrailRequest(providerGuardrailUuid, priority);
+    public void attachGuardrails(String providerAgentId, List<GuardrailAttachment> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            // Sin nada que mandar; evitamos un POST con body vacio que DO
+            // podria rechazar como 400.
+            return;
+        }
+        List<DoAttachGuardrailsRequest.GuardrailItem> items = new ArrayList<>(attachments.size());
+        for (GuardrailAttachment a : attachments) {
+            items.add(new DoAttachGuardrailsRequest.GuardrailItem(
+                    a.providerGuardrailUuid(), a.priority()));
+        }
+        DoAttachGuardrailsRequest body = new DoAttachGuardrailsRequest(items);
         // La respuesta no nos importa: lo unico que necesitamos saber es si fue 2xx.
         // El client convierte 4xx/5xx en LlmProviderException.
         client.post(AGENT_PATH + providerAgentId + GUARDRAILS_SEGMENT, body, Object.class);

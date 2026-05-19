@@ -81,6 +81,14 @@ public interface ILlmAgentProviderPort {
     }
 
     /**
+     * Item de attach que viaja al proveedor. Se manda como parte de una lista
+     * porque la API real de DO es batch: un solo POST con todos los
+     * guardrails deseados, no uno por llamada.
+     */
+    record GuardrailAttachment(String providerGuardrailUuid, int priority) {
+    }
+
+    /**
      * Obtiene la configuracion actual del agente. Se usa para validar la
      * disponibilidad del proveedor y para reconciliar el estado local.
      *
@@ -96,16 +104,20 @@ public interface ILlmAgentProviderPort {
     AgentSnapshot updateAgent(String providerAgentId, AgentUpdateSpec spec);
 
     /**
-     * Vincula un guardrail al agente con la prioridad indicada. Idempotente
-     * en el sentido de que si el guardrail ya esta vinculado, el proveedor
-     * suele aceptar la llamada y actualizar; el caller debe asumir esa
-     * semantica.
+     * Vincula uno o varios guardrails al agente en una sola llamada. La API
+     * de DO Gradient es nativamente batch (un POST con array de attachments),
+     * por eso el contrato del puerto tambien lo es. Idempotente: si un
+     * guardrail ya esta vinculado el proveedor lo acepta (y aprovecha para
+     * actualizar la priority).
+     *
+     * <p>Si {@code attachments} esta vacio o null, el adapter no hace nada.
      */
-    void attachGuardrail(String providerAgentId, String providerGuardrailUuid, int priority);
+    void attachGuardrails(String providerAgentId, List<GuardrailAttachment> attachments);
 
     /**
      * Desvincula un guardrail del agente. Idempotente: si ya no esta
-     * vinculado, no se considera error.
+     * vinculado, no se considera error. La API real de DO sigue siendo
+     * singular para detach (un DELETE por UUID).
      */
     void detachGuardrail(String providerAgentId, String providerGuardrailUuid);
 }

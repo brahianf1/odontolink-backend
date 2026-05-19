@@ -23,7 +23,15 @@ public class AiAdminAuditEvent {
         AGENT_PUBLISH,
         AGENT_PUBLISH_FAILED,
         AGENT_ROLLBACK,
-        GOVERNANCE_POLICY_UPDATED
+        GOVERNANCE_POLICY_UPDATED,
+        /**
+         * Publish exitoso pero la sincronizacion de uno o mas guardrails
+         * nativos del proveedor fallo. El agente quedo publicado con
+         * instruction y parametros pero el set de guardrails attached en DO
+         * puede no coincidir con el intent local. {@code details} guarda los
+         * UUIDs fallidos para que el admin pueda investigar.
+         */
+        PROVIDER_GUARDRAIL_SYNC_PARTIAL_FAILURE
     }
 
     private Long id;

@@ -53,7 +53,11 @@ public class AdminProviderGuardrailController {
         this.useCase = useCase;
     }
 
-    @Operation(summary = "Listar guardrails del proveedor (espejo local)")
+    @Operation(summary = "Listar guardrails del proveedor (espejo local)",
+            description = "Devuelve el espejo local. El estado puede estar " +
+                    "desincronizado con el proveedor si el admin tocó el " +
+                    "dashboard de DO desde el último refresh. Use POST /refresh " +
+                    "para forzar sincronización.")
     @GetMapping
     public ResponseEntity<List<ProviderGuardrailResponseDTO>> list() {
         List<ProviderGuardrail> all = useCase.listGuardrails();
@@ -62,9 +66,13 @@ public class AdminProviderGuardrailController {
 
     @Operation(summary = "Refrescar desde el proveedor",
             description = "Consulta al proveedor y sincroniza el espejo local. " +
-                    "Agrega los guardrails nuevos, actualiza metadata descriptiva " +
-                    "de los existentes. Preserva la intencion de attach del admin " +
-                    "para los que ya estaban localmente.")
+                    "Agrega los guardrails nuevos y sobrescribe metadata, estado " +
+                    "attached y priority de los existentes con lo que reporta el " +
+                    "proveedor. ATENCION: esta operacion es autoritativa — si el " +
+                    "admin tenia cambios DRAFT pendientes (toggles no publicados), " +
+                    "se pierden. Es intencional: refresh significa 'tráeme la " +
+                    "verdad del proveedor'. La UI deberia advertir al admin antes " +
+                    "de disparar refresh si la config esta en DRAFT.")
     @PostMapping("/refresh")
     public ResponseEntity<List<ProviderGuardrailResponseDTO>> refresh() {
         List<ProviderGuardrail> all = useCase.refreshFromProvider();
