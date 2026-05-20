@@ -40,4 +40,17 @@ public interface UserRepository {
      * Análogo a {@link #existsByEmailAndIdNot(String, Long)} pero sobre el DNI.
      */
     boolean existsByDniAndIdNot(String dni, Long excludingId);
+
+    /**
+     * Cuenta los usuarios con el rol indicado que están actualmente activos
+     * ({@code isActive = true}).
+     *
+     * <p>Caso de uso principal: la regla "last-admin-standing" en la baja
+     * lógica de administradores. Antes de desactivar un admin, el caso de
+     * uso consulta este contador para garantizar que el sistema nunca
+     * quede sin ninguna cuenta administrativa operativa — un lockout total
+     * obligaría a intervenir la base de datos a mano y violaría el
+     * principio de operación segura recomendado por OWASP ASVS.
+     */
+    long countActiveByRole(Role role);
 }

@@ -24,6 +24,13 @@ public interface JpaUserRepository extends JpaRepository<UserEntity, Long> {
     boolean existsByDniAndIdNot(String dni, Long id);
 
     /**
+     * Derivación Spring Data que cuenta usuarios con el rol indicado y
+     * {@code isActive = true}. Implementa
+     * {@link site.utnpf.odontolink.domain.repository.UserRepository#countActiveByRole(Role)}.
+     */
+    long countByRoleAndIsActiveTrue(Role role);
+
+    /**
      * Consulta dinámica para el listado administrativo de usuarios (RF05).
      *
      * Cada filtro es opcional: cuando un parámetro llega en {@code null}, su
