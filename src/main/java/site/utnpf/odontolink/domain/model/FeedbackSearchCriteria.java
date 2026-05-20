@@ -39,6 +39,15 @@ public final class FeedbackSearchCriteria {
     private final LocalDate endDate;
 
     /**
+     * Filtro opcional por dirección del feedback bidireccional. Si es null,
+     * la búsqueda no discrimina (ambos sentidos se incluyen en la página).
+     * Los agregados, en cambio, siempre se calculan discriminando por
+     * dirección (ver {@code FeedbackRepository.aggregateByDirection}) — esta
+     * propiedad sólo afecta a la slice paginada.
+     */
+    private final FeedbackDirection direction;
+
+    /**
      * Cerco silencioso. Inmutable. Nunca null tras el constructor: se
      * normaliza a un conjunto vacío para que el caller no tenga que
      * defender contra NPE y el adaptador pueda generar un predicado
@@ -51,15 +60,35 @@ public final class FeedbackSearchCriteria {
                                   Long treatmentId,
                                   LocalDate startDate,
                                   LocalDate endDate,
+                                  FeedbackDirection direction,
                                   Set<Long> allowedPractitionerIds) {
         this.practitionerId = practitionerId;
         this.patientId = patientId;
         this.treatmentId = treatmentId;
         this.startDate = startDate;
         this.endDate = endDate;
+        this.direction = direction;
         this.allowedPractitionerIds = allowedPractitionerIds == null
                 ? Collections.emptySet()
                 : Collections.unmodifiableSet(allowedPractitionerIds);
+    }
+
+    /**
+     * Devuelve una copia de estos criterios con la dirección reemplazada.
+     * Útil para que la capa de aplicación reutilice el mismo conjunto de
+     * filtros al pedir los dos agregados (uno por cada dirección) sin tener
+     * que reconstruirlo desde cero.
+     */
+    public FeedbackSearchCriteria withDirection(FeedbackDirection newDirection) {
+        return new FeedbackSearchCriteria(
+                this.practitionerId,
+                this.patientId,
+                this.treatmentId,
+                this.startDate,
+                this.endDate,
+                newDirection,
+                this.allowedPractitionerIds
+        );
     }
 
     public Long getPractitionerId() {
@@ -82,8 +111,16 @@ public final class FeedbackSearchCriteria {
         return endDate;
     }
 
+    public FeedbackDirection getDirection() {
+        return direction;
+    }
+
     public Set<Long> getAllowedPractitionerIds() {
         return allowedPractitionerIds;
+    }
+
+    public boolean hasDirection() {
+        return direction != null;
     }
 
     public boolean hasPractitionerId() {

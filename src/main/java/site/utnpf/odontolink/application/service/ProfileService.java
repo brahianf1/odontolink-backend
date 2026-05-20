@@ -91,7 +91,7 @@ public class ProfileService implements IProfileUseCase {
         // el cliente omite el campo. Un valor null dentro del wrapper limpia
         // el campo (lo aplica el mapper trasladando "" a null).
         command.getPhone().ifPresent(user::setPhone);
-        command.getBirthDate().ifPresent(user::setBirthDate);
+        command.getBirthDate().ifPresent(user::changeBirthDate);
         command.getAddress().ifPresent(user::setAddress);
         command.getProfilePictureUrl().ifPresent(user::setProfilePictureUrl);
 

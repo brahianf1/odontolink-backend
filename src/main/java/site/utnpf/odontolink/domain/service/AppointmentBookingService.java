@@ -93,6 +93,17 @@ public class AppointmentBookingService {
             Long offeredTreatmentId,
             LocalDateTime appointmentTime) {
 
+        // Defensa de dominio: el calendario del paciente jamás puede agendar
+        // en el pasado. La capa REST ya rechaza con 400 vía @FutureOrPresent,
+        // pero replicamos la regla acá para callers no-HTTP (jobs, tests) y
+        // para cubrir la ventana entre "validó el DTO" y "ejecuta la lógica"
+        // por si el reloj cruza el límite (cita exactamente igual a now()).
+        if (appointmentTime != null && appointmentTime.isBefore(LocalDateTime.now())) {
+            throw new InvalidBusinessRuleException(
+                    "No se puede reservar un turno con fecha anterior al instante actual."
+            );
+        }
+
         // Validar la Oferta: existencia + estado bookable + ventana temporal
         OfferedTreatment offeredTreatment = validateOfferedTreatment(offeredTreatmentId, appointmentTime);
 

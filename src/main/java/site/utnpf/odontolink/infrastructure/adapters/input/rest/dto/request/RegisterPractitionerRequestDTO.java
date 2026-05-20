@@ -2,6 +2,7 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
+import site.utnpf.odontolink.infrastructure.config.validation.MinimumAge;
 import site.utnpf.odontolink.infrastructure.config.validation.StrongPassword;
 
 import java.time.LocalDate;
@@ -44,8 +45,10 @@ public class RegisterPractitionerRequestDTO {
     @Size(max = 20, message = "El teléfono no puede superar los 20 caracteres")
     private String phone;
 
-    @Schema(description = "Fecha de nacimiento del practicante", example = "1998-08-20")
+    @Schema(description = "Fecha de nacimiento del practicante. Debe acreditar mayoría de edad (18+).",
+            example = "1998-08-20")
     @Past(message = "La fecha de nacimiento debe ser una fecha pasada")
+    @MinimumAge(18)
     private LocalDate birthDate;
 
     @Schema(description = "Número de legajo universitario del estudiante", example = "LEG-2024-001", required = true)

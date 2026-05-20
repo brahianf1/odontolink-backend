@@ -1,6 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 
 import jakarta.validation.constraints.*;
+import site.utnpf.odontolink.infrastructure.config.validation.MinimumAge;
 import site.utnpf.odontolink.infrastructure.config.validation.StrongPassword;
 
 import java.time.LocalDate;
@@ -36,6 +37,7 @@ public class RegisterSupervisorRequestDTO {
     private String phone;
 
     @Past(message = "La fecha de nacimiento debe ser una fecha pasada")
+    @MinimumAge(18)
     private LocalDate birthDate;
 
     @NotBlank(message = "La especialidad es obligatoria")

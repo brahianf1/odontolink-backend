@@ -3,12 +3,14 @@ package site.utnpf.odontolink.infrastructure.adapters.output.persistence.specifi
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
 import org.springframework.data.jpa.domain.Specification;
+import site.utnpf.odontolink.domain.model.FeedbackDirection;
 import site.utnpf.odontolink.domain.model.FeedbackSearchCriteria;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.AttentionEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.FeedbackEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.PatientEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.PractitionerEntity;
 import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.TreatmentEntity;
+import site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity.UserEntity;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -136,8 +138,51 @@ public final class FeedbackSpecifications {
     }
 
     /**
+     * Filtro por dirección del feedback bidireccional. Compara el
+     * {@code submittedBy} del feedback contra el user del paciente o del
+     * practicante de la atención para clasificarlo:
+     * <ul>
+     *   <li>{@link FeedbackDirection#PATIENT_TO_PRACTITIONER}:
+     *       {@code feedback.submittedBy = attention.patient.user}.</li>
+     *   <li>{@link FeedbackDirection#PRACTITIONER_TO_PATIENT}:
+     *       {@code feedback.submittedBy = attention.practitioner.user}.</li>
+     * </ul>
+     *
+     * <p>El join al user del paciente/practicante se realiza en INNER porque
+     * todo feedback válido por el modelo de dominio tiene ambos extremos
+     * presentes; cualquier null sería inconsistencia y debe excluirse del
+     * universo del panel.
+     */
+    public static Specification<FeedbackEntity> hasDirection(FeedbackDirection direction) {
+        return (root, query, cb) -> {
+            Join<FeedbackEntity, AttentionEntity> attentionJoin =
+                    root.join("attention", JoinType.INNER);
+            Join<FeedbackEntity, UserEntity> submittedByJoin =
+                    root.join("submittedBy", JoinType.INNER);
+            if (direction == FeedbackDirection.PATIENT_TO_PRACTITIONER) {
+                Join<AttentionEntity, PatientEntity> patientJoin =
+                        attentionJoin.join("patient", JoinType.INNER);
+                Join<PatientEntity, UserEntity> patientUserJoin =
+                        patientJoin.join("user", JoinType.INNER);
+                return cb.equal(submittedByJoin.get("id"), patientUserJoin.get("id"));
+            }
+            Join<AttentionEntity, PractitionerEntity> practitionerJoin =
+                    attentionJoin.join("practitioner", JoinType.INNER);
+            Join<PractitionerEntity, UserEntity> practitionerUserJoin =
+                    practitionerJoin.join("user", JoinType.INNER);
+            return cb.equal(submittedByJoin.get("id"), practitionerUserJoin.get("id"));
+        };
+    }
+
+    /**
      * Compone la Specification final. Siempre arranca con el cerco docente-
      * alumno; los filtros del docente se agregan sólo si están presentes.
+     *
+     * <p>El filtro {@code direction} se incluye sólo cuando se aplica a la
+     * búsqueda paginada: el método de agregados ({@code aggregateByDirection})
+     * pasa por acá pidiendo cada dirección por separado vía
+     * {@link FeedbackSearchCriteria#withDirection}, así reutilizamos las
+     * mismas Specifications en ambos caminos sin duplicar lógica.
      */
     public static Specification<FeedbackEntity> fromCriteria(FeedbackSearchCriteria criteria) {
         Specification<FeedbackEntity> spec = practitionerScope(criteria.getAllowedPractitionerIds());
@@ -156,6 +201,9 @@ public final class FeedbackSpecifications {
         }
         if (criteria.hasEndDate()) {
             spec = spec.and(createdUntil(criteria.getEndDate()));
+        }
+        if (criteria.hasDirection()) {
+            spec = spec.and(hasDirection(criteria.getDirection()));
         }
         return spec;
     }

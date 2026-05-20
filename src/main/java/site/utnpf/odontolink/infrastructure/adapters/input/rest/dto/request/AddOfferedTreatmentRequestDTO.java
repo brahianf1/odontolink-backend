@@ -2,6 +2,7 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -33,8 +34,12 @@ public class AddOfferedTreatmentRequestDTO {
     @Valid
     private Set<AvailabilitySlotDTO> availabilitySlots;
 
-    @Schema(description = "Fecha de inicio de la oferta (límite temporal)", example = "2025-01-15", required = true)
+    @Schema(description = "Fecha de inicio de la oferta (límite temporal). No puede ser anterior al día actual: " +
+            "el practicante sólo puede ofrecer disponibilidad de hoy en adelante.",
+            example = "2025-01-15",
+            required = true)
     @NotNull(message = "La fecha de inicio de la oferta es obligatoria")
+    @FutureOrPresent(message = "La fecha de inicio no puede ser anterior al día actual")
     private LocalDate offerStartDate;
 
     @Schema(description = "Fecha de fin de la oferta (límite temporal)", example = "2025-06-30", required = true)

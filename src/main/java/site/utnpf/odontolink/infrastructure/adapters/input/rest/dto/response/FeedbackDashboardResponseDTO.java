@@ -2,47 +2,73 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import site.utnpf.odontolink.domain.model.FeedbackDashboardResult;
+import site.utnpf.odontolink.domain.model.FeedbackDirectionalAggregates;
 
 /**
  * "DashboardWrapper" del Panel Docente de Supervisión de Feedback (RF25).
  *
- * Un panel analítico no es un array de filas: es un objeto contenedor que
+ * <p>Un panel analítico no es un array de filas: es un objeto contenedor que
  * agrupa el listado paginado y los indicadores macro calculados sobre el
  * mismo universo de filtros. Este DTO formaliza ese contrato hacia el
- * frontend para que la lectura sea autoexplicativa y los indicadores
- * sigan coherentes mientras el docente navega entre páginas.
+ * frontend.
  *
- * Campos:
+ * <p><b>Migración v2:</b> el campo único {@code averageRating} fue
+ * reemplazado por dos pares (promedio + total) discriminados por la
+ * dirección del feedback bidireccional. La métrica que evalúa al
+ * practicante (P→Pr) y la que evalúa al paciente (Pra→Pat) ahora viajan
+ * por separado para que el frontend pueda elegir cuál mostrar según el
+ * contexto. La media global anterior mezclaba ambos sentidos y
+ * distorsionaba el desempeño del estudiante; se eliminó deliberadamente.
+ *
+ * <p>Campos:
  *  - {@code feedbacks}: slice paginada (contenido + metadata de paginación).
- *  - {@code averageRating}: promedio de calificación sobre el universo
- *    filtrado completo (no sólo la página actual). Coincide con {@code
- *    SUM(rating)/COUNT(*)} en BD.
- *  - {@code totalFeedbacksCount}: cantidad total de feedbacks en el
- *    universo filtrado. Es el mismo valor que {@code feedbacks.totalElements},
- *    expuesto como campo de primer nivel para que el frontend no tenga que
- *    razonar "el total real está dentro de la página".
+ *    Si el cliente envió {@code direction=...}, la lista viene filtrada por
+ *    esa dirección; los agregados de abajo se calculan SIEMPRE sobre los dos
+ *    sentidos para que el dashboard pueda mostrar ambas tarjetas.
+ *  - {@code averageRatingPatientToPractitioner} / {@code totalPatientToPractitioner}:
+ *    promedio y total de feedbacks emitidos por pacientes calificando al
+ *    practicante (la métrica de soft-skills/RF21 para el panel docente).
+ *  - {@code averageRatingPractitionerToPatient} / {@code totalPractitionerToPatient}:
+ *    promedio y total de feedbacks emitidos por practicantes calificando al
+ *    paciente (RF22).
  */
-@Schema(description = "Contenedor del Panel Docente de Supervisión de Feedback (RF25). Incluye la lista paginada de feedbacks y los indicadores agregados sobre el mismo universo de filtros.")
+@Schema(description = "Contenedor del Panel Docente de Supervisión de Feedback (RF25) v2. " +
+        "Incluye la lista paginada y los agregados discriminados por dirección del feedback bidireccional.")
 public class FeedbackDashboardResponseDTO {
 
-    @Schema(description = "Página de feedbacks (contenido + metadata de paginación)")
+    @Schema(description = "Página de feedbacks (contenido + metadata de paginación). " +
+            "Si se envió `direction`, viene filtrada por esa dirección.")
     private PageResponseDTO<FeedbackResponseDTO> feedbacks;
 
-    @Schema(description = "Promedio de la calificación sobre el universo filtrado completo", example = "4.27")
-    private double averageRating;
+    @Schema(description = "Promedio de calificación de feedbacks paciente→practicante sobre el universo filtrado",
+            example = "4.27")
+    private double averageRatingPatientToPractitioner;
 
-    @Schema(description = "Cantidad total de feedbacks en el universo filtrado completo", example = "137")
-    private long totalFeedbacksCount;
+    @Schema(description = "Cantidad total de feedbacks paciente→practicante en el universo filtrado",
+            example = "92")
+    private long totalPatientToPractitioner;
+
+    @Schema(description = "Promedio de calificación de feedbacks practicante→paciente sobre el universo filtrado",
+            example = "4.05")
+    private double averageRatingPractitionerToPatient;
+
+    @Schema(description = "Cantidad total de feedbacks practicante→paciente en el universo filtrado",
+            example = "45")
+    private long totalPractitionerToPatient;
 
     public FeedbackDashboardResponseDTO() {
     }
 
     public FeedbackDashboardResponseDTO(PageResponseDTO<FeedbackResponseDTO> feedbacks,
-                                        double averageRating,
-                                        long totalFeedbacksCount) {
+                                        double averageRatingPatientToPractitioner,
+                                        long totalPatientToPractitioner,
+                                        double averageRatingPractitionerToPatient,
+                                        long totalPractitionerToPatient) {
         this.feedbacks = feedbacks;
-        this.averageRating = averageRating;
-        this.totalFeedbacksCount = totalFeedbacksCount;
+        this.averageRatingPatientToPractitioner = averageRatingPatientToPractitioner;
+        this.totalPatientToPractitioner = totalPatientToPractitioner;
+        this.averageRatingPractitionerToPatient = averageRatingPractitionerToPatient;
+        this.totalPractitionerToPatient = totalPractitionerToPatient;
     }
 
     /**
@@ -54,10 +80,13 @@ public class FeedbackDashboardResponseDTO {
     public static FeedbackDashboardResponseDTO of(FeedbackDashboardResult result,
                                                   java.util.function.Function<site.utnpf.odontolink.domain.model.Feedback, FeedbackResponseDTO> mapper) {
         PageResponseDTO<FeedbackResponseDTO> page = PageResponseDTO.of(result.getPage(), mapper);
+        FeedbackDirectionalAggregates aggregates = result.getAggregates();
         return new FeedbackDashboardResponseDTO(
                 page,
-                result.getAverageRating(),
-                result.getTotalFeedbacksCount()
+                aggregates.getAverageRatingPatientToPractitioner(),
+                aggregates.getTotalPatientToPractitioner(),
+                aggregates.getAverageRatingPractitionerToPatient(),
+                aggregates.getTotalPractitionerToPatient()
         );
     }
 
@@ -69,19 +98,35 @@ public class FeedbackDashboardResponseDTO {
         this.feedbacks = feedbacks;
     }
 
-    public double getAverageRating() {
-        return averageRating;
+    public double getAverageRatingPatientToPractitioner() {
+        return averageRatingPatientToPractitioner;
     }
 
-    public void setAverageRating(double averageRating) {
-        this.averageRating = averageRating;
+    public void setAverageRatingPatientToPractitioner(double averageRatingPatientToPractitioner) {
+        this.averageRatingPatientToPractitioner = averageRatingPatientToPractitioner;
     }
 
-    public long getTotalFeedbacksCount() {
-        return totalFeedbacksCount;
+    public long getTotalPatientToPractitioner() {
+        return totalPatientToPractitioner;
     }
 
-    public void setTotalFeedbacksCount(long totalFeedbacksCount) {
-        this.totalFeedbacksCount = totalFeedbacksCount;
+    public void setTotalPatientToPractitioner(long totalPatientToPractitioner) {
+        this.totalPatientToPractitioner = totalPatientToPractitioner;
+    }
+
+    public double getAverageRatingPractitionerToPatient() {
+        return averageRatingPractitionerToPatient;
+    }
+
+    public void setAverageRatingPractitionerToPatient(double averageRatingPractitionerToPatient) {
+        this.averageRatingPractitionerToPatient = averageRatingPractitionerToPatient;
+    }
+
+    public long getTotalPractitionerToPatient() {
+        return totalPractitionerToPatient;
+    }
+
+    public void setTotalPractitionerToPatient(long totalPractitionerToPatient) {
+        this.totalPractitionerToPatient = totalPractitionerToPatient;
     }
 }
