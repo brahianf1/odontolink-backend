@@ -31,15 +31,23 @@ import java.util.List;
  *       garantiza que cualquier evolución futura (por ejemplo, nuevas
  *       validaciones de DNI) se aplique tanto al auto-registro como al
  *       alta administrativa.</li>
- *   <li>Las operaciones de modificación, baja y reactivación se restringen
- *       deliberadamente a usuarios de rol PACIENTE, PRACTICANTE o
- *       SUPERVISOR, en línea con el texto del RF05. Bloquear el toque a
- *       otros administradores evita además que un admin pueda dejar al
- *       sistema sin administradores activos por error desde esta API.</li>
- *   <li>El método {@link #deactivateUser(Long)} aprovecha la regla de
+ *   <li>La modificación de perfil ({@link #updateUserProfile}) sigue
+ *       restringida a usuarios no-admin: el RF05 no contempla la edición
+ *       cruzada entre administradores y ese cambio se trata en un flujo
+ *       aparte.</li>
+ *   <li>La baja y la reactivación (RF05) sí admiten ahora targets con rol
+ *       {@code ROLE_ADMIN}, pero quedan blindadas por dos guards explícitos
+ *       contra lockout administrativo (ver
+ *       {@link #deactivateUser(Long, User)}): (a) un admin no puede
+ *       desactivarse a sí mismo, y (b) no se puede dejar al sistema sin
+ *       ningún administrador activo. Esta separación reemplaza al bloqueo
+ *       blanket previo, que protegía contra lockout por exceso pero dejaba
+ *       al sistema sin forma de retirar admins por la API.</li>
+ *   <li>El método {@link #deactivateUser(Long, User)} aprovecha la regla de
  *       negocio ya codificada en {@code User#deactivate()}: lanza
  *       {@code IllegalStateException} si el usuario ya está inactivo, que
- *       se mapea más arriba a {@link InvalidBusinessRuleException}.</li>
+ *       se mapea a {@link InvalidBusinessRuleException} para que el
+ *       GlobalExceptionHandler responda 422.</li>
  * </ul>
  *
  * Todas las operaciones de escritura son transaccionales para garantizar
@@ -113,16 +121,20 @@ public class AdminUserManagementService implements IAdminUserManagementUseCase {
     @Override
     public User updateUserProfile(Long id, String firstName, String lastName,
                                   String phone, LocalDate birthDate) {
-        User user = loadManageableUser(id);
+        User user = loadExistingUser(id);
+        assertProfileEditableByAdmin(user);
         user.updateProfile(firstName, lastName, phone, birthDate);
         return userRepository.save(user);
     }
 
     @Override
-    public User deactivateUser(Long id) {
-        User user = loadManageableUser(id);
+    public User deactivateUser(Long id, User actor) {
+        User target = loadExistingUser(id);
+        assertNotSelfDeactivation(actor, target);
+        assertNotLastActiveAdmin(target);
+
         try {
-            user.deactivate();
+            target.deactivate();
         } catch (IllegalStateException ex) {
             // Mapeamos la regla de negocio del dominio a la excepción tipada
             // que entiende el GlobalExceptionHandler para producir 422.
@@ -135,13 +147,16 @@ public class AdminUserManagementService implements IAdminUserManagementUseCase {
         // por isActive=false, pero el bump es defensa en profundidad y, sobre
         // todo, evita que tokens en cache (proxies, mobile offline) sigan
         // siendo aceptados por ventanas cortas.
-        user.invalidateActiveSessions(Instant.now());
-        return userRepository.save(user);
+        target.invalidateActiveSessions(Instant.now());
+        return userRepository.save(target);
     }
 
     @Override
     public User reactivateUser(Long id) {
-        User user = loadManageableUser(id);
+        // Reactivar un admin no necesita guards adicionales: estamos sumando
+        // capacidad administrativa, no quitándola. Un admin desactivado no
+        // tiene sesión, por lo que tampoco aplica el self-check.
+        User user = loadExistingUser(id);
         try {
             user.activate();
         } catch (IllegalStateException ex) {
@@ -151,18 +166,63 @@ public class AdminUserManagementService implements IAdminUserManagementUseCase {
     }
 
     /**
-     * Carga un usuario asegurándose de que sea gestionable por el
-     * administrador desde esta API (paciente, practicante o supervisor).
-     * Los usuarios con rol {@link Role#ROLE_ADMIN} quedan deliberadamente
-     * fuera del alcance del RF05 y de este servicio.
+     * Carga un usuario o lanza 404. No discrimina por rol — los chequeos de
+     * autorización contextual viven en los métodos que invocan a este helper.
      */
-    private User loadManageableUser(Long id) {
-        User user = userRepository.findById(id)
+    private User loadExistingUser(Long id) {
+        return userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario", "id", String.valueOf(id)));
-        if (user.getRole() == Role.ROLE_ADMIN) {
+    }
+
+    /**
+     * El RF05 no contempla la edición cruzada entre administradores. Las
+     * bajas/reactivaciones sí (con guards anti-lockout); la edición de
+     * perfil queda fuera para no abrir vectores de manipulación entre
+     * cuentas de máximo privilegio sin un flujo dedicado.
+     */
+    private void assertProfileEditableByAdmin(User target) {
+        if (target.getRole() == Role.ROLE_ADMIN) {
             throw new InvalidBusinessRuleException(
-                    "La gestión administrativa de usuarios no incluye cuentas de administrador.");
+                    "La edición de perfil administrativa no incluye cuentas de administrador.");
         }
-        return user;
+    }
+
+    /**
+     * Bloquea el self-lockout: un administrador no puede desactivar su
+     * propia cuenta. Es el caso de uso explícito del producto y, además,
+     * un patrón estándar de OWASP para evitar que un operador se deje
+     * fuera del sistema por error de un solo clic.
+     */
+    private void assertNotSelfDeactivation(User actor, User target) {
+        if (actor != null && actor.getId() != null
+                && actor.getId().equals(target.getId())) {
+            throw new InvalidBusinessRuleException(
+                    "No puedes desactivar tu propia cuenta de administrador.");
+        }
+    }
+
+    /**
+     * Bloquea el total-lockout: si el target es un administrador activo y
+     * es el único que queda, la baja dejaría al sistema sin ninguna cuenta
+     * administrativa operativa. Recuperarlo requeriría intervenir la base
+     * de datos a mano, lo cual viola el principio de operación segura
+     * (OWASP ASVS V14.4). Aplicamos sólo si el target tiene rol
+     * {@code ROLE_ADMIN} y está actualmente activo: desactivar un admin ya
+     * inactivo no cambia el conteo y el chequeo del dominio en
+     * {@code User#deactivate()} lo rechazará por su propia regla.
+     */
+    private void assertNotLastActiveAdmin(User target) {
+        if (target.getRole() != Role.ROLE_ADMIN) {
+            return;
+        }
+        if (!target.isActive()) {
+            return;
+        }
+        long activeAdmins = userRepository.countActiveByRole(Role.ROLE_ADMIN);
+        if (activeAdmins <= 1) {
+            throw new InvalidBusinessRuleException(
+                    "No se puede desactivar al único administrador activo del sistema. " +
+                    "Cree o reactive otro administrador antes de retirar esta cuenta.");
+        }
     }
 }

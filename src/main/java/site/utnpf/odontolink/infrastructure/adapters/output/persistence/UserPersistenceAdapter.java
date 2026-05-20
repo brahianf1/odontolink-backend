@@ -85,4 +85,9 @@ public class UserPersistenceAdapter implements UserRepository {
     public boolean existsByDniAndIdNot(String dni, Long excludingId) {
         return jpaUserRepository.existsByDniAndIdNot(dni, excludingId);
     }
+
+    @Override
+    public long countActiveByRole(Role role) {
+        return jpaUserRepository.countByRoleAndIsActiveTrue(role);
+    }
 }

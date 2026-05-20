@@ -77,12 +77,27 @@ public interface IAdminUserManagementUseCase {
      * Baja lógica: marca al usuario como inactivo manteniendo el registro
      * histórico. El usuario inactivo no podrá iniciar sesión gracias al
      * chequeo de {@code isActive} en {@code CustomUserDetailsService}.
+     *
+     * <p>Reglas de protección anti-lockout:
+     * <ul>
+     *   <li>El administrador autenticado no puede desactivar su propia
+     *       cuenta (self-deactivation): se rechaza con
+     *       {@link site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException}.</li>
+     *   <li>No se permite dejar al sistema sin ningún administrador
+     *       activo: si el target es {@code ROLE_ADMIN} y es el último
+     *       activo del sistema, se rechaza con la misma excepción.</li>
+     * </ul>
+     *
+     * @param id      identificador del usuario a desactivar
+     * @param actor   usuario autenticado que dispara la operación (inyectado
+     *                desde {@code AuthenticationFacade}); requerido para
+     *                aplicar los guards anti-lockout
      */
-    User deactivateUser(Long id);
+    User deactivateUser(Long id, User actor);
 
     /**
      * Revierte una baja lógica previa. Operación complementaria de
-     * {@link #deactivateUser(Long)} y restringida a administradores.
+     * {@link #deactivateUser(Long, User)} y restringida a administradores.
      */
     User reactivateUser(Long id);
 }

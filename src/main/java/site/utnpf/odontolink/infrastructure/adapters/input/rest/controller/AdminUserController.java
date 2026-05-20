@@ -29,6 +29,7 @@ import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.Admi
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request.UpdateUserProfileRequestDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.AdminUserDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper.AdminUserRestMapper;
+import site.utnpf.odontolink.infrastructure.security.AuthenticationFacade;
 
 import java.util.List;
 
@@ -50,9 +51,12 @@ import java.util.List;
 public class AdminUserController {
 
     private final IAdminUserManagementUseCase adminUserManagementUseCase;
+    private final AuthenticationFacade authenticationFacade;
 
-    public AdminUserController(IAdminUserManagementUseCase adminUserManagementUseCase) {
+    public AdminUserController(IAdminUserManagementUseCase adminUserManagementUseCase,
+                               AuthenticationFacade authenticationFacade) {
         this.adminUserManagementUseCase = adminUserManagementUseCase;
+        this.authenticationFacade = authenticationFacade;
     }
 
     @Operation(
@@ -168,11 +172,14 @@ public class AdminUserController {
     @Operation(
             summary = "Dar de baja un usuario (baja lógica)",
             description = "Marca al usuario como inactivo (isActive=false). El registro se conserva " +
-                    "para preservar la trazabilidad clínica y administrativa."
+                    "para preservar la trazabilidad clínica y administrativa. " +
+                    "Reglas anti-lockout: el administrador autenticado no puede desactivar su " +
+                    "propia cuenta, y no se permite dejar al sistema sin ningún administrador activo."
     )
     @DeleteMapping("/{id}")
     public ResponseEntity<AdminUserDTO> deactivateUser(@PathVariable Long id) {
-        User deactivated = adminUserManagementUseCase.deactivateUser(id);
+        User actor = authenticationFacade.getAuthenticatedUser();
+        User deactivated = adminUserManagementUseCase.deactivateUser(id, actor);
         return ResponseEntity.ok(AdminUserRestMapper.toDTO(deactivated));
     }
 
