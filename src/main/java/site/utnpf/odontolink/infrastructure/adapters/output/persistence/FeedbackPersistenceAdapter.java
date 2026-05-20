@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.Feedback;
+import site.utnpf.odontolink.domain.model.FeedbackDirection;
+import site.utnpf.odontolink.domain.model.FeedbackDirectionalAggregates;
 import site.utnpf.odontolink.domain.model.FeedbackSearchCriteria;
 import site.utnpf.odontolink.domain.model.PageQuery;
 import site.utnpf.odontolink.domain.model.PageResult;
@@ -144,36 +146,59 @@ public class FeedbackPersistenceAdapter implements FeedbackRepository {
     }
 
     @Override
-    public double averageRating(FeedbackSearchCriteria criteria) {
+    public FeedbackDirectionalAggregates aggregateByDirection(FeedbackSearchCriteria criteria) {
         // Atajo de defensa: si el cerco docente-alumno está vacío, sabemos
-        // que el universo resultante también lo está. Evitamos un round-trip
+        // que el universo resultante también lo está. Evitamos dos round-trips
         // al motor para preguntarle algo que ya conocemos en memoria.
         Set<Long> allowed = criteria.getAllowedPractitionerIds();
         if (allowed == null || allowed.isEmpty()) {
-            return 0.0;
+            return FeedbackDirectionalAggregates.empty();
         }
 
+        // Ignoramos un eventual filtro 'direction' presente en el criteria
+        // base: la separación por dirección la pedimos explícitamente acá
+        // pasando dos copias del criteria con la dirección correspondiente.
+        // Si quien llamó dejó direction en el criteria, lo sobrescribimos
+        // para que el filtro de paginación no contamine la agregación.
+        FeedbackSearchCriteria p2p = criteria.withDirection(FeedbackDirection.PATIENT_TO_PRACTITIONER);
+        FeedbackSearchCriteria pra2pat = criteria.withDirection(FeedbackDirection.PRACTITIONER_TO_PATIENT);
+
+        double[] p2pAgg = avgAndCount(p2p);
+        double[] pra2patAgg = avgAndCount(pra2pat);
+
+        return new FeedbackDirectionalAggregates(
+                p2pAgg[0],
+                (long) p2pAgg[1],
+                pra2patAgg[0],
+                (long) pra2patAgg[1]
+        );
+    }
+
+    /**
+     * Calcula {@code [AVG(rating), COUNT(*)]} sobre el universo derivado del
+     * criteria. AVG sobre conjunto vacío retorna {@code null} en JPA — lo
+     * normalizamos a {@code 0.0}. COUNT siempre devuelve un long no-null.
+     */
+    private double[] avgAndCount(FeedbackSearchCriteria criteria) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
-        CriteriaQuery<Double> cq = cb.createQuery(Double.class);
+        CriteriaQuery<Object[]> cq = cb.createQuery(Object[].class);
         Root<FeedbackEntity> root = cq.from(FeedbackEntity.class);
 
-        // Reutilizamos la composición de filtros de Specifications para
-        // garantizar que el promedio se calcule sobre EXACTAMENTE el mismo
-        // universo que la búsqueda paginada (consistencia agregado ↔ slice).
         Specification<FeedbackEntity> spec = FeedbackSpecifications.fromCriteria(criteria);
         Predicate predicate = spec.toPredicate(root, cq, cb);
         if (predicate != null) {
             cq.where(predicate);
         }
 
-        // AVG en BD: el motor es mucho más eficiente que traer las filas
-        // y promediarlas en Java, sobre todo cuando hay miles de feedbacks.
-        cq.select(cb.avg(root.get("rating")));
+        cq.multiselect(cb.avg(root.get("rating")), cb.count(root));
+        Object[] row = entityManager.createQuery(cq).getSingleResult();
 
-        Double result = entityManager.createQuery(cq).getSingleResult();
-        // AVG sobre conjunto vacío retorna null en JPA; lo normalizamos a 0
-        // para que el contrato del puerto sea estable (ver Javadoc del port).
-        return result != null ? result : 0.0;
+        Double avg = (Double) row[0];
+        Long count = (Long) row[1];
+        return new double[] {
+                avg != null ? avg : 0.0,
+                count != null ? count : 0L
+        };
     }
 
     /**

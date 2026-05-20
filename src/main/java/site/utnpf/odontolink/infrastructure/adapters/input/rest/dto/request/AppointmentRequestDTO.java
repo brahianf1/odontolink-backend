@@ -1,7 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDateTime;
@@ -37,12 +37,13 @@ public class AppointmentRequestDTO {
      * Debe ser una fecha futura y debe estar dentro de la disponibilidad del practicante.
      */
     @Schema(description = "Fecha y hora exactas del turno solicitado en formato ISO-8601 sin zona horaria " +
-            "(`yyyy-MM-ddTHH:mm:ss`). Debe ser una fecha futura y debe coincidir con uno de los slots " +
-            "publicados por `GET /api/patient/offered-treatments/{id}/availability`.",
+            "(`yyyy-MM-ddTHH:mm:ss`). No puede ser anterior al instante actual; los slots del mismo día " +
+            "posteriores a `now()` son válidos. Debe coincidir con uno de los slots publicados por " +
+            "`GET /api/patient/offered-treatments/{id}/availability`.",
             example = "2025-12-08T11:00:00",
             requiredMode = Schema.RequiredMode.REQUIRED)
     @NotNull(message = "La fecha y hora del turno son obligatorias")
-    @Future(message = "La fecha del turno debe ser futura")
+    @FutureOrPresent(message = "La fecha del turno no puede ser anterior al día y hora actual")
     private LocalDateTime appointmentTime;
 
     // Constructores

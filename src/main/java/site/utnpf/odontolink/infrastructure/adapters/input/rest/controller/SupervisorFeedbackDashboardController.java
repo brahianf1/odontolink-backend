@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import site.utnpf.odontolink.application.port.in.ISupervisorFeedbackDashboardUseCase;
 import site.utnpf.odontolink.application.port.in.dto.SupervisorFeedbackDashboardQuery;
 import site.utnpf.odontolink.domain.model.FeedbackDashboardResult;
+import site.utnpf.odontolink.domain.model.FeedbackDirection;
 import site.utnpf.odontolink.domain.model.PageQuery;
 import site.utnpf.odontolink.domain.model.User;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.FeedbackDashboardResponseDTO;
@@ -105,6 +106,9 @@ public class SupervisorFeedbackDashboardController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @Parameter(description = "Fecha de fin (inclusiva) sobre la creación del feedback (ISO YYYY-MM-DD)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @Parameter(description = "Dirección del feedback bidireccional. Si se omite, la lista paginada incluye " +
+                    "ambos sentidos. Los agregados se reportan SIEMPRE discriminados.")
+            @RequestParam(required = false) FeedbackDirection direction,
             @Parameter(description = "Número de página (0-based)")
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @Parameter(description = "Tamaño de página (máx 100)")
@@ -117,7 +121,7 @@ public class SupervisorFeedbackDashboardController {
         User supervisorUser = authenticationFacade.getAuthenticatedUser();
 
         SupervisorFeedbackDashboardQuery query = new SupervisorFeedbackDashboardQuery(
-                practitionerId, patientId, treatmentId, startDate, endDate
+                practitionerId, patientId, treatmentId, startDate, endDate, direction
         );
         PageQuery pageQuery = PageQuery.of(page, size, sortBy, sortDirection);
 

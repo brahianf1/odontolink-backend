@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.openapitools.jackson.nullable.JsonNullable;
+import site.utnpf.odontolink.infrastructure.config.validation.MinimumAge;
 
 import java.time.LocalDate;
 
@@ -64,9 +65,11 @@ public class UpdateMyProfileRequestDTO {
                                  message = "El teléfono sólo puede contener dígitos, espacios y los símbolos + ( ) -")
                         String> phone = JsonNullable.undefined();
 
-    @Schema(description = "Fecha de nacimiento (omitir para no modificar; null para limpiar)",
+    @Schema(description = "Fecha de nacimiento (omitir para no modificar; null para limpiar). " +
+            "Debe acreditar mayoría de edad (18+).",
             example = "1995-06-15")
     private JsonNullable<@Past(message = "La fecha de nacimiento debe ser una fecha pasada")
+                        @MinimumAge(18)
                         LocalDate> birthDate = JsonNullable.undefined();
 
     @Schema(description = "Dirección postal (omitir para no modificar; vacío para limpiar)",

@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import site.utnpf.odontolink.infrastructure.config.validation.MinimumAge;
 
 import java.time.LocalDate;
 
@@ -35,8 +36,10 @@ public class UpdateUserProfileRequestDTO {
     @Pattern(regexp = "^[0-9 +()-]*$", message = "El teléfono sólo puede contener dígitos, espacios y los símbolos + ( ) -")
     private String phone;
 
-    @Schema(description = "Fecha de nacimiento", example = "1995-06-15")
+    @Schema(description = "Fecha de nacimiento. Debe acreditar mayoría de edad (18+).",
+            example = "1995-06-15")
     @Past(message = "La fecha de nacimiento debe ser una fecha pasada")
+    @MinimumAge(18)
     private LocalDate birthDate;
 
     public UpdateUserProfileRequestDTO() {

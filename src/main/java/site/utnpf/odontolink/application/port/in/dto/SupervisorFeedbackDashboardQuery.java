@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.application.port.in.dto;
 
+import site.utnpf.odontolink.domain.model.FeedbackDirection;
+
 import java.time.LocalDate;
 
 /**
@@ -27,17 +29,20 @@ public final class SupervisorFeedbackDashboardQuery {
     private final Long treatmentId;
     private final LocalDate startDate;
     private final LocalDate endDate;
+    private final FeedbackDirection direction;
 
     public SupervisorFeedbackDashboardQuery(Long practitionerId,
                                             Long patientId,
                                             Long treatmentId,
                                             LocalDate startDate,
-                                            LocalDate endDate) {
+                                            LocalDate endDate,
+                                            FeedbackDirection direction) {
         this.practitionerId = practitionerId;
         this.patientId = patientId;
         this.treatmentId = treatmentId;
         this.startDate = startDate;
         this.endDate = endDate;
+        this.direction = direction;
     }
 
     public Long getPractitionerId() {
@@ -58,5 +63,14 @@ public final class SupervisorFeedbackDashboardQuery {
 
     public LocalDate getEndDate() {
         return endDate;
+    }
+
+    /**
+     * Filtra la slice paginada por dirección del feedback bidireccional. Si
+     * es null, la lista incluye ambos sentidos. Los agregados siempre se
+     * reportan discriminados por dirección, independientemente de este filtro.
+     */
+    public FeedbackDirection getDirection() {
+        return direction;
     }
 }

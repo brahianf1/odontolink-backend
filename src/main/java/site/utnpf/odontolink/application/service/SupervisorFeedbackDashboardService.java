@@ -6,6 +6,7 @@ import site.utnpf.odontolink.application.port.in.dto.SupervisorFeedbackDashboard
 import site.utnpf.odontolink.domain.exception.ResourceNotFoundException;
 import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
 import site.utnpf.odontolink.domain.model.FeedbackDashboardResult;
+import site.utnpf.odontolink.domain.model.FeedbackDirectionalAggregates;
 import site.utnpf.odontolink.domain.model.FeedbackSearchCriteria;
 import site.utnpf.odontolink.domain.model.PageQuery;
 import site.utnpf.odontolink.domain.model.PageResult;
@@ -103,7 +104,7 @@ public class SupervisorFeedbackDashboardService implements ISupervisorFeedbackDa
                     0L,
                     0
             );
-            return new FeedbackDashboardResult(emptyPage, 0.0, 0L);
+            return new FeedbackDashboardResult(emptyPage, FeedbackDirectionalAggregates.empty());
         }
 
         // 5) Armamos los criterios de dominio inyectando el cerco como
@@ -115,19 +116,19 @@ public class SupervisorFeedbackDashboardService implements ISupervisorFeedbackDa
                 query.getTreatmentId(),
                 query.getStartDate(),
                 query.getEndDate(),
+                query.getDirection(),
                 allowedPractitionerIds
         );
 
-        // 6) Delegamos al repositorio: una llamada paginada para el contenido,
-        //    una llamada agregada para el promedio. Ambas usan EXACTAMENTE las
-        //    mismas Specifications, garantizando que el promedio refleja el
-        //    universo total filtrado (no sólo la página actual).
+        // 6) Delegamos al repositorio: una llamada paginada para el contenido
+        //    (filtrada por direction si el docente la especificó) y una llamada
+        //    agregada que SIEMPRE devuelve los dos sentidos separados. Eso
+        //    garantiza que el supervisor vea los indicadores discriminados
+        //    aunque su filtro paginado mire un solo sentido.
         PageResult<Feedback> page = feedbackRepository.searchDashboard(criteria, pageQuery);
-        double averageRating = feedbackRepository.averageRating(criteria);
+        FeedbackDirectionalAggregates aggregates = feedbackRepository.aggregateByDirection(criteria);
 
-        // 7) totalFeedbacksCount lo tomamos del propio PageResult: es el COUNT
-        //    de la misma query, así evitamos una tercera consulta.
-        return new FeedbackDashboardResult(page, averageRating, page.getTotalElements());
+        return new FeedbackDashboardResult(page, aggregates);
     }
 
     /**

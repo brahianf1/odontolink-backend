@@ -2,6 +2,7 @@ package site.utnpf.odontolink.domain.repository;
 
 import site.utnpf.odontolink.domain.model.Attention;
 import site.utnpf.odontolink.domain.model.Feedback;
+import site.utnpf.odontolink.domain.model.FeedbackDirectionalAggregates;
 import site.utnpf.odontolink.domain.model.FeedbackSearchCriteria;
 import site.utnpf.odontolink.domain.model.PageQuery;
 import site.utnpf.odontolink.domain.model.PageResult;
@@ -87,22 +88,27 @@ public interface FeedbackRepository {
     PageResult<Feedback> searchDashboard(FeedbackSearchCriteria criteria, PageQuery pageQuery);
 
     /**
-     * Calcula el promedio de la calificación (rating) sobre EXACTAMENTE el
-     * mismo universo de filtros usado por {@link #searchDashboard}.
+     * Calcula los agregados (promedio + total) del Panel Docente
+     * discriminados por dirección del feedback bidireccional.
      *
-     * Decisión: la agregación se ejecuta en el motor de base de datos, no
-     * en memoria, para que el panel funcione bien aunque el supervisor
-     * tenga miles de feedbacks. Por la misma razón se devuelve un
-     * {@code double} sin requerir cargar las filas paginadas.
+     * <p>Reemplaza al obsoleto {@code averageRating(criteria)} que mezclaba
+     * paciente→practicante con practicante→paciente y, por tanto, distorsionaba
+     * la métrica de desempeño del estudiante. La separación se ejecuta dentro
+     * de una sola consulta SQL agregada (con CASE WHEN o GROUP BY) para no
+     * pagar dos round-trips por dirección.
      *
-     * Si el universo está vacío, se devuelve {@code 0.0} (no se lanza
-     * excepción): el frontend interpreta este valor junto con
-     * {@code totalFeedbacksCount} para decidir si mostrar el indicador.
+     * <p>El campo {@code direction} dentro de {@code criteria} NO se aplica
+     * acá: este método siempre devuelve ambos sentidos para que el cliente
+     * pueda mostrar los dos indicadores. El {@code direction} sólo afecta a
+     * {@link #searchDashboard} (filtra la slice paginada).
+     *
+     * <p>Si el universo filtrado no contiene feedbacks de una dirección,
+     * su promedio y count se reportan en 0.
      *
      * @param criteria Filtros del docente + cerco de practicantes permitidos
-     * @return Promedio de rating sobre el universo filtrado, o 0.0 si está vacío
+     * @return Agregados directionales (nunca null)
      */
-    double averageRating(FeedbackSearchCriteria criteria);
+    FeedbackDirectionalAggregates aggregateByDirection(FeedbackSearchCriteria criteria);
 
     /**
      * Obtiene los feedbacks enviados por un usuario específico.

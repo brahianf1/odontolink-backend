@@ -1,7 +1,10 @@
 package site.utnpf.odontolink.domain.model;
 
+import site.utnpf.odontolink.domain.exception.InvalidBusinessRuleException;
+
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Period;
 
 /**
  * Representa la entidad central de AUTENTICACIÓN y PERFIL.
@@ -56,6 +59,14 @@ public class User {
      */
     private Instant passwordChangedAt;
 
+    /**
+     * Edad mínima requerida (años cumplidos) para que el dominio acepte una
+     * {@code birthDate}. Se centraliza acá para que la defensa de dominio,
+     * los tests y los DTOs ({@code @MinimumAge(18)}) compartan una sola
+     * fuente de verdad y no diverjan en revisiones futuras.
+     */
+    public static final int MINIMUM_AGE_YEARS = 18;
+
     // Constructores
     public User() {
         this.isActive = true;
@@ -64,6 +75,7 @@ public class User {
 
     public User(String email, String password, Role role, String firstName, String lastName, String dni, String phone, LocalDate birthDate) {
         this();
+        validateBirthDateAge(birthDate);
         this.email = email;
         this.password = password;
         this.role = role;
@@ -72,6 +84,36 @@ public class User {
         this.dni = dni;
         this.phone = phone;
         this.birthDate = birthDate;
+    }
+
+    /**
+     * Defensa de dominio para la regla "no cuentas de menores".
+     *
+     * <p>Es complemento, no reemplazo, del constraint {@code @MinimumAge} en
+     * los DTOs: cualquier camino que construya o mute un User salteando la
+     * capa REST (bootstrap, mappers de persistencia, tests) sigue pasando
+     * por este invariante. Tolera {@code null} porque {@code birthDate} es
+     * opcional en el modelo y otros constraints son responsables de exigir
+     * presencia cuando corresponde.
+     */
+    private static void validateBirthDateAge(LocalDate birthDate) {
+        if (birthDate == null) {
+            return;
+        }
+        LocalDate today = LocalDate.now();
+        if (birthDate.isAfter(today)) {
+            // No es el "trabajo" de esta validación reportar futuro: lo cubre
+            // @Past en los DTOs. Dejamos pasar para no enmascarar el motivo
+            // real con un mensaje de edad insuficiente.
+            return;
+        }
+        int years = Period.between(birthDate, today).getYears();
+        if (years < MINIMUM_AGE_YEARS) {
+            throw new InvalidBusinessRuleException(
+                    "La fecha de nacimiento indica menos de " + MINIMUM_AGE_YEARS +
+                    " años cumplidos: el sistema no permite cuentas de menores."
+            );
+        }
     }
 
     // Comportamientos del Dominio Rico
@@ -117,6 +159,7 @@ public class User {
         // los reemplazamos siempre, dejando al adapter REST la decisión de qué
         // mandar.
         this.phone = phone;
+        validateBirthDateAge(birthDate);
         this.birthDate = birthDate;
     }
 
@@ -266,7 +309,26 @@ public class User {
         return birthDate;
     }
 
+    /**
+     * Setter Bean-style sin validación. Lo usan los mappers de persistencia
+     * para hidratar el agregado desde la base sin romper si existieran filas
+     * legacy fuera de la regla de edad. Las mutaciones desde la capa de
+     * aplicación deben pasar por {@link #changeBirthDate(LocalDate)} para
+     * activar el invariante.
+     */
     public void setBirthDate(LocalDate birthDate) {
+        this.birthDate = birthDate;
+    }
+
+    /**
+     * Operación de dominio rica para cambiar la fecha de nacimiento aplicando
+     * el invariante de edad mínima. Acepta {@code null} para borrar el dato
+     * (el campo es opcional en el modelo). Cualquier flujo de aplicación que
+     * modifique el {@code birthDate} debe pasar por acá; el setter directo
+     * está reservado a la hidratación desde persistencia.
+     */
+    public void changeBirthDate(LocalDate birthDate) {
+        validateBirthDateAge(birthDate);
         this.birthDate = birthDate;
     }
 

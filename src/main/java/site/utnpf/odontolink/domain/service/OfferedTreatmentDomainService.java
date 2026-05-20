@@ -103,11 +103,12 @@ public class OfferedTreatmentDomainService {
         validateRequiredUpdateFields(newOfferStartDate, newOfferEndDate, newMaxCompletedAttentions);
         validateUpdateDateRange(newOfferStartDate, newOfferEndDate);
         validateUpdateMaxCompletedAttentions(newMaxCompletedAttentions);
+        validateStartDateNotBackdated(existingOffer.getOfferStartDate(), newOfferStartDate);
 
-        // Nota deliberada: no se valida "startDate no en el pasado" en el update.
         // Una oferta ya en curso tiene legítimamente un startDate pasado, y los
         // updates de otros campos (requirements, slots, endDate) no deberían
-        // fallar por eso. La regla de no-backdating sólo aplica al crear.
+        // fallar por eso. La regla en el update sólo prohíbe *retroceder* la
+        // fecha al pasado: ver {@link #validateStartDateNotBackdated}.
 
         if (newDurationInMinutes != null) {
             validateDuration(newDurationInMinutes);
@@ -133,6 +134,44 @@ public class OfferedTreatmentDomainService {
         existingOffer.setMaxCompletedAttentions(newMaxCompletedAttentions);
 
         return existingOffer;
+    }
+
+    /**
+     * Prohíbe "retroceder" {@code offerStartDate} al pasado durante un update.
+     *
+     * <p>La regla base del producto exige que toda oferta comience hoy o más
+     * adelante. En la creación es categórica (constructor del POJO). En el
+     * update tiene un matiz: una oferta vigente conserva legítimamente su
+     * {@code startDate} original, aunque ese día ya haya pasado, así que
+     * exigirla siempre {@code >= hoy} rompería ediciones inocentes de otros
+     * campos. Lo único que sigue siendo inválido es <i>mover</i> la fecha
+     * hacia el pasado respecto al valor previo y a la fecha de hoy: eso es
+     * back-dating, que falsea el historial de cuándo abrió la oferta.
+     *
+     * <p>Casos admitidos:
+     * <ul>
+     *   <li>Mantener la fecha previa (aunque sea pasada) — sin cambio.</li>
+     *   <li>Adelantar el inicio a una fecha futura — válido.</li>
+     *   <li>Crear-update con fecha {@code == today} — válido.</li>
+     * </ul>
+     * <p>Casos rechazados:
+     * <ul>
+     *   <li>Pisar la fecha previa por una más antigua que también esté en el
+     *       pasado.</li>
+     *   <li>Cualquier fecha {@code < today} que no coincida exactamente con
+     *       la previa.</li>
+     * </ul>
+     */
+    private void validateStartDateNotBackdated(java.time.LocalDate previousStartDate,
+                                               java.time.LocalDate newStartDate) {
+        if (newStartDate.equals(previousStartDate)) {
+            return;
+        }
+        if (newStartDate.isBefore(java.time.LocalDate.now())) {
+            throw new InvalidBusinessRuleException(
+                    "La fecha de inicio de la oferta no puede moverse al pasado."
+            );
+        }
     }
 
     /**
