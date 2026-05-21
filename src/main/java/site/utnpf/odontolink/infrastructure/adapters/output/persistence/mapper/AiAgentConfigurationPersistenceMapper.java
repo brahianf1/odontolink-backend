@@ -56,7 +56,12 @@ public final class AiAgentConfigurationPersistenceMapper {
                 entity.getAgentInvocationUrl(),
                 entity.getEmergencyBannerText() == null
                         ? AiAgentConfiguration.DEFAULT_EMERGENCY_BANNER : entity.getEmergencyBannerText(),
-                Boolean.TRUE.equals(entity.getProvideCitations())
+                Boolean.TRUE.equals(entity.getProvideCitations()),
+                // Default true cuando la fila singleton no tiene el campo (caso
+                // de upgrade desde una version anterior): preservamos el
+                // contrato historico de mostrar el indicador.
+                entity.getShowConfidenceIndicator() == null
+                        || Boolean.TRUE.equals(entity.getShowConfidenceIndicator())
         );
     }
 
@@ -88,6 +93,7 @@ public final class AiAgentConfigurationPersistenceMapper {
         entity.setAgentInvocationUrl(domain.getAgentInvocationUrl());
         entity.setEmergencyBannerText(domain.getEmergencyBannerText());
         entity.setProvideCitations(domain.isProvideCitations());
+        entity.setShowConfidenceIndicator(domain.isShowConfidenceIndicator());
         return entity;
     }
 

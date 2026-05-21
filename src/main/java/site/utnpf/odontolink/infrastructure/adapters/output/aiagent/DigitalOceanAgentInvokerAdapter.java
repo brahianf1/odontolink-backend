@@ -218,10 +218,18 @@ public class DigitalOceanAgentInvokerAdapter implements ILlmAgentInvokerPort {
         return url.contains("?") ? url + "&" + AGENT_FLAG : url + "?" + AGENT_FLAG;
     }
 
-    /** Builder unico del body para que invoke y probe compartan exactamente la misma forma. */
+    /**
+     * Builder unico del body para que invoke y probe compartan exactamente la misma forma.
+     *
+     * <p><strong>include_retrieval_info=true es obligatorio.</strong> Sin este flag,
+     * DO Gradient responde sin el bloque {@code retrieval} (chunks RAG + scores) y el
+     * indicador de confianza (RF34) pierde su senal principal: el use case cree que no
+     * hubo RAG y devuelve un confidence neutro. Documentado oficialmente en
+     * docs.digitalocean.com/products/gradient-ai-platform/how-to/use-agents/.
+     */
     private DoChatCompletionRequest buildRequest(List<DoMessage> messages) {
         String model = (modelOverride == null || modelOverride.isBlank()) ? null : modelOverride;
-        return new DoChatCompletionRequest(messages, false, model);
+        return DoChatCompletionRequest.withRetrievalInfo(messages, model);
     }
 
     private static AgentInvocationResult toResult(DoChatCompletionResponse response) {

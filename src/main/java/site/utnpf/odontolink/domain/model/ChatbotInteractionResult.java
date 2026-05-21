@@ -10,13 +10,10 @@ import java.util.UUID;
  * <p>Estructura "rica" pensada para que el FE renderice variaciones de UI sin
  * parsear strings:
  * <ul>
- *   <li>{@code confidence} (RF34): 0-100. {@code null} cuando aplica fallback o
- *       cuando hay {@code emergencyDetected} (en emergencias el foco es la
- *       derivacion, no la confianza).</li>
- *   <li>{@code basedOnKnowledgeBase}: {@code true} si el proveedor uso RAG (hubo
- *       documentos recuperados con score). {@code false} si fue una respuesta
- *       general del modelo. El FE puede mostrar un badge "respuesta general"
- *       para que el paciente sepa si la fuente viene del corpus curado.</li>
+ *   <li>{@code assessment} (RF34): categoria visible al paciente + score
+ *       numerico interno. {@code null} cuando aplica fallback, emergencia,
+ *       PII bloqueado o el admin desactivo el indicador
+ *       ({@code showConfidenceIndicator=false} en {@code AiAgentConfiguration}).</li>
  *   <li>{@code emergencyDetected}: el detector local (no el LLM) marco una o mas
  *       keywords criticas. El {@code reply} ya viene con el banner antepuesto.</li>
  *   <li>{@code piiBlocked}: la politica era BLOCK y se detecto PII. El bot
@@ -26,6 +23,10 @@ import java.util.UUID;
  *   <li>{@code fallbackTriggered}: la llamada al proveedor fallo (circuit abierto
  *       o excepcion irrecuperable) y se respondio con un mensaje fijo amigable.
  *       {@code latencyMs} sigue reflejando el tiempo invertido.</li>
+ *   <li>{@code retrievedDocumentIds}: identificadores de los data sources que
+ *       activaron el RAG en este turno. Util para admin/auditoria/logs. La capa
+ *       REST publica NO lo expone al paciente (decision RF34: el usuario no
+ *       referencia documentos, ve solo la categoria de confianza).</li>
  * </ul>
  *
  * <p>Tambien se devuelve siempre el {@code anonymousToken} cuando la sesion es
@@ -37,8 +38,7 @@ public record ChatbotInteractionResult(
         UUID sessionId,
         UUID anonymousToken,
         String reply,
-        Integer confidence,
-        boolean basedOnKnowledgeBase,
+        ConfidenceAssessment assessment,
         boolean emergencyDetected,
         boolean piiBlocked,
         Set<ChatbotPiiType> detectedPiiTypes,
@@ -54,7 +54,7 @@ public record ChatbotInteractionResult(
                                                      long latencyMs) {
         return new ChatbotInteractionResult(
                 sessionId, anonymousToken, educationalReply,
-                null, false, false, true, detected, false, latencyMs, List.of());
+                null, false, true, detected, false, latencyMs, List.of());
     }
 
     public static ChatbotInteractionResult fallback(UUID sessionId,
@@ -63,6 +63,6 @@ public record ChatbotInteractionResult(
                                                    long latencyMs) {
         return new ChatbotInteractionResult(
                 sessionId, anonymousToken, fallbackReply,
-                null, false, false, false, Set.of(), true, latencyMs, List.of());
+                null, false, false, Set.of(), true, latencyMs, List.of());
     }
 }

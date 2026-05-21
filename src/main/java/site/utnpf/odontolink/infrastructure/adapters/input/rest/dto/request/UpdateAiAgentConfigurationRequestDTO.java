@@ -90,6 +90,14 @@ public class UpdateAiAgentConfigurationRequestDTO {
      */
     private boolean provideCitations = false;
 
+    /**
+     * Toggle del indicador de confianza categorica (RF34) que se muestra al
+     * paciente junto a cada respuesta del chatbot. Default true para
+     * preservar el contrato historico. El admin puede apagarlo desde el
+     * panel sin redeploy.
+     */
+    private boolean showConfidenceIndicator = true;
+
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
 
@@ -137,4 +145,7 @@ public class UpdateAiAgentConfigurationRequestDTO {
 
     public boolean isProvideCitations() { return provideCitations; }
     public void setProvideCitations(boolean provideCitations) { this.provideCitations = provideCitations; }
+
+    public boolean isShowConfidenceIndicator() { return showConfidenceIndicator; }
+    public void setShowConfidenceIndicator(boolean showConfidenceIndicator) { this.showConfidenceIndicator = showConfidenceIndicator; }
 }

@@ -71,6 +71,25 @@ class ChatbotInteractionServiceTest {
         invokerPort = mock(ILlmAgentInvokerPort.class);
         providerPort = mock(ILlmAgentProviderPort.class);
 
+        // Calculator real (no mockeado): es un servicio puro y barato; nos
+        // interesa que los tests del servicio reflejen la composicion real
+        // con su configuracion default razonable.
+        site.utnpf.odontolink.domain.model.ConfidenceCalculatorConfig confidenceConfig =
+                new site.utnpf.odontolink.domain.model.ConfidenceCalculatorConfig(
+                        10.0, 0.7, 0.3, 0.4, 0.5, 0.4, 3,
+                        java.util.List.of(0.5, 0.3, 0.2),
+                        0.5, 0.7, 30,
+                        java.util.List.of("no puedo procesar esta solicitud"),
+                        new site.utnpf.odontolink.domain.model.ConfidenceCalculatorConfig.CategoryMessages(
+                                "Información oficial", "off body",
+                                "Información parcial", "par body",
+                                "Respuesta general",   "gen body",
+                                "Fuera de alcance",    "out body"));
+        site.utnpf.odontolink.domain.service.RefusalDetector refusal =
+                new site.utnpf.odontolink.domain.service.RefusalDetector(confidenceConfig);
+        site.utnpf.odontolink.domain.service.ConfidenceCalculator calculator =
+                new site.utnpf.odontolink.domain.service.ConfidenceCalculator(confidenceConfig, refusal);
+
         service = new ChatbotInteractionService(
                 configRepo,
                 sessionRepo,
@@ -80,6 +99,7 @@ class ChatbotInteractionServiceTest {
                 new EmergencyDetector(),
                 invokerPort,
                 providerPort,
+                calculator,
                 "https://test.agents.do-ai.run",
                 "agent-uuid"
         );
@@ -196,7 +216,8 @@ class ChatbotInteractionServiceTest {
                 60,
                 "https://test.agents.do-ai.run",
                 "*** Emergencia ***",
-                false
+                false,
+                true
         );
         cfg.setId(AiAgentConfiguration.SINGLETON_ID);
         // Forzamos EnumSet vacio para evitar Collections.emptySet() en el constructor copy.
@@ -223,7 +244,8 @@ class ChatbotInteractionServiceTest {
                 cfg.getRateLimitAuthenticatedPerHour(),
                 cfg.getAgentInvocationUrl(),
                 cfg.getEmergencyBannerText(),
-                cfg.isProvideCitations()
+                cfg.isProvideCitations(),
+                cfg.isShowConfidenceIndicator()
         );
     }
 }

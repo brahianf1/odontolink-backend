@@ -25,12 +25,14 @@ import site.utnpf.odontolink.domain.model.ChatbotInteractionResult;
 import site.utnpf.odontolink.domain.model.ChatbotMessage;
 import site.utnpf.odontolink.domain.model.ChatbotMessageRole;
 import site.utnpf.odontolink.domain.model.ChatbotSession;
+import site.utnpf.odontolink.domain.model.ConfidenceAssessment;
 import site.utnpf.odontolink.domain.model.EmergencyKeyword;
 import site.utnpf.odontolink.domain.model.Role;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationRepository;
 import site.utnpf.odontolink.domain.repository.ChatbotMessageRepository;
 import site.utnpf.odontolink.domain.repository.ChatbotSessionRepository;
 import site.utnpf.odontolink.domain.repository.EmergencyKeywordRepository;
+import site.utnpf.odontolink.domain.service.ConfidenceCalculator;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.error.AiAgentErrorCodes;
 
 import java.util.ArrayList;
@@ -82,6 +84,7 @@ public class ChatbotInteractionService implements IChatbotInteractionUseCase {
     private final EmergencyDetector emergencyDetector;
     private final ILlmAgentInvokerPort invokerPort;
     private final ILlmAgentProviderPort providerPort;
+    private final ConfidenceCalculator confidenceCalculator;
     private final String envAgentInvocationUrl;
     private final String providerAgentUuid;
 
@@ -93,6 +96,7 @@ public class ChatbotInteractionService implements IChatbotInteractionUseCase {
                                      EmergencyDetector emergencyDetector,
                                      ILlmAgentInvokerPort invokerPort,
                                      ILlmAgentProviderPort providerPort,
+                                     ConfidenceCalculator confidenceCalculator,
                                      String envAgentInvocationUrl,
                                      String providerAgentUuid) {
         this.configRepository = configRepository;
@@ -103,6 +107,7 @@ public class ChatbotInteractionService implements IChatbotInteractionUseCase {
         this.emergencyDetector = emergencyDetector;
         this.invokerPort = invokerPort;
         this.providerPort = providerPort;
+        this.confidenceCalculator = confidenceCalculator;
         this.envAgentInvocationUrl = envAgentInvocationUrl;
         this.providerAgentUuid = providerAgentUuid;
     }
@@ -377,6 +382,24 @@ public class ChatbotInteractionService implements IChatbotInteractionUseCase {
         }
     }
 
+    /**
+     * Compone el resultado del turno aplicando el banner de emergencia si
+     * corresponde y delegando el calculo del indicador de confianza al
+     * {@link ConfidenceCalculator}.
+     *
+     * <p>Reglas de visibilidad del indicador (RF34):
+     * <ul>
+     *   <li>Si {@code emergency=true}: assessment es {@code null}. El foco es la
+     *       derivacion a la guardia, no la confianza.</li>
+     *   <li>Si el admin desactivo {@code showConfidenceIndicator} en la
+     *       configuracion: assessment es {@code null}. La UI no muestra el
+     *       bloque.</li>
+     *   <li>En el resto: el calculator devuelve un assessment categorico que
+     *       el mapper REST traduce a 4 campos visibles (category, label,
+     *       message, score). El score numerico se expone para
+     *       observabilidad/admin pero el FE no lo muestra al paciente.</li>
+     * </ul>
+     */
     private ChatbotInteractionResult buildResult(ChatbotSession session,
                                                 AgentInvocationResult invocation,
                                                 boolean emergency,
@@ -387,24 +410,22 @@ public class ChatbotInteractionService implements IChatbotInteractionUseCase {
         if (reply == null || reply.isBlank()) {
             reply = FALLBACK_REPLY;
         }
-        Integer confidence;
-        boolean basedOnKb;
         List<RetrievalDocument> docs = invocation.retrievedDocuments() == null
                 ? List.of() : invocation.retrievedDocuments();
-        if (docs.isEmpty()) {
-            // Sin RAG: respuesta general. Confidence neutro para que el FE
-            // muestre badge "respuesta general" si quiere.
-            confidence = 50;
-            basedOnKb = false;
-        } else {
-            double maxScore = docs.stream().mapToDouble(RetrievalDocument::score).max().orElse(0.0);
-            confidence = (int) Math.round(Math.max(0.0, Math.min(1.0, maxScore)) * 100.0);
-            basedOnKb = true;
-        }
+
         if (emergency) {
             reply = config.getEmergencyBannerText() + reply;
-            confidence = null; // En emergencias el foco es la derivacion, no la confianza.
         }
+
+        ConfidenceAssessment assessment;
+        if (emergency || !config.isShowConfidenceIndicator()) {
+            // Emergencia: prioridad a la derivacion clinica.
+            // Toggle off: el admin oculta el indicador en runtime.
+            assessment = null;
+        } else {
+            assessment = confidenceCalculator.assess(reply, docs);
+        }
+
         long latency = System.currentTimeMillis() - startedAt;
         List<String> retrievedIds = docs.stream().map(RetrievalDocument::dataSourceId).toList();
         Set<site.utnpf.odontolink.domain.model.ChatbotPiiType> detected = pii == null
@@ -413,8 +434,7 @@ public class ChatbotInteractionService implements IChatbotInteractionUseCase {
                 session.getId(),
                 session.getAnonymousToken(),
                 reply,
-                confidence,
-                basedOnKb,
+                assessment,
                 emergency,
                 false,
                 detected,

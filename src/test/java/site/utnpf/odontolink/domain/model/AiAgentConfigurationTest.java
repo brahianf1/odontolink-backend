@@ -43,7 +43,8 @@ class AiAgentConfigurationTest {
                 AiPiiPolicy.BLOCK,
                 20, 20, 60,
                 "*** Emergencia ***",
-                false
+                false,
+                true
         );
         assertEquals(AiAgentAccessMode.PUBLIC, cfg.getAccessMode());
         assertTrue(cfg.getAllowedRoles().isEmpty());
@@ -58,7 +59,8 @@ class AiAgentConfigurationTest {
                 AiPiiPolicy.BLOCK,
                 20, 20, 60,
                 "*** Emergencia ***",
-                false
+                false,
+                true
         );
         assertTrue(cfg.getAllowedRoles().isEmpty());
     }
@@ -73,7 +75,8 @@ class AiAgentConfigurationTest {
                 AiPiiPolicy.BLOCK,
                 20, 20, 60,
                 "*** Emergencia ***",
-                false
+                false,
+                true
         );
         assertTrue(cfg.getAllowedRoles().isEmpty());
     }
@@ -87,7 +90,8 @@ class AiAgentConfigurationTest {
                 AiPiiPolicy.BLOCK,
                 20, 20, 60,
                 "*** Emergencia ***",
-                false
+                false,
+                true
         );
         assertEquals(2, cfg.getAllowedRoles().size());
         assertTrue(cfg.getAllowedRoles().contains(Role.ROLE_PATIENT));
@@ -103,7 +107,8 @@ class AiAgentConfigurationTest {
                 AiPiiPolicy.BLOCK,
                 20, 20, 60,
                 "*** Emergencia ***",
-                false
+                false,
+                true
         );
         assertTrue(cfg.canBeUsedBy(Role.ROLE_PATIENT));
         assertEquals(false, cfg.canBeUsedBy(Role.ROLE_PRACTITIONER));
@@ -115,7 +120,7 @@ class AiAgentConfigurationTest {
         AiAgentConfiguration cfg = baseAgent();
         cfg.applyChatbotConfig(
                 AiAgentAccessMode.PUBLIC, Set.of(), AiPiiPolicy.BLOCK,
-                20, 20, 60, "*** Emergencia ***", false);
+                20, 20, 60, "*** Emergencia ***", false, true);
         assertTrue(cfg.canBeUsedBy(null));
         assertTrue(cfg.canBeUsedBy(Role.ROLE_PATIENT));
     }
@@ -125,7 +130,7 @@ class AiAgentConfigurationTest {
         AiAgentConfiguration cfg = baseAgent();
         cfg.applyChatbotConfig(
                 AiAgentAccessMode.DISABLED, Set.of(), AiPiiPolicy.BLOCK,
-                20, 20, 60, "*** Emergencia ***", false);
+                20, 20, 60, "*** Emergencia ***", false, true);
         assertEquals(false, cfg.canBeUsedBy(null));
         assertEquals(false, cfg.canBeUsedBy(Role.ROLE_ADMIN));
     }

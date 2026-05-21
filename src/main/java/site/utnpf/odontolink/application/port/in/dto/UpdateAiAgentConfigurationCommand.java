@@ -15,7 +15,8 @@ import java.util.Set;
  *
  * <p>Sin defaults: si el admin no provee un campo, la validacion del
  * dominio lo rechaza con 422. Incluye tanto los campos del agente IA
- * (RF31/RF32/RF33) como los del chatbot institucional (RF29/RF34).
+ * (RF31/RF32/RF33) como los del chatbot institucional (RF29/RF34) y el
+ * toggle del indicador de confianza categorica.
  */
 public record UpdateAiAgentConfigurationCommand(
         String displayName,
@@ -34,6 +35,7 @@ public record UpdateAiAgentConfigurationCommand(
         int rateLimitAnonymousPerHour,
         int rateLimitAuthenticatedPerHour,
         String emergencyBannerText,
-        boolean provideCitations
+        boolean provideCitations,
+        boolean showConfidenceIndicator
 ) {
 }

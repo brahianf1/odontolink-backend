@@ -43,6 +43,7 @@ public class AiAgentConfigurationResponseDTO {
     private String agentInvocationUrl;
     private String emergencyBannerText;
     private Boolean provideCitations;
+    private Boolean showConfidenceIndicator;
 
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
@@ -112,4 +113,7 @@ public class AiAgentConfigurationResponseDTO {
 
     public Boolean getProvideCitations() { return provideCitations; }
     public void setProvideCitations(Boolean provideCitations) { this.provideCitations = provideCitations; }
+
+    public Boolean getShowConfidenceIndicator() { return showConfidenceIndicator; }
+    public void setShowConfidenceIndicator(Boolean showConfidenceIndicator) { this.showConfidenceIndicator = showConfidenceIndicator; }
 }
