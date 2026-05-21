@@ -83,6 +83,16 @@ public class AiAgentConfiguration {
      * via {@code provide_citations} al hacer publish.
      */
     private boolean provideCitations;
+    /**
+     * Si {@code true}, las respuestas del chatbot incluyen el indicador de
+     * confianza categorica (RF34): categoria + label + mensaje al paciente.
+     * Si {@code false}, el backend omite todos los campos relacionados con
+     * confianza en la respuesta — la UI no muestra el bloque, manteniendo
+     * la respuesta del bot sin pistas de calidad. Default {@code true} para
+     * preservar el contrato historico; el admin puede apagarlo desde el
+     * panel para A/B testing o demos.
+     */
+    private boolean showConfidenceIndicator;
 
     public AiAgentConfiguration() {
     }
@@ -109,7 +119,8 @@ public class AiAgentConfiguration {
                                 int rateLimitAuthenticatedPerHour,
                                 String agentInvocationUrl,
                                 String emergencyBannerText,
-                                boolean provideCitations) {
+                                boolean provideCitations,
+                                boolean showConfidenceIndicator) {
         this.id = id;
         this.displayName = displayName;
         this.systemPromptCore = systemPromptCore;
@@ -133,6 +144,7 @@ public class AiAgentConfiguration {
         this.agentInvocationUrl = agentInvocationUrl;
         this.emergencyBannerText = emergencyBannerText;
         this.provideCitations = provideCitations;
+        this.showConfidenceIndicator = showConfidenceIndicator;
     }
 
     /**
@@ -168,7 +180,7 @@ public class AiAgentConfiguration {
                 SINGLETON_ID, null, null, null, null, null, 0, 0, null,
                 AiAgentLifecycle.DRAFT, null, null, null, null,
                 AiAgentAccessMode.DISABLED, EnumSet.noneOf(Role.class), AiPiiPolicy.BLOCK,
-                20, 20, 60, null, DEFAULT_EMERGENCY_BANNER, false
+                20, 20, 60, null, DEFAULT_EMERGENCY_BANNER, false, true
         );
         config.apply(displayName, systemPromptCore, welcomeMessage,
                 temperature, topP, maxTokens, k, retrievalMethod);
@@ -223,7 +235,8 @@ public class AiAgentConfiguration {
                                    int rateLimitAnonymousPerHour,
                                    int rateLimitAuthenticatedPerHour,
                                    String emergencyBannerText,
-                                   boolean provideCitations) {
+                                   boolean provideCitations,
+                                   boolean showConfidenceIndicator) {
         if (accessMode == null) {
             throw new InvalidBusinessRuleException("accessMode es obligatorio.");
         }
@@ -247,6 +260,7 @@ public class AiAgentConfiguration {
         this.rateLimitAuthenticatedPerHour = rateLimitAuthenticatedPerHour;
         this.emergencyBannerText = emergencyBannerText;
         this.provideCitations = provideCitations;
+        this.showConfidenceIndicator = showConfidenceIndicator;
         this.lifecycle = AiAgentLifecycle.DRAFT;
         this.updatedAt = Instant.now();
     }
@@ -443,5 +457,9 @@ public class AiAgentConfiguration {
 
     public boolean isProvideCitations() {
         return provideCitations;
+    }
+
+    public boolean isShowConfidenceIndicator() {
+        return showConfidenceIndicator;
     }
 }

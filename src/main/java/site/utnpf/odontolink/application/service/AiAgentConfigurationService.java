@@ -138,7 +138,8 @@ public class AiAgentConfigurationService implements IAiAgentConfigurationUseCase
                 cmd.rateLimitAnonymousPerHour(),
                 cmd.rateLimitAuthenticatedPerHour(),
                 cmd.emergencyBannerText(),
-                cmd.provideCitations());
+                cmd.provideCitations(),
+                cmd.showConfidenceIndicator());
         return configRepository.save(config);
     }
 

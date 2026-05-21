@@ -2,6 +2,7 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.mapper;
 
 import site.utnpf.odontolink.application.port.in.dto.ChatbotPublicInfo;
 import site.utnpf.odontolink.domain.model.ChatbotInteractionResult;
+import site.utnpf.odontolink.domain.model.ConfidenceAssessment;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ChatbotMessageResponseDTO;
 import site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response.ChatbotPublicInfoResponseDTO;
 
@@ -28,14 +29,22 @@ public final class ChatbotRestMapper {
         dto.setSessionId(result.sessionId());
         dto.setAnonymousToken(result.anonymousToken());
         dto.setReply(result.reply());
-        dto.setConfidence(result.confidence());
-        dto.setBasedOnKnowledgeBase(result.basedOnKnowledgeBase());
+
+        ConfidenceAssessment assessment = result.assessment();
+        if (assessment != null) {
+            dto.setConfidenceCategory(assessment.category());
+            dto.setConfidenceCategoryLabel(assessment.label());
+            dto.setConfidenceCategoryMessage(assessment.message());
+            dto.setConfidenceScore(assessment.score());
+        }
+
         dto.setEmergencyDetected(result.emergencyDetected());
         dto.setPiiBlocked(result.piiBlocked());
         dto.setDetectedPiiTypes(result.detectedPiiTypes());
         dto.setFallbackTriggered(result.fallbackTriggered());
         dto.setLatencyMs(result.latencyMs());
-        dto.setRetrievedDocumentIds(result.retrievedDocumentIds());
+        // Decision RF34: retrievedDocumentIds NO se expone al paciente. Vive
+        // en el dominio (logs/admin/auditoria) pero no viaja al FE.
         return dto;
     }
 }

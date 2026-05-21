@@ -34,7 +34,8 @@ public final class AiAgentConfigurationRestMapper {
                 dto.getRateLimitAnonymousPerHour(),
                 dto.getRateLimitAuthenticatedPerHour(),
                 dto.getEmergencyBannerText(),
-                dto.isProvideCitations()
+                dto.isProvideCitations(),
+                dto.isShowConfidenceIndicator()
         );
     }
 
@@ -70,6 +71,7 @@ public final class AiAgentConfigurationRestMapper {
         dto.setAgentInvocationUrl(domain.getAgentInvocationUrl());
         dto.setEmergencyBannerText(domain.getEmergencyBannerText());
         dto.setProvideCitations(domain.isProvideCitations());
+        dto.setShowConfidenceIndicator(domain.isShowConfidenceIndicator());
         return dto;
     }
 }

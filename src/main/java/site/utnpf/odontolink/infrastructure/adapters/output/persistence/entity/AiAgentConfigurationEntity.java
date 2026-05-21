@@ -112,6 +112,16 @@ public class AiAgentConfigurationEntity {
     @Column(name = "provide_citations")
     private Boolean provideCitations;
 
+    /**
+     * Toggle del indicador de confianza categorica (RF34). Nullable a nivel
+     * JPA por la misma razon que {@link #provideCitations}: la fila singleton
+     * existente en BD no tiene esta columna al actualizar a esta version. El
+     * mapper aplica {@code true} como default (indicador visible) para
+     * preservar el contrato historico.
+     */
+    @Column(name = "show_confidence_indicator")
+    private Boolean showConfidenceIndicator;
+
     public AiAgentConfigurationEntity() {
     }
 
@@ -297,5 +307,13 @@ public class AiAgentConfigurationEntity {
 
     public void setProvideCitations(Boolean provideCitations) {
         this.provideCitations = provideCitations;
+    }
+
+    public Boolean getShowConfidenceIndicator() {
+        return showConfidenceIndicator;
+    }
+
+    public void setShowConfidenceIndicator(Boolean showConfidenceIndicator) {
+        this.showConfidenceIndicator = showConfidenceIndicator;
     }
 }

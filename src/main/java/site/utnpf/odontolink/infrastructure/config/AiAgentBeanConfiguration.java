@@ -28,6 +28,7 @@ import site.utnpf.odontolink.application.service.KnowledgeBaseAdminService;
 import site.utnpf.odontolink.application.service.security.EmergencyDetector;
 import site.utnpf.odontolink.application.service.security.PiiSanitizer;
 import site.utnpf.odontolink.application.service.support.SingletonRowBootstrap;
+import site.utnpf.odontolink.domain.model.ConfidenceCalculatorConfig;
 import site.utnpf.odontolink.domain.repository.AiAdminAuditEventRepository;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationRepository;
 import site.utnpf.odontolink.domain.repository.AiAgentConfigurationVersionRepository;
@@ -37,12 +38,15 @@ import site.utnpf.odontolink.domain.repository.ChatbotSessionRepository;
 import site.utnpf.odontolink.domain.repository.EmergencyKeywordRepository;
 import site.utnpf.odontolink.domain.repository.AgentPolicyRuleRepository;
 import site.utnpf.odontolink.domain.repository.KnowledgeBaseDocumentRepository;
+import site.utnpf.odontolink.domain.service.ConfidenceCalculator;
+import site.utnpf.odontolink.domain.service.RefusalDetector;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.DigitalOceanAgentInvokerAdapter;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.DigitalOceanAgentPlatformProperties;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.DigitalOceanGradientClient;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.DigitalOceanKnowledgeBaseAdapter;
 import site.utnpf.odontolink.infrastructure.adapters.output.aiagent.DigitalOceanLlmAgentAdapter;
 import site.utnpf.odontolink.infrastructure.adapters.output.storage.S3CompatibleObjectStorageAdapter;
+import site.utnpf.odontolink.infrastructure.config.confidence.ConfidenceCalculatorProperties;
 import site.utnpf.odontolink.infrastructure.security.AuthenticationFacade;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -64,7 +68,10 @@ import java.net.URI;
  * reemplazo del proveedor toca un solo archivo.
  */
 @Configuration
-@EnableConfigurationProperties(DigitalOceanAgentPlatformProperties.class)
+@EnableConfigurationProperties({
+        DigitalOceanAgentPlatformProperties.class,
+        ConfidenceCalculatorProperties.class
+})
 public class AiAgentBeanConfiguration {
 
     /**
@@ -325,6 +332,27 @@ public class AiAgentBeanConfiguration {
     }
 
     /**
+     * Adapta las properties Spring a un record de dominio inmutable. El
+     * calculador y el detector dependen solo del dominio (sin Spring), lo
+     * que los hace testeables sin contexto y reutilizables fuera del modulo.
+     */
+    @Bean
+    public ConfidenceCalculatorConfig confidenceCalculatorConfig(ConfidenceCalculatorProperties props) {
+        return props.toDomainConfig();
+    }
+
+    @Bean
+    public RefusalDetector refusalDetector(ConfidenceCalculatorConfig config) {
+        return new RefusalDetector(config);
+    }
+
+    @Bean
+    public ConfidenceCalculator confidenceCalculator(ConfidenceCalculatorConfig config,
+                                                     RefusalDetector refusalDetector) {
+        return new ConfidenceCalculator(config, refusalDetector);
+    }
+
+    /**
      * Adapter de invocacion del agente. Reutiliza el {@link DigitalOceanGradientClient}
      * dedicado al endpoint del agente, NO el del management API: el agente
      * usa una access key propia que se genera en su seccion "Endpoint Keys".
@@ -348,6 +376,7 @@ public class AiAgentBeanConfiguration {
             EmergencyDetector emergencyDetector,
             ILlmAgentInvokerPort invokerPort,
             ILlmAgentProviderPort providerPort,
+            ConfidenceCalculator confidenceCalculator,
             DigitalOceanAgentPlatformProperties props) {
         // Nota: el GuardrailRepository se quito a proposito. Los guardrails se
         // componen al system prompt SOLO en el flujo de publish() (lo hace
@@ -365,6 +394,7 @@ public class AiAgentBeanConfiguration {
                 emergencyDetector,
                 invokerPort,
                 providerPort,
+                confidenceCalculator,
                 props.getAgentInvocationUrl(),
                 props.getAgentUuid()
         );
