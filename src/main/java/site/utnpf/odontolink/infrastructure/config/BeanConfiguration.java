@@ -646,25 +646,41 @@ public class BeanConfiguration {
     public software.amazon.awssdk.services.s3.S3Client profilePictureS3Client(
             @Value("${storage.s3.endpoint:}") String endpoint,
             @Value("${storage.s3.region:auto}") String region,
-            @Value("${storage.s3.access-key-id:unset}") String accessKeyId,
-            @Value("${storage.s3.secret-access-key:unset}") String secretAccessKey,
+            @Value("${storage.s3.access-key-id:}") String accessKeyId,
+            @Value("${storage.s3.secret-access-key:}") String secretAccessKey,
             @Value("${storage.s3.path-style:false}") boolean pathStyle) {
-        // Mismo patron defensivo que el cliente de la KB: aceptamos config
-        // vacia para que la app arranque, y dejamos que el primer upload
-        // dispare StorageException con mensaje claro si las credenciales
-        // no fueron seteadas.
+        // Mismo patron defensivo que el cliente de la KB
+        // (AiAgentBeanConfiguration#aiKbS3Client): aceptamos config vacia para
+        // que la app arranque, y dejamos que el primer upload dispare
+        // StorageException con mensaje claro si las credenciales no fueron
+        // seteadas.
+        //
+        // Importante (gotcha de Spring @Value): el default ":unset" SOLO
+        // aplica cuando la property esta ausente. Si la property existe pero
+        // viene vacia ("STORAGE_S3_ACCESS_KEY_ID="), Spring resuelve a string
+        // vacio y el AWS SDK lanza NPE al construir AwsBasicCredentials.
+        // Por eso normalizamos aqui con isBlank() y NO confiamos en el
+        // default de @Value para este sustituto.
         String effectiveEndpoint = (endpoint == null || endpoint.isBlank())
                 ? "https://invalid-storage-endpoint.localhost"
                 : endpoint;
+        String effectiveAccessKey = (accessKeyId == null || accessKeyId.isBlank())
+                ? "unset"
+                : accessKeyId;
+        String effectiveSecretKey = (secretAccessKey == null || secretAccessKey.isBlank())
+                ? "unset"
+                : secretAccessKey;
+        String effectiveRegion = (region == null || region.isBlank()) ? "auto" : region;
         software.amazon.awssdk.services.s3.S3Configuration s3Config =
                 software.amazon.awssdk.services.s3.S3Configuration.builder()
                         .pathStyleAccessEnabled(pathStyle)
                         .build();
         return software.amazon.awssdk.services.s3.S3Client.builder()
                 .endpointOverride(java.net.URI.create(effectiveEndpoint))
-                .region(software.amazon.awssdk.regions.Region.of(region))
+                .region(software.amazon.awssdk.regions.Region.of(effectiveRegion))
                 .credentialsProvider(software.amazon.awssdk.auth.credentials.StaticCredentialsProvider.create(
-                        software.amazon.awssdk.auth.credentials.AwsBasicCredentials.create(accessKeyId, secretAccessKey)))
+                        software.amazon.awssdk.auth.credentials.AwsBasicCredentials.create(
+                                effectiveAccessKey, effectiveSecretKey)))
                 .httpClient(software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient.create())
                 .requestChecksumCalculation(software.amazon.awssdk.core.checksums.RequestChecksumCalculation.WHEN_REQUIRED)
                 .responseChecksumValidation(software.amazon.awssdk.core.checksums.ResponseChecksumValidation.WHEN_REQUIRED)
