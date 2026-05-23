@@ -26,7 +26,9 @@ public class JwtResponseDTO {
     @Schema(description = "Correo electrónico del usuario", example = "juan.perez@email.com")
     private String email;
 
-    @Schema(description = "Rol del usuario en el sistema", example = "PATIENT")
+    @Schema(description = "Rol del usuario en el sistema (Spring Security: incluye prefijo ROLE_)",
+            example = "ROLE_PATIENT",
+            allowableValues = {"ROLE_PATIENT", "ROLE_PRACTITIONER", "ROLE_SUPERVISOR", "ROLE_ADMIN"})
     private String role;
 
     @Schema(description = "Nombre del usuario", example = "Juan")

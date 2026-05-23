@@ -1,5 +1,7 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.time.Instant;
 
 /**
@@ -21,7 +23,12 @@ public class FeedbackResponseDTO {
     // Información del usuario que envió el feedback
     private Long submittedById;
     private String submittedByName;
-    private String submittedByRole; // PATIENT, PRACTITIONER
+
+    @Schema(description = "Rol del usuario que envió el feedback (Spring Security: incluye prefijo ROLE_). " +
+            "Sólo paciente o practicante pueden emitir feedback.",
+            example = "ROLE_PATIENT",
+            allowableValues = {"ROLE_PATIENT", "ROLE_PRACTITIONER"})
+    private String submittedByRole;
 
     // Información de la atención asociada
     private Long attentionId;

@@ -78,7 +78,7 @@ public class FeedbackController {
                                               "createdAt": "2025-11-20T14:30:00Z",
                                               "submittedById": 15,
                                               "submittedByName": "Carlos Rodríguez",
-                                              "submittedByRole": "PATIENT",
+                                              "submittedByRole": "ROLE_PATIENT",
                                               "attentionId": 23,
                                               "treatmentName": "Limpieza Dental",
                                               "patientName": "Carlos Rodríguez",
