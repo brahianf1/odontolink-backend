@@ -1,52 +1,41 @@
 package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.request;
 
-import jakarta.validation.constraints.*;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+
+import java.util.List;
 
 /**
- * DTO para la solicitud de creación de feedback sobre una atención.
- * Implementa CU-009, CU-016 (RF21, RF22): Calificar Paciente/Practicante.
- *
- * Este DTO captura la intención del usuario (paciente o practicante) de enviar
- * su calificación sobre una atención finalizada.
- *
- * @author OdontoLink Team
+ * Request multi-criterio para crear feedback sobre una atención finalizada
+ * (RF21/RF22/RF23). El paciente puntúa al practicante y viceversa con el
+ * set de criterios definido por el catálogo (ver
+ * {@code GET /api/feedback/criteria}).
  */
+@Schema(description = "Encuesta multi-criterio sobre una atención finalizada.")
 public class CreateFeedbackRequestDTO {
 
-    /**
-     * ID de la atención sobre la que se envía el feedback.
-     * Debe ser una atención que esté en estado COMPLETED.
-     */
+    @Schema(description = "ID de la atención", example = "23")
     @NotNull(message = "El ID de la atención es obligatorio")
     @Positive(message = "El ID de la atención debe ser positivo")
     private Long attentionId;
 
-    /**
-     * Calificación en escala de 1 a 5 estrellas.
-     */
-    @NotNull(message = "La calificación es obligatoria")
-    @Min(value = 1, message = "La calificación mínima es 1 estrella")
-    @Max(value = 5, message = "La calificación máxima es 5 estrellas")
-    private Integer rating;
+    @Schema(description = "Lista de scores. Debe cubrir exactamente los criterios activos para la dirección.")
+    @NotEmpty(message = "Debe enviar al menos un score")
+    @Size(max = 10, message = "Demasiados scores")
+    @Valid
+    private List<CriterionScoreInputDTO> scores;
 
-    /**
-     * Comentario opcional del usuario.
-     * Si se proporciona, debe tener un contenido significativo.
-     */
+    @Schema(description = "Comentario libre opcional", example = "Excelente atención")
     @Size(max = 1000, message = "El comentario no puede exceder los 1000 caracteres")
     private String comment;
 
-    // Constructores
     public CreateFeedbackRequestDTO() {
     }
 
-    public CreateFeedbackRequestDTO(Long attentionId, Integer rating, String comment) {
-        this.attentionId = attentionId;
-        this.rating = rating;
-        this.comment = comment;
-    }
-
-    // Getters y Setters
     public Long getAttentionId() {
         return attentionId;
     }
@@ -55,12 +44,12 @@ public class CreateFeedbackRequestDTO {
         this.attentionId = attentionId;
     }
 
-    public Integer getRating() {
-        return rating;
+    public List<CriterionScoreInputDTO> getScores() {
+        return scores;
     }
 
-    public void setRating(Integer rating) {
-        this.rating = rating;
+    public void setScores(List<CriterionScoreInputDTO> scores) {
+        this.scores = scores;
     }
 
     public String getComment() {

@@ -1,111 +1,105 @@
 package site.utnpf.odontolink.domain.model;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
- * Representa el Feedback (calificación) sobre una Atención.
- * Modela tanto "Calificar Paciente" (CU-009, RF21) como "Calificar Practicante" (CU-016, RF22).
+ * Encuesta multi-criterio sobre una {@link Attention} finalizada.
  *
- * Un Feedback está siempre vinculado a:
- * - Una Attention (caso clínico finalizado)
- * - Un User que lo envía (submittedBy)
+ * <p>Modela la calificación bidireccional (CU-009/RF21 paciente→practicante,
+ * CU-016/RF22 practicante→paciente). Cada feedback agrupa un conjunto de
+ * {@link FeedbackCriterionScore} sobre los criterios activos correspondientes
+ * a su {@link FeedbackDirection}. El antiguo campo escalar {@code rating}
+ * desaparece — la puntuación holística "satisfacción general" pasa a ser
+ * un criterio más dentro del set.
  *
- * Reglas de negocio implementadas:
- * - El rating debe estar entre 1 y 5 estrellas
- * - El feedback solo puede crearse cuando la Attention está COMPLETED
- * - El submittedBy debe ser el Paciente o el Practicante de la Attention
- *
- * @author OdontoLink Team
+ * <p>Reglas de negocio que aplican (validadas en
+ * {@code FeedbackPolicyService} y {@code FeedbackCriterionPolicyService}):
+ * <ul>
+ *   <li>La atención debe estar {@link AttentionStatus#COMPLETED}.</li>
+ *   <li>El submittedBy debe ser el paciente o el practicante de la atención.</li>
+ *   <li>No más de un feedback por usuario por atención (RF23, también
+ *       garantizado por UK a nivel de BD).</li>
+ *   <li>Los scores deben cubrir exactamente el set de criterios activos para
+ *       la dirección.</li>
+ * </ul>
  */
 public class Feedback {
+
     private Long id;
-
-    /** Relación N-a-1: El feedback es SIEMPRE sobre un caso/atención */
     private Attention attention;
-
-    /** Relación N-a-1: El User que escribió este feedback */
     private User submittedBy;
-
-    /** Calificación en escala de 1 a 5 estrellas */
-    private int rating;
-
-    /** Comentario opcional del usuario */
     private String comment;
-
-    /** Timestamp de creación del feedback */
     private Instant createdAt;
+    private final List<FeedbackCriterionScore> scores = new ArrayList<>();
 
-    // Constantes para validación
-    private static final int MIN_RATING = 1;
-    private static final int MAX_RATING = 5;
-
-    // Constructor sin argumentos (requerido por mappers de persistencia)
     public Feedback() {
         this.createdAt = Instant.now();
     }
 
-    /**
-     * Constructor con validaciones de negocio.
-     *
-     * @param attention La atención asociada (debe estar COMPLETED)
-     * @param submittedBy El usuario que envía el feedback
-     * @param rating Calificación (1-5)
-     * @param comment Comentario opcional
-     * @throws IllegalArgumentException si los parámetros son inválidos
-     */
-    public Feedback(Attention attention, User submittedBy, int rating, String comment) {
+    public Feedback(Attention attention, User submittedBy, String comment) {
         this();
-        validateRating(rating);
         this.attention = attention;
         this.submittedBy = submittedBy;
-        this.rating = rating;
         this.comment = comment;
     }
 
     /**
-     * Valida que el rating esté en el rango permitido (1-5).
-     *
-     * @param rating La calificación a validar
-     * @throws IllegalArgumentException si el rating está fuera del rango
+     * Agrega un score al feedback estableciendo la relación bidireccional.
+     * Idempotente respecto a {@code (feedback, criterion)}: rechaza
+     * duplicados para no violar la UK lógica antes de llegar a la BD.
      */
-    private void validateRating(int rating) {
-        if (rating < MIN_RATING || rating > MAX_RATING) {
+    public void addScore(FeedbackCriterionScore score) {
+        Objects.requireNonNull(score, "score");
+        Objects.requireNonNull(score.getCriterion(), "score.criterion");
+        boolean duplicate = scores.stream()
+                .anyMatch(s -> s.getCriterion() != null
+                        && Objects.equals(s.getCriterion().getCode(), score.getCriterion().getCode()));
+        if (duplicate) {
             throw new IllegalArgumentException(
-                String.format("La calificación debe estar entre %d y %d estrellas.", MIN_RATING, MAX_RATING)
-            );
+                    "Score duplicado para el criterio " + score.getCriterion().getCode());
         }
+        score.setFeedback(this);
+        scores.add(score);
+    }
+
+    public List<FeedbackCriterionScore> getScores() {
+        return Collections.unmodifiableList(scores);
     }
 
     /**
-     * Verifica si el usuario dado puede enviar feedback para la atención asociada.
-     * El usuario debe ser el paciente o el practicante de la atención.
-     *
-     * @param user El usuario a verificar
-     * @return true si el usuario puede enviar feedback, false en caso contrario
+     * Devuelve el score asignado a un criterio por su {@code code}, si existe.
+     * Útil para derivar agregados legacy (p.ej. el promedio "global" de
+     * satisfacción holística por dirección).
      */
+    public Optional<Integer> scoreFor(String criterionCode) {
+        if (criterionCode == null) {
+            return Optional.empty();
+        }
+        return scores.stream()
+                .filter(s -> s.getCriterion() != null
+                        && criterionCode.equalsIgnoreCase(s.getCriterion().getCode()))
+                .map(FeedbackCriterionScore::getScore)
+                .findFirst();
+    }
+
     public boolean canUserSubmitFeedback(User user) {
         if (attention == null || user == null) {
             return false;
         }
-
-        // Verificar si es el paciente
         Patient patient = attention.getPatient();
         if (patient != null && patient.getUser() != null
                 && patient.getUser().getId().equals(user.getId())) {
             return true;
         }
-
-        // Verificar si es el practicante
         Practitioner practitioner = attention.getPractitioner();
-        if (practitioner != null && practitioner.getUser() != null
-                && practitioner.getUser().getId().equals(user.getId())) {
-            return true;
-        }
-
-        return false;
+        return practitioner != null && practitioner.getUser() != null
+                && practitioner.getUser().getId().equals(user.getId());
     }
-
-    // Getters y Setters
 
     public Long getId() {
         return id;
@@ -131,15 +125,6 @@ public class Feedback {
         this.submittedBy = submittedBy;
     }
 
-    public int getRating() {
-        return rating;
-    }
-
-    public void setRating(int rating) {
-        validateRating(rating);
-        this.rating = rating;
-    }
-
     public String getComment() {
         return comment;
     }
@@ -154,5 +139,23 @@ public class Feedback {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    /**
+     * Reemplaza completamente el conjunto de scores. Usado por mappers de
+     * persistencia al rehidratar desde la entidad JPA. Para construcción
+     * lógica preferir {@link #addScore(FeedbackCriterionScore)}.
+     */
+    public void replaceScores(List<FeedbackCriterionScore> incoming) {
+        this.scores.clear();
+        if (incoming == null) {
+            return;
+        }
+        for (FeedbackCriterionScore s : incoming) {
+            if (s != null) {
+                s.setFeedback(this);
+                scores.add(s);
+            }
+        }
     }
 }

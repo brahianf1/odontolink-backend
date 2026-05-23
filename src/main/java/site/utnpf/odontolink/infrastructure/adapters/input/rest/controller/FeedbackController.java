@@ -25,27 +25,13 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Controlador REST para las operaciones MICRO-contexto de Feedback.
- * Adaptador de entrada (Input Adapter) en Arquitectura Hexagonal.
- *
- * Endpoints implementados:
- * - POST   /api/feedback                              - Crear feedback (CU-009, CU-016: RF21, RF22, RF23)
- * - GET    /api/feedback/attention/{attentionId}      - Ver feedback de una atención (CU-010: RF24)
- *
- * El MACRO-contexto del docente (Panel de Supervisión de Feedback RF25) vive en
- * {@code SupervisorFeedbackDashboardController}: el viejo endpoint
- * {@code GET /api/supervisor/feedback/practitioner/{practitionerId}} fue
- * absorbido por {@code GET /api/supervisors/feedbacks/dashboard}, que ofrece
- * filtros combinables, paginación y agregados, además del mismo cerco
- * docente-alumno.
- *
- * Todos los endpoints están protegidos con @PreAuthorize según el rol requerido.
- *
- * @author OdontoLink Team
+ * Endpoints micro-contexto de Feedback. El catálogo de criterios vive en
+ * {@code FeedbackCriterionCatalogController}; el panel docente y los charts
+ * en los controllers bajo {@code /api/supervisors/feedbacks/}.
  */
 @RestController
 @RequestMapping("/api")
-@Tag(name = "Feedback", description = "Sistema de retroalimentación y calificación de atenciones entre pacientes y practicantes")
+@Tag(name = "Feedback", description = "Encuesta multi-criterio entre paciente y practicante sobre atenciones finalizadas.")
 @SecurityRequirement(name = "Bearer Authentication")
 public class FeedbackController {
 
@@ -53,35 +39,31 @@ public class FeedbackController {
     private final AuthenticationFacade authenticationFacade;
 
     public FeedbackController(IFeedbackUseCase feedbackUseCase,
-                             AuthenticationFacade authenticationFacade) {
+                              AuthenticationFacade authenticationFacade) {
         this.feedbackUseCase = feedbackUseCase;
         this.authenticationFacade = authenticationFacade;
     }
 
     @Operation(
-            summary = "Crear feedback sobre atención (RF21, RF22, RF23 - CU-009, CU-016)",
+            summary = "Crear feedback multi-criterio sobre atención (RF21, RF22, RF23)",
             description = "Permite al paciente o practicante calificar una atención finalizada " +
-                    "(`AttentionStatus.COMPLETED`).\n\n" +
-                    "**Forma de la respuesta**: en éxito (`201 Created`) se devuelve únicamente el " +
-                    "`FeedbackResponseDTO` del feedback recién creado. Por diseño, la respuesta no incluye " +
-                    "la `Attention` actualizada ni flags derivados de UI (`hasMyFeedback`, `feedbackCount`, " +
-                    "etc.): esos son estados de presentación que el frontend debe derivar de sus propios " +
-                    "datos. Mezclarlos aquí acoplaría el contrato REST a vistas específicas del cliente.\n\n" +
-                    "**Garantía de unicidad (RF23)**: la regla \"un usuario emite a lo sumo un feedback por " +
-                    "atención\" se aplica server-side en `FeedbackPolicyService.validateFeedbackCreation` " +
-                    "vía `existsByAttentionAndSubmittedBy`. Un reintento duplicado responde `400` con el " +
-                    "código de error de regla de negocio violada. Esa validación es el cinturón real; no " +
-                    "se necesita un flag adicional en la respuesta para sostener la UX.\n\n" +
-                    "**Patrón sugerido para el frontend**: tras un `201 Created` actualizar el estado " +
-                    "local (optimistic update: ocultar el botón \"Calificar\" para esa atención, sumar al " +
-                    "contador propio) y, si la vista lo requiere, invalidar/refetchear el listado de " +
-                    "atenciones (`GET /api/practitioner/attentions` o `GET /api/patient/attentions`) y/o " +
-                    "`GET /api/feedback/attention/{attentionId}` para consolidar consistencia."
+                    "(`AttentionStatus.COMPLETED`) puntuando un set de criterios definidos en el " +
+                    "catálogo (ver `GET /api/feedback/criteria`).\n\n" +
+                    "**Forma de la respuesta**: en éxito (`201 Created`) se devuelve el feedback creado " +
+                    "incluyendo el array `scores` con la puntuación por criterio. La respuesta no incluye " +
+                    "flags derivados de UI (`hasMyFeedback`, contadores, etc.): esos son estado de " +
+                    "presentación que el frontend debe derivar.\n\n" +
+                    "**Validaciones**: la encuesta debe cubrir EXACTAMENTE el set de criterios activos " +
+                    "para la dirección (P→Pr o Pr→Pat). Faltantes, intrusos, duplicados o scores fuera " +
+                    "de 1–5 → 400 con detalle. Reintento duplicado por el mismo usuario → 400 (RF23, " +
+                    "enforce server-side por `FeedbackPolicyService` + UK en BD).\n\n" +
+                    "**Patrón sugerido para el frontend**: tras 201 actualizar estado local " +
+                    "(ocultar CTA Calificar) y opcionalmente refetchear el listado de atenciones."
     )
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "201",
-                    description = "Feedback creado exitosamente",
+                    description = "Feedback creado",
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = FeedbackResponseDTO.class),
@@ -89,29 +71,32 @@ public class FeedbackController {
                                     value = """
                                             {
                                               "id": 12,
-                                              "rating": 5,
-                                              "comment": "Excelente atención, muy profesional y cuidadoso",
-                                              "createdAt": "2025-11-20T14:30:00Z",
+                                              "comment": "Excelente atención",
+                                              "createdAt": "2026-05-23T14:30:00Z",
                                               "submittedById": 15,
                                               "submittedByName": "Carlos Rodríguez",
                                               "submittedByRole": "ROLE_PATIENT",
                                               "attentionId": 23,
                                               "treatmentName": "Limpieza Dental",
                                               "patientName": "Carlos Rodríguez",
-                                              "practitionerName": "Ana Martínez"
+                                              "practitionerName": "Ana Martínez",
+                                              "scores": [
+                                                {"criterionCode": "PUNCTUALITY", "criterionDisplayName": "Puntualidad", "score": 5},
+                                                {"criterionCode": "CARE_QUALITY", "criterionDisplayName": "Calidad de atención", "score": 4},
+                                                {"criterionCode": "COMMUNICATION_CLARITY", "criterionDisplayName": "Claridad en la comunicación", "score": 5},
+                                                {"criterionCode": "GENERAL_SATISFACTION", "criterionDisplayName": "Satisfacción general", "score": 5}
+                                              ]
                                             }
                                             """
                             )
                     )
             ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "Atención no finalizada o feedback ya existe",
-                    content = @Content(mediaType = "application/json")
-            )
+            @ApiResponse(responseCode = "400",
+                    description = "Atención no finalizada, encuesta inválida o feedback duplicado",
+                    content = @Content(mediaType = "application/json"))
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Datos del feedback",
+            description = "Encuesta multi-criterio",
             required = true,
             content = @Content(
                     mediaType = "application/json",
@@ -119,8 +104,13 @@ public class FeedbackController {
                             value = """
                                     {
                                       "attentionId": 23,
-                                      "rating": 5,
-                                      "comment": "Excelente atención, muy profesional y cuidadoso"
+                                      "comment": "Excelente atención",
+                                      "scores": [
+                                        {"criterionCode": "PUNCTUALITY", "score": 5},
+                                        {"criterionCode": "CARE_QUALITY", "score": 4},
+                                        {"criterionCode": "COMMUNICATION_CLARITY", "score": 5},
+                                        {"criterionCode": "GENERAL_SATISFACTION", "score": 5}
+                                      ]
                                     }
                                     """
                     )
@@ -131,58 +121,33 @@ public class FeedbackController {
     public ResponseEntity<FeedbackResponseDTO> createFeedback(
             @Valid @RequestBody CreateFeedbackRequestDTO request) {
 
-        // Obtener el usuario autenticado (paciente o practicante)
         User submittingUser = authenticationFacade.getAuthenticatedUser();
 
-        // Delegar al caso de uso (servicio de aplicación)
         Feedback feedback = feedbackUseCase.createFeedback(
                 request.getAttentionId(),
-                request.getRating(),
+                FeedbackRestMapper.toCommand(request.getScores()),
                 request.getComment(),
                 submittingUser
         );
 
-        // Convertir a DTO de respuesta
-        FeedbackResponseDTO response = FeedbackRestMapper.toResponse(feedback);
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(FeedbackRestMapper.toResponse(feedback));
     }
 
-    /**
-     * Obtiene todos los feedbacks asociados a una atención específica.
-     * Implementa CU-010 (RF24) - Para pacientes y practicantes.
-     *
-     * Este endpoint permite a los pacientes y practicantes involucrados en una atención
-     * consultar el feedback bidireccional de esa atención.
-     *
-     * GET /api/feedback/attention/{attentionId}
-     *
-     * Seguridad: PATIENT, PRACTITIONER y SUPERVISOR pueden acceder
-     *
-     * Regla de privacidad:
-     * - Solo el paciente o practicante de la atención puede consultar su feedback
-     * - Los supervisores pueden consultar el feedback de las atenciones de sus practicantes
-     *
-     * @param attentionId ID de la atención
-     * @return Lista de feedbacks de la atención
-     */
+    @Operation(
+            summary = "Listar feedbacks de una atención (RF24)",
+            description = "Devuelve el feedback bidireccional de la atención. Visibilidad: paciente y " +
+                    "practicante de la atención, y supervisores de ese practicante."
+    )
     @GetMapping("/feedback/attention/{attentionId}")
     @PreAuthorize("hasAnyRole('PATIENT', 'PRACTITIONER', 'SUPERVISOR')")
     public ResponseEntity<List<FeedbackResponseDTO>> getFeedbackForAttention(
             @PathVariable Long attentionId) {
-
-        // Obtener el usuario autenticado
         User requestingUser = authenticationFacade.getAuthenticatedUser();
-
-        // Delegar al caso de uso (servicio de aplicación)
-        // El servicio validará los permisos de acceso
         List<Feedback> feedbacks = feedbackUseCase.getFeedbackForAttention(attentionId, requestingUser);
-
-        // Convertir a DTOs de respuesta
         List<FeedbackResponseDTO> response = feedbacks.stream()
                 .map(FeedbackRestMapper::toResponse)
                 .collect(Collectors.toList());
-
         return ResponseEntity.ok(response);
     }
 }

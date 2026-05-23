@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import site.utnpf.odontolink.application.port.in.dto.SupervisorFeedbackDashboardQuery;
+import site.utnpf.odontolink.application.service.support.SupervisorScopeResolver;
 import site.utnpf.odontolink.domain.exception.UnauthorizedOperationException;
 import site.utnpf.odontolink.domain.model.Feedback;
 import site.utnpf.odontolink.domain.model.FeedbackDashboardResult;
@@ -34,17 +35,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * Verifica el cableado del panel docente de feedback con el nuevo modelo
- * directional (Regla 3 del PR):
- *   - los agregados llegan al servicio discriminados por dirección;
- *   - el filtro {@code direction} se propaga al criteria que va al
- *     repositorio para que la paginación sea consistente con lo que pidió
- *     el docente;
- *   - el cerco docente-alumno sigue funcionando (defensa de RF40);
- *   - el atajo "supervisor sin practicantes" devuelve agregados vacíos sin
- *     tocar el repositorio.
- */
 class SupervisorFeedbackDashboardServiceTest {
 
     private FeedbackRepository feedbackRepository;
@@ -55,7 +45,8 @@ class SupervisorFeedbackDashboardServiceTest {
     void setUp() {
         feedbackRepository = mock(FeedbackRepository.class);
         supervisorRepository = mock(SupervisorRepository.class);
-        service = new SupervisorFeedbackDashboardService(feedbackRepository, supervisorRepository);
+        SupervisorScopeResolver resolver = new SupervisorScopeResolver(supervisorRepository);
+        service = new SupervisorFeedbackDashboardService(feedbackRepository, resolver);
     }
 
     @Test
@@ -67,18 +58,13 @@ class SupervisorFeedbackDashboardServiceTest {
         PageResult<Feedback> page = new PageResult<>(List.of(), 0, 20, 0L, 0);
         when(feedbackRepository.searchDashboard(any(), any())).thenReturn(page);
         FeedbackDirectionalAggregates aggregates = new FeedbackDirectionalAggregates(
-                4.5, 12L, 3.2, 5L
-        );
+                4.5, 12L, 3.2, 5L);
         when(feedbackRepository.aggregateByDirection(any())).thenReturn(aggregates);
 
         SupervisorFeedbackDashboardQuery query = new SupervisorFeedbackDashboardQuery(
-                null, null, null, null, null, null
-        );
+                null, null, null, null, null, null);
         FeedbackDashboardResult result = service.getDashboard(
-                query,
-                PageQuery.of(0, 20, null, null),
-                supervisorUser(7L)
-        );
+                query, PageQuery.of(0, 20, null, null), supervisorUser(7L));
 
         assertEquals(4.5, result.getAggregates().getAverageRatingPatientToPractitioner());
         assertEquals(12L, result.getAggregates().getTotalPatientToPractitioner());
@@ -97,9 +83,7 @@ class SupervisorFeedbackDashboardServiceTest {
                 .thenReturn(FeedbackDirectionalAggregates.empty());
 
         SupervisorFeedbackDashboardQuery query = new SupervisorFeedbackDashboardQuery(
-                null, null, null, null, null,
-                FeedbackDirection.PATIENT_TO_PRACTITIONER
-        );
+                null, null, null, null, null, FeedbackDirection.PATIENT_TO_PRACTITIONER);
         service.getDashboard(query, PageQuery.of(0, 20, null, null), supervisorUser(7L));
 
         ArgumentCaptor<FeedbackSearchCriteria> captor =
@@ -108,27 +92,24 @@ class SupervisorFeedbackDashboardServiceTest {
 
         FeedbackSearchCriteria sent = captor.getValue();
         assertEquals(FeedbackDirection.PATIENT_TO_PRACTITIONER, sent.getDirection());
-        // El cerco también debe estar inyectado.
         assertEquals(Set.of(11L), sent.getAllowedPractitionerIds());
     }
 
     @Test
     @DisplayName("supervisor sin practicantes obtiene agregados vacíos sin tocar el repo")
     void emptyScopeShortCircuits() {
-        Supervisor sup = supervisorWithPractitioners(); // sin practicantes
+        Supervisor sup = supervisorWithPractitioners();
         when(supervisorRepository.findByUserId(7L)).thenReturn(Optional.of(sup));
 
         FeedbackDashboardResult result = service.getDashboard(
                 new SupervisorFeedbackDashboardQuery(null, null, null, null, null, null),
                 PageQuery.of(0, 20, null, null),
-                supervisorUser(7L)
-        );
+                supervisorUser(7L));
 
         assertEquals(0.0, result.getAggregates().getAverageRatingPatientToPractitioner());
         assertEquals(0L, result.getAggregates().getTotalPatientToPractitioner());
         assertEquals(0.0, result.getAggregates().getAverageRatingPractitionerToPatient());
         assertEquals(0L, result.getAggregates().getTotalPractitionerToPatient());
-        // Nunca consultamos al repositorio: el cerco vacío lo decide en memoria.
         verify(feedbackRepository, never()).searchDashboard(any(), any());
         verify(feedbackRepository, never()).aggregateByDirection(any());
     }
@@ -140,8 +121,7 @@ class SupervisorFeedbackDashboardServiceTest {
         when(supervisorRepository.findByUserId(7L)).thenReturn(Optional.of(sup));
 
         SupervisorFeedbackDashboardQuery query = new SupervisorFeedbackDashboardQuery(
-                99L, null, null, null, null, null
-        );
+                99L, null, null, null, null, null);
         assertThrows(UnauthorizedOperationException.class,
                 () -> service.getDashboard(query, PageQuery.of(0, 20, null, null), supervisorUser(7L)));
         verify(feedbackRepository, never()).searchDashboard(any(), any());
@@ -158,9 +138,7 @@ class SupervisorFeedbackDashboardServiceTest {
         assertThrows(UnauthorizedOperationException.class,
                 () -> service.getDashboard(
                         new SupervisorFeedbackDashboardQuery(null, null, null, null, null, null),
-                        PageQuery.of(0, 20, null, null),
-                        patient
-                ));
+                        PageQuery.of(0, 20, null, null), patient));
         verify(supervisorRepository, times(0)).findByUserId(any());
     }
 

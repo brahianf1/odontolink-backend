@@ -3,15 +3,18 @@ package site.utnpf.odontolink.infrastructure.adapters.output.persistence.entity;
 import jakarta.persistence.*;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Entidad JPA para la tabla 'feedbacks'.
- * Representa el feedback (calificación) sobre una atención en la base de datos.
  *
- * Esta entidad modela tanto "Calificar Paciente" (CU-009) como "Calificar Practicante" (CU-016).
- * Un feedback siempre está asociado a una Attention y a un User (submittedBy).
- *
- * @author OdontoLink Team
+ * <p>La columna escalar {@code rating} fue eliminada en la migración a
+ * encuesta multi-criterio: las puntuaciones viven ahora en la tabla
+ * {@code feedback_criterion_scores} (subcolección {@link #scores}). Con
+ * {@code ddl-auto=update} la columna física en MySQL puede quedar huérfana
+ * en entornos pre-existentes; en producción se la elimina una sola vez con
+ * {@code ALTER TABLE feedbacks DROP COLUMN rating}.
  */
 @Entity
 @Table(name = "feedbacks",
@@ -31,54 +34,36 @@ public class FeedbackEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Relación ManyToOne con AttentionEntity.
-     * Un feedback está siempre asociado a una atención específica.
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "attention_id", nullable = false)
     private AttentionEntity attention;
 
-    /**
-     * Relación ManyToOne con UserEntity.
-     * Representa el usuario que envió el feedback (paciente o practicante).
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "submitted_by_id", nullable = false)
     private UserEntity submittedBy;
 
-    /**
-     * Calificación en escala de 1 a 5 estrellas.
-     */
-    @Column(nullable = false)
-    private int rating;
-
-    /**
-     * Comentario opcional del usuario.
-     */
     @Column(columnDefinition = "TEXT")
     private String comment;
 
-    /**
-     * Timestamp de creación del feedback.
-     */
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
-    // Constructor sin argumentos (requerido por JPA)
+    @OneToMany(mappedBy = "feedback",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
+            fetch = FetchType.LAZY)
+    private List<FeedbackCriterionScoreEntity> scores = new ArrayList<>();
+
     public FeedbackEntity() {
         this.createdAt = Instant.now();
     }
 
-    // Callbacks de JPA
     @PrePersist
     protected void onCreate() {
         if (createdAt == null) {
             createdAt = Instant.now();
         }
     }
-
-    // Getters y Setters
 
     public Long getId() {
         return id;
@@ -104,14 +89,6 @@ public class FeedbackEntity {
         this.submittedBy = submittedBy;
     }
 
-    public int getRating() {
-        return rating;
-    }
-
-    public void setRating(int rating) {
-        this.rating = rating;
-    }
-
     public String getComment() {
         return comment;
     }
@@ -126,5 +103,13 @@ public class FeedbackEntity {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public List<FeedbackCriterionScoreEntity> getScores() {
+        return scores;
+    }
+
+    public void setScores(List<FeedbackCriterionScoreEntity> scores) {
+        this.scores = scores;
     }
 }
