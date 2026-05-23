@@ -29,6 +29,7 @@ public final class FeedbackCriterionPersistenceMapper {
         domain.setId(entity.getId());
         domain.setCreatedAt(entity.getCreatedAt());
         domain.setUpdatedAt(entity.getUpdatedAt());
+        domain.setDeactivatedAt(entity.getDeactivatedAt());
         return domain;
     }
 
@@ -47,6 +48,7 @@ public final class FeedbackCriterionPersistenceMapper {
         entity.setActive(domain.isActive());
         entity.setCreatedAt(domain.getCreatedAt());
         entity.setUpdatedAt(domain.getUpdatedAt());
+        entity.setDeactivatedAt(domain.getDeactivatedAt());
         return entity;
     }
 }

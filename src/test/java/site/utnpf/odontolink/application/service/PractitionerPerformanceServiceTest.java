@@ -70,6 +70,24 @@ class PractitionerPerformanceServiceTest {
     }
 
     @Test
+    @DisplayName("topByCriterion: criterio inactivo → ResourceNotFoundException (no zombie chart)")
+    void topByCriterion_inactiveCriterion() {
+        FeedbackCriterion inactive = new FeedbackCriterion(
+                FeedbackCriterionCodes.PUNCTUALITY, "Puntualidad", null,
+                FeedbackDirection.PATIENT_TO_PRACTITIONER, true, 1, false);
+        when(criterionRepository.findByCode(FeedbackCriterionCodes.PUNCTUALITY))
+                .thenReturn(Optional.of(inactive));
+
+        PractitionerCriterionChartQuery query = new PractitionerCriterionChartQuery(
+                FeedbackCriterionCodes.PUNCTUALITY, null, null, null, null);
+        assertThrows(ResourceNotFoundException.class,
+                () -> service.getTopByCriterion(query, supervisorUser(7L)));
+        verify(feedbackRepository, never()).topPractitionersByCriterion(
+                anyString(), any(), any(), any(), any(), anyInt(), anyInt());
+        verify(supervisorRepository, never()).findByUserId(any());
+    }
+
+    @Test
     @DisplayName("topByCriterion: cerco vacío devuelve entries=[] sin consultar feedback repo")
     void topByCriterion_emptyScopeShortCircuit() {
         when(criterionRepository.findByCode(FeedbackCriterionCodes.PUNCTUALITY))

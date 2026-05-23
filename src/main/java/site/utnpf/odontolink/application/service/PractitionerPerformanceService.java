@@ -56,6 +56,15 @@ public class PractitionerPerformanceService implements IPractitionerPerformanceU
         FeedbackCriterion criterion = criterionRepository.findByCode(query.getCriterionCode())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "FeedbackCriterion", "code", query.getCriterionCode()));
+        // Si el criterio fue desactivado por el admin, no devolvemos el chart
+        // aunque haya scores históricos en BD: evitamos los "charts zombie"
+        // (criterio que ya no se mide pero el ranking sigue exhibiéndose como
+        // si fuera vigente). Reportes históricos sobre criterios archivados
+        // son un feature aparte, no este endpoint.
+        if (!criterion.isActive()) {
+            throw new ResourceNotFoundException(
+                    "FeedbackCriterion", "code (inactivo)", query.getCriterionCode());
+        }
 
         Set<Long> scope = scopeResolver.resolveAllowedPractitionerIds(supervisorUser);
         int topN = query.getTopN() != null && query.getTopN() > 0 ? query.getTopN() : defaultTopN;

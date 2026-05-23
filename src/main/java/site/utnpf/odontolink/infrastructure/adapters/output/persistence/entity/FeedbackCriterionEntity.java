@@ -50,6 +50,15 @@ public class FeedbackCriterionEntity {
     @Column(name = "active", nullable = false)
     private boolean active;
 
+    /**
+     * Timestamp del último pasaje activo→inactivo. {@code null} si el
+     * criterio nunca fue desactivado o si fue reactivado. Lo administra el
+     * dominio ({@code FeedbackCriterion.setActive}); persistencia sólo lo
+     * round-trippea.
+     */
+    @Column(name = "deactivated_at")
+    private Instant deactivatedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -137,6 +146,14 @@ public class FeedbackCriterionEntity {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public Instant getDeactivatedAt() {
+        return deactivatedAt;
+    }
+
+    public void setDeactivatedAt(Instant deactivatedAt) {
+        this.deactivatedAt = deactivatedAt;
     }
 
     public Instant getCreatedAt() {

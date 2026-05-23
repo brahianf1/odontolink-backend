@@ -35,6 +35,16 @@ public class FeedbackCriterion {
     private Instant createdAt;
     private Instant updatedAt;
 
+    /**
+     * Timestamp del momento en que el criterio fue desactivado. Lo administra
+     * {@link #setActive(boolean)} automáticamente: se setea cuando pasa de
+     * activo→inactivo y se nulea cuando reactivan. Sirve como registro de
+     * auditoría y habilita (sin migración futura) queries "as-of date" sobre
+     * la definición vigente al momento de un feedback. {@code null} si nunca
+     * fue desactivado.
+     */
+    private Instant deactivatedAt;
+
     public FeedbackCriterion(String code,
                              String displayName,
                              String description,
@@ -141,8 +151,28 @@ public class FeedbackCriterion {
     }
 
     public void setActive(boolean active) {
+        boolean wasActive = this.active;
         this.active = active;
-        this.updatedAt = Instant.now();
+        Instant now = Instant.now();
+        if (wasActive && !active) {
+            this.deactivatedAt = now;
+        } else if (!wasActive && active) {
+            this.deactivatedAt = null;
+        }
+        this.updatedAt = now;
+    }
+
+    public Instant getDeactivatedAt() {
+        return deactivatedAt;
+    }
+
+    /**
+     * Setter de uso restringido a mappers de persistencia para rehidratar
+     * el estado tal cual está en BD. La lógica de auto-management vive en
+     * {@link #setActive(boolean)} y no debe ser bypasseada en código nuevo.
+     */
+    public void setDeactivatedAt(Instant deactivatedAt) {
+        this.deactivatedAt = deactivatedAt;
     }
 
     public Instant getCreatedAt() {
