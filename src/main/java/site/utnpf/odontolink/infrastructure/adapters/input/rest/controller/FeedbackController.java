@@ -59,8 +59,24 @@ public class FeedbackController {
     }
 
     @Operation(
-            summary = "Crear feedback sobre atención",
-            description = "Permite calificar una atención finalizada"
+            summary = "Crear feedback sobre atención (RF21, RF22, RF23 - CU-009, CU-016)",
+            description = "Permite al paciente o practicante calificar una atención finalizada " +
+                    "(`AttentionStatus.COMPLETED`).\n\n" +
+                    "**Forma de la respuesta**: en éxito (`201 Created`) se devuelve únicamente el " +
+                    "`FeedbackResponseDTO` del feedback recién creado. Por diseño, la respuesta no incluye " +
+                    "la `Attention` actualizada ni flags derivados de UI (`hasMyFeedback`, `feedbackCount`, " +
+                    "etc.): esos son estados de presentación que el frontend debe derivar de sus propios " +
+                    "datos. Mezclarlos aquí acoplaría el contrato REST a vistas específicas del cliente.\n\n" +
+                    "**Garantía de unicidad (RF23)**: la regla \"un usuario emite a lo sumo un feedback por " +
+                    "atención\" se aplica server-side en `FeedbackPolicyService.validateFeedbackCreation` " +
+                    "vía `existsByAttentionAndSubmittedBy`. Un reintento duplicado responde `400` con el " +
+                    "código de error de regla de negocio violada. Esa validación es el cinturón real; no " +
+                    "se necesita un flag adicional en la respuesta para sostener la UX.\n\n" +
+                    "**Patrón sugerido para el frontend**: tras un `201 Created` actualizar el estado " +
+                    "local (optimistic update: ocultar el botón \"Calificar\" para esa atención, sumar al " +
+                    "contador propio) y, si la vista lo requiere, invalidar/refetchear el listado de " +
+                    "atenciones (`GET /api/practitioner/attentions` o `GET /api/patient/attentions`) y/o " +
+                    "`GET /api/feedback/attention/{attentionId}` para consolidar consistencia."
     )
     @ApiResponses(value = {
             @ApiResponse(
