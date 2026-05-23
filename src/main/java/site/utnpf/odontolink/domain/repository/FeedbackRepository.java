@@ -6,10 +6,14 @@ import site.utnpf.odontolink.domain.model.FeedbackDirectionalAggregates;
 import site.utnpf.odontolink.domain.model.FeedbackSearchCriteria;
 import site.utnpf.odontolink.domain.model.PageQuery;
 import site.utnpf.odontolink.domain.model.PageResult;
+import site.utnpf.odontolink.domain.model.PractitionerCriterionPerformance;
+import site.utnpf.odontolink.domain.model.PractitionerRankingEntry;
 import site.utnpf.odontolink.domain.model.User;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Puerto de salida (Output Port) para operaciones de persistencia de Feedback.
@@ -126,4 +130,57 @@ public interface FeedbackRepository {
      * @return Optional conteniendo el feedback si existe
      */
     Optional<Feedback> findByAttentionIdAndSubmittedById(Long attentionId, Long userId);
+
+    /**
+     * Top-N practicantes con mejor promedio sobre un criterio puntual,
+     * dentro del cerco {@code allowedPractitionerIds} y opcionales filtros
+     * de fecha y tratamiento.
+     *
+     * <p>Sólo considera practicantes con al menos {@code minFeedbackCount}
+     * scores sobre ese criterio. Si el cerco viene vacío se devuelve lista
+     * vacía sin tocar BD (corresponde al adaptador).
+     *
+     * @param criterionCode          code del {@link site.utnpf.odontolink.domain.model.FeedbackCriterion}
+     * @param allowedPractitionerIds cerco silencioso supervisor→practicantes
+     * @param startDate              filtro {@code createdAt >= startDate} (nullable)
+     * @param endDate                filtro {@code createdAt <= endDate}   (nullable)
+     * @param treatmentId            filtro por treatment (nullable)
+     * @param minFeedbackCount       mínimo de scores para aparecer
+     * @param topN                   tamaño máximo del ranking
+     * @return entradas ordenadas DESC por averageScore con rankPosition 1-based
+     */
+    List<PractitionerCriterionPerformance> topPractitionersByCriterion(
+            String criterionCode,
+            Set<Long> allowedPractitionerIds,
+            LocalDate startDate,
+            LocalDate endDate,
+            Long treatmentId,
+            int minFeedbackCount,
+            int topN);
+
+    /**
+     * Ranking de practicantes según el "promedio de promedios" sobre los
+     * criterios con {@code includeInRanking=true} aplicables a la dirección
+     * paciente→practicante.
+     *
+     * <p>Para cada practicante: para cada criterio computa AVG(score); luego
+     * promedia esos AVGs (cada criterio pesa igual sin importar el sample
+     * size por criterio). Sólo aparecen practicantes con al menos
+     * {@code minFeedbackCount} feedbacks distintos contribuyendo.
+     *
+     * @param allowedPractitionerIds cerco silencioso
+     * @param startDate              nullable
+     * @param endDate                nullable
+     * @param treatmentId            nullable
+     * @param minFeedbackCount       mínimo de feedbacks distintos
+     * @param topN                   tamaño máximo del ranking
+     * @return entradas ordenadas DESC por combinedAverage con rankPosition 1-based
+     */
+    List<PractitionerRankingEntry> practitionerOverallRanking(
+            Set<Long> allowedPractitionerIds,
+            LocalDate startDate,
+            LocalDate endDate,
+            Long treatmentId,
+            int minFeedbackCount,
+            int topN);
 }
