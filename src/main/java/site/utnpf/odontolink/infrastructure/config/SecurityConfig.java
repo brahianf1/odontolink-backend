@@ -85,6 +85,7 @@ public class SecurityConfig {
                         // endpoints de gestion viven bajo /api/admin/site-config/**
                         // y caen en el catch-all de admin de abajo.
                         .requestMatchers(HttpMethod.GET, "/api/site-config/appearance").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/non-working-days").permitAll()
                         // RF05 y RF07: todo lo que cuelgue de /api/admin/** queda
                         // reservado al rol ROLE_ADMIN. Esta regla declarativa se
                         // suma a los @PreAuthorize de los controllers como

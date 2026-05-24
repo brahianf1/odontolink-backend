@@ -8,6 +8,7 @@ import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.AvailabilitySlotRepository;
 import site.utnpf.odontolink.domain.repository.ChatSessionRepository;
 import site.utnpf.odontolink.domain.repository.InstitutionalSettingsRepository;
+import site.utnpf.odontolink.domain.repository.NonWorkingDayRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 
 import java.time.LocalDate;
@@ -45,6 +46,7 @@ public class AppointmentBookingService {
     private final AttentionRepository attentionRepository;
     private final ChatSessionRepository chatSessionRepository;
     private final InstitutionalSettingsRepository institutionalSettingsRepository;
+    private final NonWorkingDayRepository nonWorkingDayRepository;
 
     public AppointmentBookingService(
             OfferedTreatmentRepository offeredTreatmentRepository,
@@ -52,13 +54,15 @@ public class AppointmentBookingService {
             AppointmentRepository appointmentRepository,
             AttentionRepository attentionRepository,
             ChatSessionRepository chatSessionRepository,
-            InstitutionalSettingsRepository institutionalSettingsRepository) {
+            InstitutionalSettingsRepository institutionalSettingsRepository,
+            NonWorkingDayRepository nonWorkingDayRepository) {
         this.offeredTreatmentRepository = offeredTreatmentRepository;
         this.availabilitySlotRepository = availabilitySlotRepository;
         this.appointmentRepository = appointmentRepository;
         this.attentionRepository = attentionRepository;
         this.chatSessionRepository = chatSessionRepository;
         this.institutionalSettingsRepository = institutionalSettingsRepository;
+        this.nonWorkingDayRepository = nonWorkingDayRepository;
     }
 
     /**
@@ -102,6 +106,17 @@ public class AppointmentBookingService {
             throw new InvalidBusinessRuleException(
                     "No se puede reservar un turno con fecha anterior al instante actual."
             );
+        }
+
+        // Defensa en profundidad: rechazar días no laborables (feriados, recesos, etc.)
+        if (appointmentTime != null) {
+            nonWorkingDayRepository.findByDate(appointmentTime.toLocalDate()).ifPresent(nwd -> {
+                throw new InvalidBusinessRuleException(
+                        "La fecha seleccionada (" + appointmentTime.toLocalDate() +
+                        ") es un día no laborable: " + nwd.getName() +
+                        ". Por favor, seleccione otra fecha."
+                );
+            });
         }
 
         // Validar la Oferta: existencia + estado bookable + ventana temporal
