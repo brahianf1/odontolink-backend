@@ -3,6 +3,7 @@ package site.utnpf.odontolink.domain.service;
 import site.utnpf.odontolink.domain.model.*;
 import site.utnpf.odontolink.domain.repository.AppointmentRepository;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
+import site.utnpf.odontolink.domain.repository.NonWorkingDayRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 import site.utnpf.odontolink.domain.service.slotstrategy.SlotGenerationStrategy;
 
@@ -47,15 +48,18 @@ public class AvailabilityGenerationService {
     private final OfferedTreatmentRepository offeredTreatmentRepository;
     private final AttentionRepository attentionRepository;
     private final SlotGenerationStrategy slotGenerationStrategy;
+    private final NonWorkingDayRepository nonWorkingDayRepository;
 
     public AvailabilityGenerationService(AppointmentRepository appointmentRepository,
                                          OfferedTreatmentRepository offeredTreatmentRepository,
                                          AttentionRepository attentionRepository,
-                                         SlotGenerationStrategy slotGenerationStrategy) {
+                                         SlotGenerationStrategy slotGenerationStrategy,
+                                         NonWorkingDayRepository nonWorkingDayRepository) {
         this.appointmentRepository = appointmentRepository;
         this.offeredTreatmentRepository = offeredTreatmentRepository;
         this.attentionRepository = attentionRepository;
         this.slotGenerationStrategy = slotGenerationStrategy;
+        this.nonWorkingDayRepository = nonWorkingDayRepository;
     }
 
     /**
@@ -95,6 +99,11 @@ public class AvailabilityGenerationService {
 
         // VALIDACIÓN 1: Límite de Tiempo
         if (!isWithinOfferDateRange(offeredTreatment, requestedDate)) {
+            return new ArrayList<>();
+        }
+
+        // VALIDACIÓN 1.5: Día no laborable (feriado, receso, etc.)
+        if (nonWorkingDayRepository.isNonWorkingDay(requestedDate)) {
             return new ArrayList<>();
         }
 

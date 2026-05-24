@@ -12,6 +12,7 @@ import site.utnpf.odontolink.application.port.in.IAuthUseCase;
 import site.utnpf.odontolink.application.port.in.IChatUseCase;
 import site.utnpf.odontolink.application.port.in.IFeedbackCriterionCatalogUseCase;
 import site.utnpf.odontolink.application.port.in.IFeedbackUseCase;
+import site.utnpf.odontolink.application.port.in.INonWorkingDayUseCase;
 import site.utnpf.odontolink.application.port.in.IPractitionerPerformanceUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorFeedbackDashboardUseCase;
 import site.utnpf.odontolink.application.port.in.IInstitutionalSettingsUseCase;
@@ -37,6 +38,7 @@ import site.utnpf.odontolink.application.service.AuthService;
 import site.utnpf.odontolink.application.service.ChatService;
 import site.utnpf.odontolink.application.service.FeedbackCriterionCatalogService;
 import site.utnpf.odontolink.application.service.FeedbackService;
+import site.utnpf.odontolink.application.service.NonWorkingDayService;
 import site.utnpf.odontolink.application.service.PractitionerPerformanceService;
 import site.utnpf.odontolink.application.service.SupervisorFeedbackDashboardService;
 import site.utnpf.odontolink.application.service.support.SupervisorScopeResolver;
@@ -59,6 +61,7 @@ import site.utnpf.odontolink.domain.repository.AvailabilitySlotRepository;
 import site.utnpf.odontolink.domain.repository.FeedbackCriterionRepository;
 import site.utnpf.odontolink.domain.repository.FeedbackRepository;
 import site.utnpf.odontolink.domain.repository.InstitutionalSettingsRepository;
+import site.utnpf.odontolink.domain.repository.NonWorkingDayRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 import site.utnpf.odontolink.domain.repository.PasswordResetTokenRepository;
 import site.utnpf.odontolink.domain.repository.PatientRepository;
@@ -80,6 +83,7 @@ import site.utnpf.odontolink.domain.service.SupervisorPolicyService;
 import site.utnpf.odontolink.domain.service.slotstrategy.DynamicDurationSlotStrategy;
 import site.utnpf.odontolink.domain.service.slotstrategy.FixedIntervalSlotStrategy;
 import site.utnpf.odontolink.domain.service.slotstrategy.SlotGenerationStrategy;
+import site.utnpf.odontolink.infrastructure.adapters.output.holidays.ArgentinaDatosHolidayClient;
 import site.utnpf.odontolink.infrastructure.config.ratelimit.RateLimitRegistry;
 
 /**
@@ -236,14 +240,16 @@ public class BeanConfiguration {
             AppointmentRepository appointmentRepository,
             AttentionRepository attentionRepository,
             ChatSessionRepository chatSessionRepository,
-            InstitutionalSettingsRepository institutionalSettingsRepository) {
+            InstitutionalSettingsRepository institutionalSettingsRepository,
+            NonWorkingDayRepository nonWorkingDayRepository) {
         return new AppointmentBookingService(
                 offeredTreatmentRepository,
                 availabilitySlotRepository,
                 appointmentRepository,
                 attentionRepository,
                 chatSessionRepository,
-                institutionalSettingsRepository
+                institutionalSettingsRepository,
+                nonWorkingDayRepository
         );
     }
 
@@ -284,12 +290,14 @@ public class BeanConfiguration {
             AppointmentRepository appointmentRepository,
             OfferedTreatmentRepository offeredTreatmentRepository,
             AttentionRepository attentionRepository,
-            SlotGenerationStrategy slotGenerationStrategy) {
+            SlotGenerationStrategy slotGenerationStrategy,
+            NonWorkingDayRepository nonWorkingDayRepository) {
         return new AvailabilityGenerationService(
                 appointmentRepository,
                 offeredTreatmentRepository,
                 attentionRepository,
-                slotGenerationStrategy
+                slotGenerationStrategy,
+                nonWorkingDayRepository
         );
     }
 
@@ -799,5 +807,32 @@ public class BeanConfiguration {
     public site.utnpf.odontolink.application.service.support.SingletonRowBootstrap singletonRowBootstrap(
             org.springframework.transaction.PlatformTransactionManager transactionManager) {
         return new site.utnpf.odontolink.application.service.support.SingletonRowBootstrap(transactionManager);
+    }
+
+    @Bean
+    public org.springframework.web.client.RestClient holidayApiRestClient(
+            @Value("${odontolink.holidays.api-base-url:https://api.argentinadatos.com}") String baseUrl,
+            @Value("${odontolink.holidays.connect-timeout-ms:5000}") int connectTimeout,
+            @Value("${odontolink.holidays.read-timeout-ms:10000}") int readTimeout) {
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory =
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(connectTimeout);
+        factory.setReadTimeout(readTimeout);
+        return org.springframework.web.client.RestClient.builder()
+                .baseUrl(baseUrl)
+                .requestFactory(factory)
+                .build();
+    }
+
+    @Bean
+    public ArgentinaDatosHolidayClient argentinaDatosHolidayClient(
+            @org.springframework.beans.factory.annotation.Qualifier("holidayApiRestClient")
+            org.springframework.web.client.RestClient holidayApiRestClient) {
+        return new ArgentinaDatosHolidayClient(holidayApiRestClient);
+    }
+
+    @Bean
+    public INonWorkingDayUseCase nonWorkingDayUseCase(NonWorkingDayRepository nonWorkingDayRepository) {
+        return new NonWorkingDayService(nonWorkingDayRepository);
     }
 }

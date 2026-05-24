@@ -9,6 +9,7 @@ import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.AvailabilitySlotRepository;
 import site.utnpf.odontolink.domain.repository.ChatSessionRepository;
 import site.utnpf.odontolink.domain.repository.InstitutionalSettingsRepository;
+import site.utnpf.odontolink.domain.repository.NonWorkingDayRepository;
 import site.utnpf.odontolink.domain.repository.OfferedTreatmentRepository;
 
 import java.time.LocalDateTime;
@@ -39,9 +40,10 @@ class AppointmentBookingServicePastDateTest {
         AttentionRepository attentionRepo = mock(AttentionRepository.class);
         ChatSessionRepository chatRepo = mock(ChatSessionRepository.class);
         InstitutionalSettingsRepository settingsRepo = mock(InstitutionalSettingsRepository.class);
+        NonWorkingDayRepository nwdRepo = mock(NonWorkingDayRepository.class);
 
         AppointmentBookingService service = new AppointmentBookingService(
-                offeredRepo, slotRepo, appointmentRepo, attentionRepo, chatRepo, settingsRepo
+                offeredRepo, slotRepo, appointmentRepo, attentionRepo, chatRepo, settingsRepo, nwdRepo
         );
 
         Patient patient = mock(Patient.class);
@@ -55,6 +57,6 @@ class AppointmentBookingServicePastDateTest {
 
         // El guard debe abortar antes de consultar la oferta, slots, etc.
         verifyNoInteractions(offeredRepo, slotRepo, appointmentRepo,
-                attentionRepo, chatRepo, settingsRepo);
+                attentionRepo, chatRepo, settingsRepo, nwdRepo);
     }
 }
