@@ -10,8 +10,10 @@ import site.utnpf.odontolink.application.port.in.IAppointmentUseCase;
 import site.utnpf.odontolink.application.port.in.IAttentionUseCase;
 import site.utnpf.odontolink.application.port.in.IAuthUseCase;
 import site.utnpf.odontolink.application.port.in.IChatUseCase;
+import site.utnpf.odontolink.application.port.in.IFeedbackCriterionCatalogUseCase;
 import site.utnpf.odontolink.application.port.in.IFeedbackUseCase;
 import site.utnpf.odontolink.application.port.in.INonWorkingDayUseCase;
+import site.utnpf.odontolink.application.port.in.IPractitionerPerformanceUseCase;
 import site.utnpf.odontolink.application.port.in.ISupervisorFeedbackDashboardUseCase;
 import site.utnpf.odontolink.application.port.in.IInstitutionalSettingsUseCase;
 import site.utnpf.odontolink.application.port.in.IOfferedTreatmentUseCase;
@@ -34,9 +36,12 @@ import site.utnpf.odontolink.application.service.AppointmentService;
 import site.utnpf.odontolink.application.service.AttentionService;
 import site.utnpf.odontolink.application.service.AuthService;
 import site.utnpf.odontolink.application.service.ChatService;
+import site.utnpf.odontolink.application.service.FeedbackCriterionCatalogService;
 import site.utnpf.odontolink.application.service.FeedbackService;
 import site.utnpf.odontolink.application.service.NonWorkingDayService;
+import site.utnpf.odontolink.application.service.PractitionerPerformanceService;
 import site.utnpf.odontolink.application.service.SupervisorFeedbackDashboardService;
+import site.utnpf.odontolink.application.service.support.SupervisorScopeResolver;
 import site.utnpf.odontolink.application.service.InstitutionalSettingsService;
 import site.utnpf.odontolink.application.service.OfferedTreatmentService;
 import site.utnpf.odontolink.application.service.SearchOfferedTreatmentsService;
@@ -53,6 +58,7 @@ import site.utnpf.odontolink.application.service.TreatmentService;
 import site.utnpf.odontolink.domain.repository.AppointmentRepository;
 import site.utnpf.odontolink.domain.repository.AttentionRepository;
 import site.utnpf.odontolink.domain.repository.AvailabilitySlotRepository;
+import site.utnpf.odontolink.domain.repository.FeedbackCriterionRepository;
 import site.utnpf.odontolink.domain.repository.FeedbackRepository;
 import site.utnpf.odontolink.domain.repository.InstitutionalSettingsRepository;
 import site.utnpf.odontolink.domain.repository.NonWorkingDayRepository;
@@ -70,6 +76,7 @@ import site.utnpf.odontolink.domain.service.AppointmentBookingService;
 import site.utnpf.odontolink.domain.service.AttentionPolicyService;
 import site.utnpf.odontolink.domain.service.AvailabilityGenerationService;
 import site.utnpf.odontolink.domain.service.ChatPolicyService;
+import site.utnpf.odontolink.domain.service.FeedbackCriterionPolicyService;
 import site.utnpf.odontolink.domain.service.FeedbackPolicyService;
 import site.utnpf.odontolink.domain.service.OfferedTreatmentDomainService;
 import site.utnpf.odontolink.domain.service.SupervisorPolicyService;
@@ -475,33 +482,63 @@ public class BeanConfiguration {
      * {@link #supervisorFeedbackDashboardUseCase(FeedbackRepository, SupervisorRepository)}.
      */
     @Bean
+    public FeedbackCriterionPolicyService feedbackCriterionPolicyService() {
+        return new FeedbackCriterionPolicyService();
+    }
+
+    @Bean
     public IFeedbackUseCase feedbackUseCase(
             FeedbackRepository feedbackRepository,
             AttentionRepository attentionRepository,
-            FeedbackPolicyService feedbackPolicyService) {
+            FeedbackCriterionRepository feedbackCriterionRepository,
+            FeedbackPolicyService feedbackPolicyService,
+            FeedbackCriterionPolicyService feedbackCriterionPolicyService) {
         return new FeedbackService(
                 feedbackRepository,
                 attentionRepository,
-                feedbackPolicyService
+                feedbackCriterionRepository,
+                feedbackPolicyService,
+                feedbackCriterionPolicyService
         );
     }
 
+    @Bean
+    public IFeedbackCriterionCatalogUseCase feedbackCriterionCatalogUseCase(
+            FeedbackCriterionRepository feedbackCriterionRepository) {
+        return new FeedbackCriterionCatalogService(feedbackCriterionRepository);
+    }
+
     /**
-     * Bean para el Panel Docente de Supervisión de Feedback (RF25).
-     *
-     * Es un caso de uso EXCLUSIVO del macro-contexto evaluador de desempeño:
-     * análisis agregado del feedback recibido por los practicantes a cargo.
-     * Se mantiene separado de {@link IFeedbackUseCase} (micro-contexto) por
-     * Responsabilidad Única — distinto sombrero del docente, distintas reglas.
-     *
-     * Reutiliza el {@link SupervisorRepository} para resolver el cerco
-     * docente-alumno sin duplicar la lógica de N-a-N ya validada en RF22/RF37/RF39.
+     * Cerco supervisor→practicantes compartido por dashboard y charts. Único
+     * lugar donde se resuelve la relación N-a-N supervisor↔practicantes para
+     * todas las operaciones macro-contexto del docente.
      */
+    @Bean
+    public SupervisorScopeResolver supervisorScopeResolver(SupervisorRepository supervisorRepository) {
+        return new SupervisorScopeResolver(supervisorRepository);
+    }
+
     @Bean
     public ISupervisorFeedbackDashboardUseCase supervisorFeedbackDashboardUseCase(
             FeedbackRepository feedbackRepository,
-            SupervisorRepository supervisorRepository) {
-        return new SupervisorFeedbackDashboardService(feedbackRepository, supervisorRepository);
+            SupervisorScopeResolver supervisorScopeResolver) {
+        return new SupervisorFeedbackDashboardService(feedbackRepository, supervisorScopeResolver);
+    }
+
+    @Bean
+    public IPractitionerPerformanceUseCase practitionerPerformanceUseCase(
+            FeedbackRepository feedbackRepository,
+            FeedbackCriterionRepository feedbackCriterionRepository,
+            SupervisorScopeResolver supervisorScopeResolver,
+            @org.springframework.beans.factory.annotation.Value("${odontolink.ranking.min-feedback-count:3}") int minFeedbackCount,
+            @org.springframework.beans.factory.annotation.Value("${odontolink.ranking.chart-default-top-n:10}") int defaultTopN) {
+        return new PractitionerPerformanceService(
+                feedbackRepository,
+                feedbackCriterionRepository,
+                supervisorScopeResolver,
+                minFeedbackCount,
+                defaultTopN
+        );
     }
 
     /**

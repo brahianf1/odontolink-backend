@@ -3,60 +3,65 @@ package site.utnpf.odontolink.infrastructure.adapters.input.rest.dto.response;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
 
 /**
- * DTO de respuesta para un feedback.
- * Se usa para mostrar el feedback de una atención a los actores autorizados.
+ * Respuesta del feedback multi-criterio sobre una atención.
  *
- * Contiene la información completa del feedback, incluyendo datos del usuario
- * que lo envió y la atención asociada.
- *
- * @author OdontoLink Team
+ * <p>El campo escalar {@code rating} fue retirado en la migración a
+ * multi-criterio; las puntuaciones por criterio viven en {@link #scores}.
+ * Para mostrar un valor único en la UI puede usarse el score del criterio
+ * "satisfacción general" (P→Pr) o "comportamiento del paciente" (Pr→Pat),
+ * según convenga al consumidor.
  */
+@Schema(description = "Feedback multi-criterio sobre una atención.")
 public class FeedbackResponseDTO {
 
+    @Schema(example = "12")
     private Long id;
-    private int rating;
+
+    @Schema(description = "Comentario libre opcional", example = "Excelente atención")
     private String comment;
+
+    @Schema(example = "2026-05-23T14:30:00Z")
     private Instant createdAt;
 
-    // Información del usuario que envió el feedback
+    @Schema(example = "15")
     private Long submittedById;
+
+    @Schema(example = "Carlos Rodríguez")
     private String submittedByName;
 
-    @Schema(description = "Rol del usuario que envió el feedback (Spring Security: incluye prefijo ROLE_). " +
-            "Sólo paciente o practicante pueden emitir feedback.",
+    @Schema(description = "Rol del usuario que envió el feedback (incluye prefijo ROLE_).",
             example = "ROLE_PATIENT",
             allowableValues = {"ROLE_PATIENT", "ROLE_PRACTITIONER"})
     private String submittedByRole;
 
-    // Información de la atención asociada
+    @Schema(example = "23")
     private Long attentionId;
 
-    // Información adicional de la atención (para contexto)
+    @Schema(example = "Limpieza Dental")
     private String treatmentName;
+
+    @Schema(example = "Carlos Rodríguez")
     private String patientName;
+
+    @Schema(example = "Ana Martínez")
     private String practitionerName;
 
-    // Constructores
+    @Schema(description = "Scores por criterio. El set depende de la dirección del feedback.")
+    private List<CriterionScoreResponseDTO> scores = Collections.emptyList();
+
     public FeedbackResponseDTO() {
     }
 
-    // Getters y Setters
     public Long getId() {
         return id;
     }
 
     public void setId(Long id) {
         this.id = id;
-    }
-
-    public int getRating() {
-        return rating;
-    }
-
-    public void setRating(int rating) {
-        this.rating = rating;
     }
 
     public String getComment() {
@@ -129,5 +134,13 @@ public class FeedbackResponseDTO {
 
     public void setPractitionerName(String practitionerName) {
         this.practitionerName = practitionerName;
+    }
+
+    public List<CriterionScoreResponseDTO> getScores() {
+        return scores;
+    }
+
+    public void setScores(List<CriterionScoreResponseDTO> scores) {
+        this.scores = scores == null ? Collections.emptyList() : scores;
     }
 }
