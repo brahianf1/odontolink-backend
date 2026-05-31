@@ -60,6 +60,9 @@ public class AppointmentRestMapper {
                             domain.getAttention().getPatient().getUser().getFirstName() + " " +
                                     domain.getAttention().getPatient().getUser().getLastName()
                     );
+                    response.setPatientProfilePictureUrl(
+                            domain.getAttention().getPatient().getUser().getProfilePictureUrl()
+                    );
                 }
             }
 
@@ -70,6 +73,9 @@ public class AppointmentRestMapper {
                     response.setPractitionerName(
                             domain.getAttention().getPractitioner().getUser().getFirstName() + " " +
                                     domain.getAttention().getPractitioner().getUser().getLastName()
+                    );
+                    response.setPractitionerProfilePictureUrl(
+                            domain.getAttention().getPractitioner().getUser().getProfilePictureUrl()
                     );
                 }
             }

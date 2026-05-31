@@ -58,6 +58,8 @@ public class ChatRestMapper {
                 dto.setPatientName(
                         chatSession.getPatient().getUser().getFirstName() + " "
                                 + chatSession.getPatient().getUser().getLastName());
+                dto.setPatientProfilePictureUrl(
+                        chatSession.getPatient().getUser().getProfilePictureUrl());
             }
         }
 
@@ -67,6 +69,8 @@ public class ChatRestMapper {
                 dto.setPractitionerName(
                         chatSession.getPractitioner().getUser().getFirstName() + " "
                                 + chatSession.getPractitioner().getUser().getLastName());
+                dto.setPractitionerProfilePictureUrl(
+                        chatSession.getPractitioner().getUser().getProfilePictureUrl());
             }
         }
 
@@ -107,6 +111,7 @@ public class ChatRestMapper {
             dto.setSenderName(
                     chatMessage.getSender().getFirstName() + " "
                             + chatMessage.getSender().getLastName());
+            dto.setSenderProfilePictureUrl(chatMessage.getSender().getProfilePictureUrl());
         }
         return dto;
     }

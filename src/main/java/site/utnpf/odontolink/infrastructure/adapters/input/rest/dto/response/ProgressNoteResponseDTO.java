@@ -35,6 +35,10 @@ public class ProgressNoteResponseDTO {
     @Schema(description = "Nombre completo del autor de la nota.", example = "Ana Martinez")
     private String authorName;
 
+    @Schema(description = "URL pública de la foto de perfil del autor de la nota. Null si no tiene foto.",
+            example = "https://cdn.odontolink/u/8/avatar.jpg", nullable = true)
+    private String authorProfilePictureUrl;
+
     @Schema(description = "Rol del autor de la nota (mayormente `ROLE_PRACTITIONER`; los supervisores " +
             "pueden aparecer si registraron observaciones desde su propio módulo).",
             example = "ROLE_PRACTITIONER",
@@ -88,6 +92,14 @@ public class ProgressNoteResponseDTO {
 
     public void setAuthorName(String authorName) {
         this.authorName = authorName;
+    }
+
+    public String getAuthorProfilePictureUrl() {
+        return authorProfilePictureUrl;
+    }
+
+    public void setAuthorProfilePictureUrl(String authorProfilePictureUrl) {
+        this.authorProfilePictureUrl = authorProfilePictureUrl;
     }
 
     public String getAuthorRole() {

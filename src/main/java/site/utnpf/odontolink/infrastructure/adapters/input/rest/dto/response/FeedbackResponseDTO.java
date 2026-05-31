@@ -33,6 +33,10 @@ public class FeedbackResponseDTO {
     @Schema(example = "Carlos Rodríguez")
     private String submittedByName;
 
+    @Schema(description = "URL pública de la foto de perfil del autor del feedback. Null si no tiene foto.",
+            example = "https://cdn.odontolink/u/15/avatar.jpg", nullable = true)
+    private String submittedByProfilePictureUrl;
+
     @Schema(description = "Rol del usuario que envió el feedback (incluye prefijo ROLE_).",
             example = "ROLE_PATIENT",
             allowableValues = {"ROLE_PATIENT", "ROLE_PRACTITIONER"})
@@ -47,8 +51,16 @@ public class FeedbackResponseDTO {
     @Schema(example = "Carlos Rodríguez")
     private String patientName;
 
+    @Schema(description = "URL pública de la foto de perfil del paciente. Null si no tiene foto.",
+            example = "https://cdn.odontolink/u/15/avatar.jpg", nullable = true)
+    private String patientProfilePictureUrl;
+
     @Schema(example = "Ana Martínez")
     private String practitionerName;
+
+    @Schema(description = "URL pública de la foto de perfil del practicante. Null si no tiene foto.",
+            example = "https://cdn.odontolink/u/8/avatar.jpg", nullable = true)
+    private String practitionerProfilePictureUrl;
 
     @Schema(description = "Scores por criterio. El set depende de la dirección del feedback.")
     private List<CriterionScoreResponseDTO> scores = Collections.emptyList();
@@ -96,6 +108,14 @@ public class FeedbackResponseDTO {
         this.submittedByName = submittedByName;
     }
 
+    public String getSubmittedByProfilePictureUrl() {
+        return submittedByProfilePictureUrl;
+    }
+
+    public void setSubmittedByProfilePictureUrl(String submittedByProfilePictureUrl) {
+        this.submittedByProfilePictureUrl = submittedByProfilePictureUrl;
+    }
+
     public String getSubmittedByRole() {
         return submittedByRole;
     }
@@ -128,12 +148,28 @@ public class FeedbackResponseDTO {
         this.patientName = patientName;
     }
 
+    public String getPatientProfilePictureUrl() {
+        return patientProfilePictureUrl;
+    }
+
+    public void setPatientProfilePictureUrl(String patientProfilePictureUrl) {
+        this.patientProfilePictureUrl = patientProfilePictureUrl;
+    }
+
     public String getPractitionerName() {
         return practitionerName;
     }
 
     public void setPractitionerName(String practitionerName) {
         this.practitionerName = practitionerName;
+    }
+
+    public String getPractitionerProfilePictureUrl() {
+        return practitionerProfilePictureUrl;
+    }
+
+    public void setPractitionerProfilePictureUrl(String practitionerProfilePictureUrl) {
+        this.practitionerProfilePictureUrl = practitionerProfilePictureUrl;
     }
 
     public List<CriterionScoreResponseDTO> getScores() {

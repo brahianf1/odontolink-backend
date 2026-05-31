@@ -18,6 +18,7 @@ public class SupervisorDTO {
     private String specialty;
     private String employeeId;
     private boolean isActive;
+    private String profilePictureUrl;
 
     // Constructores
     public SupervisorDTO() {
@@ -102,5 +103,13 @@ public class SupervisorDTO {
 
     public void setActive(boolean active) {
         isActive = active;
+    }
+
+    public String getProfilePictureUrl() {
+        return profilePictureUrl;
+    }
+
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
     }
 }

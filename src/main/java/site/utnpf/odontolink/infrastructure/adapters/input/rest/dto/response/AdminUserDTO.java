@@ -43,6 +43,10 @@ public class AdminUserDTO {
     @Schema(description = "Fecha de nacimiento", example = "1995-06-15")
     private LocalDate birthDate;
 
+    @Schema(description = "URL pública de la foto de perfil. Puede ser null si el usuario no tiene foto.",
+            example = "https://cdn.odontolink/u/15/avatar.jpg", nullable = true)
+    private String profilePictureUrl;
+
     @Schema(description = "Fecha de creación de la cuenta", example = "2025-08-12T19:34:21Z")
     private Instant createdAt;
 
@@ -119,6 +123,14 @@ public class AdminUserDTO {
 
     public void setBirthDate(LocalDate birthDate) {
         this.birthDate = birthDate;
+    }
+
+    public String getProfilePictureUrl() {
+        return profilePictureUrl;
+    }
+
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
     }
 
     public Instant getCreatedAt() {

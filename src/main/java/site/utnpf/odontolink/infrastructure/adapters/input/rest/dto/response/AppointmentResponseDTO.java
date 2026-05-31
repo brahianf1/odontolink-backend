@@ -64,6 +64,10 @@ public class AppointmentResponseDTO {
     @Schema(description = "Nombre completo del paciente del turno.", example = "Carlos Rodriguez")
     private String patientName;
 
+    @Schema(description = "URL pública de la foto de perfil del paciente. Null si no tiene foto.",
+            example = "https://cdn.odontolink/u/15/avatar.jpg", nullable = true)
+    private String patientProfilePictureUrl;
+
     // Información del practicante (para vista del paciente)
     @Schema(description = "ID del practicante responsable del turno.", example = "8")
     private Long practitionerId;
@@ -71,6 +75,10 @@ public class AppointmentResponseDTO {
     @Schema(description = "Nombre completo del practicante responsable del turno.",
             example = "Ana Martinez")
     private String practitionerName;
+
+    @Schema(description = "URL pública de la foto de perfil del practicante. Null si no tiene foto.",
+            example = "https://cdn.odontolink/u/8/avatar.jpg", nullable = true)
+    private String practitionerProfilePictureUrl;
 
     // ID de la atención asociada (para navegación)
     @Schema(description = "ID de la atención (Attention) que agrupa este turno. Útil para navegar al " +
@@ -146,6 +154,14 @@ public class AppointmentResponseDTO {
         this.patientName = patientName;
     }
 
+    public String getPatientProfilePictureUrl() {
+        return patientProfilePictureUrl;
+    }
+
+    public void setPatientProfilePictureUrl(String patientProfilePictureUrl) {
+        this.patientProfilePictureUrl = patientProfilePictureUrl;
+    }
+
     public Long getPractitionerId() {
         return practitionerId;
     }
@@ -160,6 +176,14 @@ public class AppointmentResponseDTO {
 
     public void setPractitionerName(String practitionerName) {
         this.practitionerName = practitionerName;
+    }
+
+    public String getPractitionerProfilePictureUrl() {
+        return practitionerProfilePictureUrl;
+    }
+
+    public void setPractitionerProfilePictureUrl(String practitionerProfilePictureUrl) {
+        this.practitionerProfilePictureUrl = practitionerProfilePictureUrl;
     }
 
     public Long getAttentionId() {

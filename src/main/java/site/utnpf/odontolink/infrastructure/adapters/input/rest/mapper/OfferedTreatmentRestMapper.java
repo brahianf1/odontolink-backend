@@ -64,6 +64,9 @@ public class OfferedTreatmentRestMapper {
                     domain.getPractitioner().getUser().getFirstName() + " " +
                     domain.getPractitioner().getUser().getLastName()
                 );
+                response.setPractitionerProfilePictureUrl(
+                    domain.getPractitioner().getUser().getProfilePictureUrl()
+                );
             }
         }
 
