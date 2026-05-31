@@ -29,6 +29,7 @@ public class PractitionerRestMapper {
             practitioner.getUser().getDni(),
             practitioner.getUser().getEmail()
         );
+        userDTO.setProfilePictureUrl(practitioner.getUser().getProfilePictureUrl());
 
         return new PractitionerDTO(
             practitioner.getId(),

@@ -24,6 +24,10 @@ public class UserBasicDTO {
     @Schema(description = "Correo electrónico", example = "juan.perez@example.com")
     private String email;
 
+    @Schema(description = "URL pública de la foto de perfil. Puede ser null si el usuario no tiene foto.",
+            example = "https://cdn.odontolink/u/15/avatar.jpg", nullable = true)
+    private String profilePictureUrl;
+
     // Constructores
     public UserBasicDTO() {
     }
@@ -75,5 +79,13 @@ public class UserBasicDTO {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getProfilePictureUrl() {
+        return profilePictureUrl;
+    }
+
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
     }
 }

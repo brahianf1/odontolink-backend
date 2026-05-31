@@ -28,6 +28,7 @@ public class SupervisorRestMapper {
         dto.setSpecialty(supervisor.getSpecialty());
         dto.setEmployeeId(supervisor.getEmployeeId());
         dto.setActive(supervisor.getUser().isActive());
+        dto.setProfilePictureUrl(supervisor.getUser().getProfilePictureUrl());
 
         return dto;
     }

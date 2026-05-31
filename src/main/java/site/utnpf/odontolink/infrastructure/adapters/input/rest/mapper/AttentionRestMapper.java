@@ -56,6 +56,9 @@ public class AttentionRestMapper {
                         domain.getPatient().getUser().getFirstName() + " " +
                                 domain.getPatient().getUser().getLastName()
                 );
+                response.setPatientProfilePictureUrl(
+                        domain.getPatient().getUser().getProfilePictureUrl()
+                );
             }
         }
 
@@ -66,6 +69,9 @@ public class AttentionRestMapper {
                 response.setPractitionerName(
                         domain.getPractitioner().getUser().getFirstName() + " " +
                                 domain.getPractitioner().getUser().getLastName()
+                );
+                response.setPractitionerProfilePictureUrl(
+                        domain.getPractitioner().getUser().getProfilePictureUrl()
                 );
             }
         }

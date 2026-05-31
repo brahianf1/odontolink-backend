@@ -37,12 +37,20 @@ public class AttentionResponseDTO {
     @Schema(description = "Nombre completo del paciente del caso.", example = "Carlos Rodriguez")
     private String patientName;
 
+    @Schema(description = "URL pública de la foto de perfil del paciente. Null si no tiene foto.",
+            example = "https://cdn.odontolink/u/15/avatar.jpg", nullable = true)
+    private String patientProfilePictureUrl;
+
     // Información del practicante
     @Schema(description = "ID del practicante responsable del caso.", example = "8")
     private Long practitionerId;
 
     @Schema(description = "Nombre completo del practicante responsable del caso.", example = "Ana Martinez")
     private String practitionerName;
+
+    @Schema(description = "URL pública de la foto de perfil del practicante. Null si no tiene foto.",
+            example = "https://cdn.odontolink/u/8/avatar.jpg", nullable = true)
+    private String practitionerProfilePictureUrl;
 
     // Información del tratamiento
     @Schema(description = "ID del tratamiento del catálogo maestro asociado al caso.", example = "3")
@@ -101,6 +109,14 @@ public class AttentionResponseDTO {
         this.patientName = patientName;
     }
 
+    public String getPatientProfilePictureUrl() {
+        return patientProfilePictureUrl;
+    }
+
+    public void setPatientProfilePictureUrl(String patientProfilePictureUrl) {
+        this.patientProfilePictureUrl = patientProfilePictureUrl;
+    }
+
     public Long getPractitionerId() {
         return practitionerId;
     }
@@ -115,6 +131,14 @@ public class AttentionResponseDTO {
 
     public void setPractitionerName(String practitionerName) {
         this.practitionerName = practitionerName;
+    }
+
+    public String getPractitionerProfilePictureUrl() {
+        return practitionerProfilePictureUrl;
+    }
+
+    public void setPractitionerProfilePictureUrl(String practitionerProfilePictureUrl) {
+        this.practitionerProfilePictureUrl = practitionerProfilePictureUrl;
     }
 
     public Long getTreatmentId() {

@@ -38,6 +38,12 @@ public class ChatMessageResponseDTO {
     private String senderName;
 
     /**
+     * URL pública de la foto de perfil del remitente. Null si el usuario no subió avatar.
+     * Denormalizado igual que {@link #senderName} para evitar lookups adicionales en el frontend.
+     */
+    private String senderProfilePictureUrl;
+
+    /**
      * Contenido textual del mensaje. Máximo 2000 caracteres (validado en SendMessageRequestDTO).
      */
     private String content;
@@ -99,6 +105,14 @@ public class ChatMessageResponseDTO {
 
     public void setSenderName(String senderName) {
         this.senderName = senderName;
+    }
+
+    public String getSenderProfilePictureUrl() {
+        return senderProfilePictureUrl;
+    }
+
+    public void setSenderProfilePictureUrl(String senderProfilePictureUrl) {
+        this.senderProfilePictureUrl = senderProfilePictureUrl;
     }
 
     public String getContent() {

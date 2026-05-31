@@ -22,6 +22,10 @@ public class OfferedTreatmentResponseDTO {
     @Schema(description = "Nombre completo del practicante", example = "Maria Gomez")
     private String practitionerName;
 
+    @Schema(description = "URL pública de la foto de perfil del practicante. Puede ser null si no tiene foto.",
+            example = "https://cdn.odontolink/u/8/avatar.jpg", nullable = true)
+    private String practitionerProfilePictureUrl;
+
     @Schema(description = "Información del tratamiento maestro")
     private TreatmentResponseDTO treatment;
 
@@ -121,6 +125,14 @@ public class OfferedTreatmentResponseDTO {
 
     public void setPractitionerName(String practitionerName) {
         this.practitionerName = practitionerName;
+    }
+
+    public String getPractitionerProfilePictureUrl() {
+        return practitionerProfilePictureUrl;
+    }
+
+    public void setPractitionerProfilePictureUrl(String practitionerProfilePictureUrl) {
+        this.practitionerProfilePictureUrl = practitionerProfilePictureUrl;
     }
 
     public TreatmentResponseDTO getTreatment() {

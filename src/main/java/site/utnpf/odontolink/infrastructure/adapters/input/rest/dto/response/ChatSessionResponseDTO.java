@@ -23,10 +23,12 @@ public class ChatSessionResponseDTO {
     // Información del paciente participante
     private Long patientId;
     private String patientName;
+    private String patientProfilePictureUrl;
 
     // Información del practicante participante
     private Long practitionerId;
     private String practitionerName;
+    private String practitionerProfilePictureUrl;
 
     private Instant createdAt;
 
@@ -112,6 +114,14 @@ public class ChatSessionResponseDTO {
         this.patientName = patientName;
     }
 
+    public String getPatientProfilePictureUrl() {
+        return patientProfilePictureUrl;
+    }
+
+    public void setPatientProfilePictureUrl(String patientProfilePictureUrl) {
+        this.patientProfilePictureUrl = patientProfilePictureUrl;
+    }
+
     public Long getPractitionerId() {
         return practitionerId;
     }
@@ -126,6 +136,14 @@ public class ChatSessionResponseDTO {
 
     public void setPractitionerName(String practitionerName) {
         this.practitionerName = practitionerName;
+    }
+
+    public String getPractitionerProfilePictureUrl() {
+        return practitionerProfilePictureUrl;
+    }
+
+    public void setPractitionerProfilePictureUrl(String practitionerProfilePictureUrl) {
+        this.practitionerProfilePictureUrl = practitionerProfilePictureUrl;
     }
 
     public Instant getCreatedAt() {

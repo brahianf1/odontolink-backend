@@ -29,6 +29,7 @@ public final class FeedbackRestMapper {
             response.setSubmittedByName(
                     safeName(domain.getSubmittedBy().getFirstName(),
                             domain.getSubmittedBy().getLastName()));
+            response.setSubmittedByProfilePictureUrl(domain.getSubmittedBy().getProfilePictureUrl());
             if (domain.getSubmittedBy().getRole() != null) {
                 response.setSubmittedByRole(domain.getSubmittedBy().getRole().toString());
             }
@@ -43,11 +44,13 @@ public final class FeedbackRestMapper {
                     && domain.getAttention().getPatient().getUser() != null) {
                 var p = domain.getAttention().getPatient().getUser();
                 response.setPatientName(safeName(p.getFirstName(), p.getLastName()));
+                response.setPatientProfilePictureUrl(p.getProfilePictureUrl());
             }
             if (domain.getAttention().getPractitioner() != null
                     && domain.getAttention().getPractitioner().getUser() != null) {
                 var pr = domain.getAttention().getPractitioner().getUser();
                 response.setPractitionerName(safeName(pr.getFirstName(), pr.getLastName()));
+                response.setPractitionerProfilePictureUrl(pr.getProfilePictureUrl());
             }
         }
 

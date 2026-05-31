@@ -33,6 +33,7 @@ public final class AdminUserRestMapper {
         dto.setDni(user.getDni());
         dto.setPhone(user.getPhone());
         dto.setBirthDate(user.getBirthDate());
+        dto.setProfilePictureUrl(user.getProfilePictureUrl());
         dto.setCreatedAt(user.getCreatedAt());
         return dto;
     }

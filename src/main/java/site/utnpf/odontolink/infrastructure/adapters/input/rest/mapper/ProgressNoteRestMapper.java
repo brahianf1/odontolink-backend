@@ -49,6 +49,7 @@ public class ProgressNoteRestMapper {
                     domain.getAuthor().getFirstName() + " " +
                             domain.getAuthor().getLastName()
             );
+            response.setAuthorProfilePictureUrl(domain.getAuthor().getProfilePictureUrl());
             if (domain.getAuthor().getRole() != null) {
                 response.setAuthorRole(domain.getAuthor().getRole().toString());
             }
